@@ -64,19 +64,28 @@ describe('launcher size and place (worksuite-desktop#206)', () => {
   ];
 
   it('is a popover min(880px, 100vw − 48px) wide, centred, 12% down the window, of whole rows', () => {
-    // [width, height] → [left, top, grid rows, popover height], compact icons (84px tiles), the chips showing.
+    // [width, height] → [left, top, grid rows, popover height], compact icons (48px, 88px tiles), the chips showing.
     const expected: Record<string, [number, number, number, number]> = {
-      '1024x700': [72, 84, 4, 511],
-      '1280x800': [200, 96, 5, 597],
-      '1440x900': [280, 108, 5, 597],
-      '1728x1117': [424, 134, 5, 597],
-      '2560x1440': [840, 173, 5, 597],
+      '1024x700': [72, 84, 4, 527],
+      '1280x800': [200, 96, 5, 617],
+      '1440x900': [280, 108, 5, 617],
+      '1728x1117': [424, 134, 5, 617],
+      '2560x1440': [840, 173, 5, 617],
     };
     for (const [w, h] of SIZES) {
       const l = launcherLayout(win(w, h), full(w, h), { mode: 'popover', size: 'compact' }, parts);
       const [left, top, rows, height] = expected[`${w}x${h}`]!;
-      expect(l).toMatchObject({ kind: 'popover', width: 880, left, top, height, icon: 44, rowHeight: 84 });
+      expect(l).toMatchObject({ kind: 'popover', width: 880, left, top, height, icon: 48, rowHeight: 88 });
       expect(l.grid!.rows).toBe(rows);
+    }
+  });
+
+  it('gives a grid in sections all the room there is, whole rows or not', () => {
+    for (const [w, h] of SIZES) {
+      const l = launcherLayout(win(w, h), full(w, h), { mode: 'popover', size: 'compact' }, { ...parts, pinned: true, recent: true, sections: true });
+      const max = Math.min(640, h - 96, h - 24 - l.top);
+      expect(l.height).toBe(max);
+      expect(l.grid!.height).toBe(max - popoverChrome({ ...parts, pinned: true, recent: true }));
     }
   });
 
@@ -157,7 +166,7 @@ describe('launcher size and place (worksuite-desktop#206)', () => {
 
   it('has three icon sizes in the popover, each a step larger in full screen', () => {
     const at = (mode: 'popover' | 'fullscreen', size: 'compact' | 'comfortable' | 'large') => launcherLayout(win(1280, 800), full(1280, 800), { mode, size }).icon;
-    expect([at('popover', 'compact'), at('popover', 'comfortable'), at('popover', 'large')]).toEqual([44, 52, 64]);
+    expect([at('popover', 'compact'), at('popover', 'comfortable'), at('popover', 'large')]).toEqual([48, 52, 64]);
     expect([at('fullscreen', 'compact'), at('fullscreen', 'comfortable'), at('fullscreen', 'large')]).toEqual([52, 56, 72]);
   });
 

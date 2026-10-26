@@ -35,7 +35,7 @@ import { app } from '../../core/app-state';
 import { appColour } from '../../core/app-look';
 import { call, isMac } from '../../core/bridge';
 import { prettyAccelerator } from '../../core/commands';
-import { appLabel } from '../../core/i18n';
+import { appLabel, text } from '../../core/i18n';
 import { syncLauncherPrefsIfStale, updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
 import { noteRecentApp, readRecentApps } from '../../core/recent-apps';
 import { pinSidebarItem, useSidebarPinnedKeys } from '../../core/sidebar-prefs';
@@ -69,12 +69,22 @@ import { cx } from '../../components/ui';
  * each only while there is more past that edge, within the column.
  *
  * Typing searches at once (names and keywords, hidden apps too); the arrow keys move over the grid, Enter opens,
- * ⌘Enter opens in a new window, Esc closes, as does a click outside. Right-click a tile, or drag it, to pin it, hide
- * it, move it to a group of one's own or open it in a new window. Apps the person may not open are never here
- * (`app.apps` is through the gates). It fades and scales in and out over 120ms, not at all for reduced motion.
+ * ⌘Enter opens in a new window, Tab and Shift+Tab go through the categories, Esc closes, as does a click outside.
+ * Right-click a tile (or press the menu key, or Shift+F10, on the one selected), or drag it, to pin it, hide it, move
+ * it to a group of one's own or open it in a new window; the star at a tile's top left pins and unpins it, and pinned
+ * chips are dragged along the Pinned row to reorder them. Apps the person may not open are never here (`app.apps` is
+ * through the gates). It fades and scales in and out over 120ms, not at all for reduced motion.
+ *
+ * The popover (worksuite-desktop launcher redesign, light and dark): a 16px-rounded card; the search with its focus
+ * ring, the launcher's shortcut at its end and a square close button beside it; Pinned and Recent as chips; the
+ * categories as pills with their counts ("All", then each category), the one shown solid in the primary colour; under
+ * All, the apps category by category, each under its uppercase name and count; and a footer with the keys on the left
+ * and how to pin and reorder on the right, beside the launcher's settings.
  */
 
 const DRAG_TYPE = 'application/x-worksuite-app';
+/** The popover's room above a category heading after the first (its own 8px of padding comes on top). */
+const POPOVER_HEADING_GAP = 8;
 /** How long the launcher takes to close: its fade out. */
 export const LAUNCHER_CLOSE_MS = 120;
 
@@ -137,7 +147,7 @@ export function Launcher() {
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState<string>(ALL_CATEGORY);
   const [sel, setSel] = useState(0);
-  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number; keyboard?: boolean } | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [fades, setFades] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false });
@@ -175,12 +185,13 @@ export function Launcher() {
   const showPinned = !searching && (view.pinned.length > 0 || !!dragging);
   const showRecent = !searching && recent.length > 0;
   const hasChips = view.categories.length > 1;
-  const layout = launcherLayout(win, area, prefs, { pinned: showPinned, recent: showRecent, chips: hasChips });
+  const layout = launcherLayout(win, area, prefs, { pinned: showPinned, recent: showRecent, chips: hasChips, sections: hasChips && !searching });
   const sheet = layout.kind === 'sheet';
   const full = layout.kind === 'fullscreen';
-  // Under All apps, with nothing searched, full screen and the sheet read category by category, each under its name;
-  // with the categories in the sidebar, one category is under its name too, as the sidebar says which it is.
-  const sections = launcherSections(view, prefs, !searching && hasChips && layout.kind !== 'popover' && (view.current === ALL_CATEGORY || layout.sidebar));
+  const popover = layout.kind === 'popover';
+  // Under All apps, with nothing searched, the launcher reads category by category, each under its name and count;
+  // with the categories in full screen's sidebar, one category is under its name too, as the sidebar says which it is.
+  const sections = launcherSections(view, prefs, !searching && hasChips && (view.current === ALL_CATEGORY || layout.sidebar));
   // The columns the grid really has, when the browser says (a scrollbar can take one); else as worked out.
   const columns = measuredColumns ?? layout.columns;
   const selected = Math.min(sel, Math.max(0, list.length - 1));
@@ -303,6 +314,13 @@ export function Launcher() {
       const i = view.categories.findIndex((c) => c.id === view.current);
       setCat(view.categories[(i + (e.shiftKey ? view.categories.length - 1 : 1)) % view.categories.length]!.id);
       setSel(0);
+    } else if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && !menu) {
+      // The selected tile's menu, from the keyboard: under the tile, its first item focused.
+      const a = list[selected];
+      if (!a) return;
+      e.preventDefault();
+      const r = grid.current?.querySelector<HTMLElement>(`[data-index="${selected}"]`)?.getBoundingClientRect();
+      setMenu({ id: a.id, x: r ? r.left + r.width / 2 : 0, y: r ? r.bottom : 0, keyboard: true });
     } else if (!inInput && !menu && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
       // Typing anywhere in the launcher searches.
       input.current?.focus();
@@ -375,12 +393,14 @@ export function Launcher() {
     const web = a.surface === 'browser';
     const name = appLabel(a);
     const sel = i === selected;
+    const pinned = prefs.pinned.includes(a.id);
     return (
       <button
         key={a.id}
         type="button"
         role="option"
         data-index={i}
+        data-pinned={pinned || undefined}
         aria-selected={sel}
         aria-label={name}
         tabIndex={-1}
@@ -397,7 +417,7 @@ export function Launcher() {
         {...dropZone(`tile:${a.id}`, dropOnTile(a))}
         style={{ height: layout.rowHeight }}
         className={cx(
-          'relative flex min-w-0 flex-col items-center overflow-hidden text-ink outline-none',
+          'group relative flex min-w-0 flex-col items-center overflow-hidden text-ink outline-none',
           full ? 'gap-2.5 rounded-[14px] border border-transparent px-2' : 'gap-1.5 rounded-[12px] px-1',
           full ? (names ? 'pt-3.5 pb-3' : 'py-3.5') : names ? 'pt-2.5 pb-2' : 'py-2.5',
           sel ? 'bg-selection shadow-[inset_0_0_0_2px_var(--color-primary)]' : full ? 'hover:border-launcher-line hover:bg-subtle' : 'hover:bg-subtle',
@@ -417,6 +437,24 @@ export function Launcher() {
               <Icon name="external" size={10} />
             </span>
           ) : null}
+          {/* The star pins and unpins: filled on a pinned app, and on the others while pointed at or selected. The tile's
+              menu (right-click, the menu key) does the same from the keyboard and for a screen reader. */}
+          <span
+            data-star={pinned ? 'on' : 'off'}
+            aria-hidden
+            title={pinned ? text('Unpin') : text('Pin')}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              togglePin(a);
+            }}
+            className={cx(
+              'absolute -top-[3px] -left-3.5 flex h-4 w-4 cursor-pointer items-center justify-center hover:scale-110',
+              pinned ? 'text-primary' : cx('text-ink-3 hover:text-primary', sel ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'),
+            )}
+          >
+            <Icon name="star" size={13} strokeWidth={2} className={pinned ? 'fill-current' : undefined} />
+          </span>
         </span>
         <span data-name className={cx('block max-w-full truncate font-medium', full ? 'text-[14px] leading-[18px]' : 'text-[12px] leading-4', !names && 'sr-only')}>
           {name}
@@ -558,12 +596,12 @@ export function Launcher() {
             onClick={() => (setCat(c.id), setSel(0))}
             {...dropZone(`cat:${c.id}`, dropOnCategory(c.id))}
             className={cx(
-              'flex h-[30px] max-w-[200px] shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold',
-              on ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink-2 hover:text-ink',
+              'flex h-[30px] max-w-[200px] shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold',
+              on ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink-2 hover:border-ink-3/40 hover:text-ink',
               over === `cat:${c.id}` && prefs.groupBy === 'mine' && c.id !== ALL_CATEGORY && 'ring-2 ring-primary',
             )}
           >
-            <span className="min-w-0 truncate">{c.label}</span>
+            <span className="min-w-0 truncate">{c.id === ALL_CATEGORY && !full ? text('All') : c.label}</span>
             <span className="text-[11px] opacity-75">{c.count}</span>
           </button>
         );
@@ -593,7 +631,8 @@ export function Launcher() {
     ? { scrollPaddingTop: stuck, scrollPaddingBottom: FADE_PX }
     : full
       ? { paddingTop: headed ? 0 : GRID_PAD.top, paddingBottom: FULL_GRID.bottom, scrollPaddingTop: stuck + GRID_PAD.top, scrollPaddingBottom: FADE_PX }
-      : { paddingTop: GRID_PAD.top, paddingBottom: GRID_PAD.bottom, paddingLeft: GRID_PAD.x, paddingRight: GRID_PAD.x, scrollPaddingTop: GRID_PAD.top, scrollPaddingBottom: FADE_PX };
+      : // The popover: a heading starts at the top of the scroller, and a tile the keys move to stays clear of it.
+        { paddingTop: headed ? 0 : GRID_PAD.top, paddingBottom: GRID_PAD.bottom, paddingLeft: GRID_PAD.x, paddingRight: GRID_PAD.x, scrollPaddingTop: headed ? stuck : GRID_PAD.top, scrollPaddingBottom: FADE_PX };
   const fade = (edge: 'top' | 'bottom') => (
     <div
       aria-hidden
@@ -614,25 +653,21 @@ export function Launcher() {
         className={cx('h-full overflow-y-auto overscroll-contain scroll-thin', sheet && 'px-2 pb-3')}
         style={scrollerStyle}
       >
-        {sections.map((s) => (
+        {sections.map((s, si) => (
           <div key={s.id} role="presentation">
             {s.label ? (
               <div
                 data-heading
-                style={{ marginTop: FULL_GRID.headingMargin, paddingTop: FULL_GRID.headingPad, paddingBottom: FULL_GRID.headingPad }}
-                className={cx('sticky top-0 z-[1] flex items-center bg-launcher font-semibold tracking-[0.08em] text-ink-3 uppercase', full ? 'gap-3 text-[12px] leading-4' : 'px-2 text-[11px] leading-4')}
+                style={{ marginTop: popover && si === 0 ? 0 : popover ? POPOVER_HEADING_GAP : FULL_GRID.headingMargin, paddingTop: FULL_GRID.headingPad, paddingBottom: FULL_GRID.headingPad }}
+                className={cx('sticky top-0 z-[1] flex items-center bg-launcher font-semibold tracking-[0.08em] text-ink-3 uppercase', full ? 'gap-3 text-[12px] leading-4' : 'gap-2 px-2 text-[11px] leading-4')}
               >
                 <span data-heading-label className="truncate">
                   {s.label}
                 </span>
-                {full ? (
-                  <>
-                    <span data-heading-count className="shrink-0 font-normal tracking-normal">
-                      {s.items.length}
-                    </span>
-                    <span aria-hidden className="h-px min-w-6 flex-1 bg-launcher-line" />
-                  </>
-                ) : null}
+                <span data-heading-count className="shrink-0 font-normal tracking-normal">
+                  {s.items.length}
+                </span>
+                {full ? <span aria-hidden className="h-px min-w-6 flex-1 bg-launcher-line" /> : null}
               </div>
             ) : null}
             <div role="presentation" data-grid className="grid" style={gridStyle}>
@@ -651,8 +686,16 @@ export function Launcher() {
   // is the launcher's own: it opens the app in a new window.
   const footerWidth = full ? Math.min(layout.column?.width ?? layout.width, layout.width) - 2 * FULL_COLUMN.padSide : layout.width;
   const narrow = footerNarrow(footerWidth, sheet);
-  const count = `${list.length} ${list.length === 1 ? 'app' : 'apps'}`;
-  const hints = (
+  const count = list.length === 1 ? text('1 app') : text('{count} apps', { count: list.length });
+  const hints = popover ? (
+    // The popover's keys (the launcher redesign): Tab goes through the categories; ⌘↵ is in each tile's menu.
+    <>
+      {count} · <Key k="↑" />
+      <Key k="↓" />
+      <Key k="←" />
+      <Key k="→" /> move · <Key k="↵" /> open · <Key k="Tab" /> category · <Key k="Esc" /> close
+    </>
+  ) : (
     <>
       {count} · <Key k="↑" />
       <Key k="↓" />
@@ -680,17 +723,35 @@ export function Launcher() {
       <div data-footer style={{ height: LAUNCHER_PARTS.fullFooter }} className="flex shrink-0 justify-center border-t border-launcher-line bg-launcher">
         <div className="flex w-full min-w-0 items-center gap-4 text-[12.5px] text-ink-3" style={{ maxWidth: FULL_COLUMN.maxWidth, paddingLeft: FULL_COLUMN.padSide, paddingRight: FULL_COLUMN.padSide }}>
           <span data-hints data-narrow={narrow || undefined} className="min-w-0 flex-1 truncate">
-            {narrow ? `${count} · Esc to close` : hints}
+            {narrow ? `${count} · ${text('Esc to close')}` : hints}
           </span>
           <button type="button" onClick={customise} className="h-11 shrink-0 rounded-[10px] border border-launcher-line px-3.5 text-[14px] font-medium text-primary hover:bg-subtle">
             Customise
           </button>
         </div>
       </div>
+    ) : popover ? (
+      // The popover's footer: the keys on the left; how to pin and reorder, and the launcher's settings, on the right.
+      <div data-footer style={{ height: LAUNCHER_PARTS.footer }} className="flex shrink-0 items-center justify-between gap-3 border-t border-launcher-line bg-launcher ps-3.5 pe-2 text-[11px] text-ink-3">
+        <span data-hints data-narrow={narrow || undefined} className="min-w-0 truncate">
+          {narrow ? `${count} · ${text('Esc to close')}` : hints}
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {narrow ? null : (
+            <span data-pin-hint className="flex items-center gap-1">
+              <Icon name="star" size={12} />
+              pins an app · drag to reorder
+            </span>
+          )}
+          <button type="button" aria-label="App launcher settings" title="App launcher settings" onClick={customise} className="flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-3 hover:bg-subtle hover:text-ink">
+            <Icon name="settings" size={14} />
+          </button>
+        </span>
+      </div>
     ) : (
       <div data-footer style={{ height: LAUNCHER_PARTS.footer }} className="flex shrink-0 items-center justify-between gap-3 border-t border-launcher-line bg-launcher px-3 text-[11px] text-ink-3">
         <span data-hints data-narrow={narrow || undefined} className="min-w-0 truncate">
-          {narrow ? `${count} · Esc to close` : hints}
+          {narrow ? `${count} · ${text('Esc to close')}` : hints}
         </span>
         <button type="button" onClick={customise} className="shrink-0 font-semibold text-primary hover:underline">
           Customise
@@ -702,8 +763,9 @@ export function Launcher() {
     <label
       className={cx(
         'flex min-w-0 flex-1 items-center gap-2.5 border bg-well text-ink-3',
-        sheet ? 'h-11 rounded-[11px] border-line px-3' : 'border-primary',
-        !sheet && !full && 'h-[42px] rounded-[11px] px-3',
+        sheet ? 'h-11 rounded-[11px] border-line px-3' : full ? 'border-primary' : 'h-[42px] rounded-[11px] border-line px-3',
+        // The popover's search: its focus ring while it has the focus, as it does from the moment the launcher opens.
+        popover && 'focus-within:border-primary focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_18%,transparent)]',
         full && 'gap-3 rounded-[14px] px-[18px] shadow-[0_0_0_4px_color-mix(in_srgb,var(--color-primary)_18%,transparent)]',
       )}
       style={full ? { height: FULL_SEARCH.height } : undefined}
@@ -757,6 +819,7 @@ export function Launcher() {
       <TileMenu
         app={menuApp}
         at={menu}
+        keyboard={!!menu.keyboard}
         prefs={prefs}
         sidebarPinned={sidebarPins.includes(menuApp.id)}
         onClose={() => setMenu(null)}
@@ -827,7 +890,7 @@ export function Launcher() {
         className={cx(
           'absolute flex flex-col overflow-hidden border border-line bg-launcher text-ink shadow-[0_30px_80px_-20px_rgb(var(--ws-shadow-rgb)/.45)]',
           motion,
-          layout.kind === 'popover' && 'rounded-[18px]',
+          popover && 'rounded-[16px]',
           sheet && 'rounded-t-[18px] border-b-0',
         )}
         style={frame}
@@ -859,7 +922,6 @@ export function Launcher() {
           <>
             <div style={{ height: LAUNCHER_PARTS.header }} className="flex shrink-0 items-center gap-2 px-3.5">
               {search}
-              {settingsButton}
               {closeButton}
             </div>
             {showPinned ? chipRow('Pinned', view.pinned, { pinned: true }) : null}
@@ -907,6 +969,8 @@ function DragActions(props: {
 function TileMenu(props: {
   app: AppDefinition;
   at: { x: number; y: number };
+  /** Opened from the keyboard: its first item takes the focus. */
+  keyboard?: boolean;
   prefs: LauncherPrefs;
   sidebarPinned: boolean;
   onClose: () => void;
@@ -924,8 +988,13 @@ function TileMenu(props: {
   const hidden = prefs.hidden.includes(a.id);
   const inGroup = prefs.groups.find((g) => g.apps.includes(a.id))?.id ?? null;
   const height = 300 + prefs.groups.length * 34;
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (props.keyboard) box.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [props.keyboard]);
   return (
     <div
+      ref={box}
       role="menu"
       aria-label={`${appLabel(a)} options`}
       onMouseDown={(e) => e.stopPropagation()}
