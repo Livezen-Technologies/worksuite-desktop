@@ -4327,6 +4327,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     updater.disable("WorkSuite OS keeps WorkSuite up to date with the system's own updates.");
     log.info('WorkSuite OS mode: sign-in through the OS, device from the OS enrolment, no self-updates, no app lock');
   }
+  // Mac App Store / TestFlight build (docs/TESTFLIGHT.md): the store updates the app, and the sandbox could not
+  // replace the bundle anyway.
+  if (process.mas) updater.disable('The App Store keeps WorkSuite up to date.');
   lock.start();
   // The till sends its sales with its own credential, whoever is signed in (or nobody).
   pos.start();

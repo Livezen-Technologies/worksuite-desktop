@@ -215,7 +215,7 @@ hiding in the App Store build before a public release.
 |---|---|
 | Remote control (`osascript` / Accessibility) | Blocked — Apple Events to System Events are not allowed |
 | Local AI (`node-llama-cpp` native binaries) | May fail to load; untested |
-| In-app updater | Must not run — TestFlight / the App Store update the app |
+| In-app updater | Turned off automatically (`process.mas`); Settings › Updates says the App Store keeps WorkSuite up to date |
 | Default `mailto:` handler, opening `.eml`/`.msg` | Only for files macOS hands to the app |
 | Files outside Downloads | Only through the open/save dialog |
 | `worksuite://` links, mail, chat, calls, files | Work |
@@ -243,6 +243,8 @@ Adding a permission means adding a key there; Apple may ask why during review.
 | *The bundle version must be higher than the previously uploaded version* | Raise `WS_MAS_BUILD_NUMBER`. |
 | `ITMS-90237` / non-public API | Comes from a native module; the email names the binary. |
 | Build delivered but not in TestFlight after an hour | Processing failed. Check the uploading Apple ID's email for an *ITMS-* message. |
+| Signing in on the build Mac shows *The application can't be opened* | macOS sent the `worksuite://` sign-in link to the App Store copy left in `release/<version>/mas-universal/WorkSuite.app`, which only runs when installed by TestFlight. After uploading, delete that `.app` (keep the `.pkg`). |
+| TestFlight: *Could not install … The requested app is not available or doesn't exist* | The build is not released to you yet: answer Export Compliance, add the build to an Internal Testing group that includes your Apple ID, wait for *Ready to Test*, then reopen TestFlight. |
 
 ## Where the configuration lives
 
