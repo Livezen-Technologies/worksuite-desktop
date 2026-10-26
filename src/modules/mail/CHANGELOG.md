@@ -4,6 +4,15 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.34.2 — 2026-10-26
+
+**Fixed**
+
+- the quick filters stay on one row inside the message list: a new `FilterChips` row measures itself (ResizeObserver, through `useOverflow`) and moves the chips that do not fit into a "More filters" menu, with a count of those that are on; the sort control has its own line (#428).
+- the list pane is `min-w-0`, its own stacking layer, and its header is `overflow: hidden` with `contain: layout paint`, so nothing in it covers the reading pane; menus are portalled above both. The reading pane keeps at least 280 px.
+- a date band's label truncates at the start side and its count stays at the end, never clipped.
+- the shared mailbox's assignment filters use the same chip row, and its status tabs truncate their labels instead of overflowing.
+
 ## 1.34.1 — 2026-10-26
 
 **Fixed**

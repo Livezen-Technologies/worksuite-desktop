@@ -57,6 +57,7 @@ import { alertFor, chime, deviceId, freshRows, markSeen, myRules, ruleTakes } fr
 import { CreateRule, useRules } from './MailRules';
 import { CatchUp } from './CatchUp';
 import { CleanupDialog, IgnoreDialog, conversationKeyOf, ignoreConversation, ignoredKeys, redundantInThread, stopIgnoring } from './Conversations';
+import { FilterChips } from './FilterChips';
 import { ReadingPane, afterClose, loadTabs, saveTabs, withTab, type OpenTab } from './ReadingPane';
 import { ScheduledList } from './Scheduled';
 import { SearchView } from './SearchView';
@@ -764,19 +765,22 @@ function MailWorkspace({ active }: ModuleProps) {
         {(['open', 'answered', 'closed', 'all'] as const).map((s) => {
           const n = s === 'all' ? null : (list.data?.pages ?? []).flatMap((p) => p.data.messages).filter((m) => (m.team?.status ?? 'open') === s).length;
           return (
-            <button key={s} type="button" role="tab" aria-selected={team === s} onClick={() => setTeam(s)} className={cx('flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[8px] text-[13px] font-semibold', team === s ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink')}>
-              {s === 'open' ? text('Open') : s === 'answered' ? text('Pending') : s === 'closed' ? text('Done') : text('All')}
-              {n ? <span className="text-[12px] text-ink-3">{n}</span> : null}
+            <button key={s} type="button" role="tab" aria-selected={team === s} onClick={() => setTeam(s)} className={cx('flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[8px] px-1 text-[13px] font-semibold', team === s ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink')}>
+              <span className="min-w-0 truncate">{s === 'open' ? text('Open') : s === 'answered' ? text('Pending') : s === 'closed' ? text('Done') : text('All')}</span>
+              {n ? <span className="shrink-0 text-[12px] text-ink-3">{n}</span> : null}
             </button>
           );
         })}
       </div>
-      <div className="mt-2 flex gap-1.5">
-        {(['mine', 'nobody', 'snoozed'] as const).map((w) => (
-          <button key={w} type="button" aria-pressed={teamWho === w} onClick={() => setTeamWho(teamWho === w ? 'all' : w)} className={cx('h-[26px] rounded-full border px-2.5 text-[12.5px] font-semibold', teamWho === w ? 'border-ink bg-ink text-surface' : 'border-line text-ink hover:bg-subtle')}>
-            {w === 'mine' ? text('Assigned to me') : w === 'nobody' ? text('Unassigned') : text('Snoozed')}
-          </button>
-        ))}
+      {/* The same never-wrapping chip row as the quick filters (#428): what does not fit goes into More filters. */}
+      <div className="mt-2 flex min-w-0">
+        <FilterChips
+          label={text('Assignment')}
+          tone="ink"
+          chips={[{ id: 'mine', label: text('Assigned to me') }, { id: 'nobody', label: text('Unassigned') }, { id: 'snoozed', label: text('Snoozed') }]}
+          isOn={(id) => teamWho === id}
+          onToggle={(id) => setTeamWho(teamWho === id ? 'all' : (id as 'mine' | 'nobody' | 'snoozed'))}
+        />
       </div>
     </div>
   ) : null;
@@ -1163,7 +1167,8 @@ function MailWorkspace({ active }: ModuleProps) {
   ) : (
     <>
       {listEl}
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* Under the list's layer (its divider overlaps by 4 px) and never squeezed below a readable width (#428). */}
+      <div data-mail-reading-wrap className="relative z-0 flex min-w-[280px] flex-1 flex-col overflow-hidden">
         {reader}
         <WaitingPanel pending={mailPending} />
       </div>
@@ -1172,7 +1177,7 @@ function MailWorkspace({ active }: ModuleProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         {!focus ? (
           <SidePanel id="mail" label="the folders">
             <MailBoundary part="sidebar" onRetry={() => void qc.resetQueries({ queryKey: ['mail', 'mailboxes'] })} onDiagnostics={(ref) => navigate(diagnosticsRoute(ref))}>
