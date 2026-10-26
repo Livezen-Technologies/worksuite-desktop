@@ -11,6 +11,7 @@ function run(argv) {
     var px = +argv[1], py = +argv[2];
     var H = null; try { H = $.NSScreen.screens.objectAtIndex(0).frame.size.height; } catch (e) { out.push('screen err ' + e); }
     out.push('screenH=' + H);
+    try { var app = $.NSApplication.sharedApplication; out.push('app up ' + !!app); } catch (e) { out.push('app err ' + e); }
     try { out.push('hitFlipped=' + $.NSWindow.windowNumberAtPointBelowWindowWithWindowNumber($.CGPointMake(px, H - py), 0)); } catch (e) { out.push('hitFlipped err ' + e); }
     try { out.push('hitRaw=' + $.NSWindow.windowNumberAtPointBelowWindowWithWindowNumber($.CGPointMake(px, py), 0)); } catch (e) { out.push('hitRaw err ' + e); }
     var all = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(17, 0))) || [];
@@ -29,6 +30,9 @@ function run(argv) {
         if (mode === 'js') { var e = $.CGEventCreateKeyboardEvent(null, 0, down); $.CGEventKeyboardSetUnicodeString(e, s.length, s); post(e); }
         else if (mode === 'data') { var e2 = $.CGEventCreateKeyboardEvent(null, 0, down); var data = $(s).dataUsingEncoding(0x94000100); $.CGEventKeyboardSetUnicodeString(e2, data.length / 2, data.bytes); post(e2); }
         else if (mode === 'ref') { if (s.length !== 1) continue; var e3 = $.CGEventCreateKeyboardEvent(null, 0, down); var r = Ref('S'); r[0] = s.charCodeAt(0); $.CGEventKeyboardSetUnicodeString(e3, 1, r); post(e3); }
+        else if (mode === 'ref2arr') { var e4 = $.CGEventCreateKeyboardEvent(null, 0, down); var r2 = Ref('[2S]'); r2[0] = s.charCodeAt(0); if (s.length > 1) r2[1] = s.charCodeAt(1); $.CGEventKeyboardSetUnicodeString(e4, s.length, r2); post(e4); }
+        else if (mode === 'refpair') { for (var u = 0; u < s.length; u++) { var e5 = $.CGEventCreateKeyboardEvent(null, 0, down); var r5 = Ref('S'); r5[0] = s.charCodeAt(u); $.CGEventKeyboardSetUnicodeString(e5, 1, r5); post(e5); } }
+        else if (mode === 'refI') { var e6 = $.CGEventCreateKeyboardEvent(null, 0, down); var r6 = Ref('I'); r6[0] = s.length > 1 ? (s.charCodeAt(0) + s.charCodeAt(1) * 65536) : s.charCodeAt(0); $.CGEventKeyboardSetUnicodeString(e6, s.length, r6); post(e6); }
         else if (mode === 'nsevent') { var ev = $.NSEvent.keyEventWithTypeLocationModifierFlagsTimestampWindowNumberContextCharactersCharactersIgnoringModifiersIsARepeatKeyCode(down ? 10 : 11, { x: 0, y: 0 }, 0, 0, 0, $(), $(s), $(s), false, 0); var cg = ev.CGEvent; post(cg); }
       } catch (err) { out.push(mode + ' err ' + err); }
       delay(0.02);
