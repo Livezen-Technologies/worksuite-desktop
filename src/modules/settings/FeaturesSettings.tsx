@@ -22,8 +22,17 @@ export function FeaturesSettings() {
   const ds = useDesktopSettings();
   const bootstrap = useStore(app, (s) => s.bootstrap);
   const guest = useGuest();
-  // Every app the person is given — turned off ones included, so they can be turned on again.
-  const given = useMemo(() => (bootstrap ? navApps(visibleApps(grantOf(bootstrap))).filter((a) => canDisableModule(a.id)) : []), [bootstrap]);
+  // Every app the person is given — turned off ones included, so they can be turned on again — once per server
+  // application slug (`modules.<slug>.enabled`). Apps without a slug (Home, Activity …) cannot be turned off.
+  const given = useMemo(() => {
+    if (!bootstrap) return [];
+    const seen = new Set<string>();
+    return navApps(visibleApps(grantOf(bootstrap))).filter((a): a is typeof a & { app: string } => {
+      if (!a.app || !canDisableModule(a.app) || seen.has(a.app)) return false;
+      seen.add(a.app);
+      return true;
+    });
+  }, [bootstrap]);
   const items = new Map(ds.catalogue.map((c) => [c.key, c]));
   const known = new Set(DESKTOP_FEATURES.map((f) => featureKey(f.id)));
   // Features the server knows and this desktop does not draw itself: shown and synced all the same.
@@ -69,13 +78,13 @@ export function FeaturesSettings() {
                   {list.map((a) => (
                     <BooleanRow
                       key={a.id}
-                      k={moduleKey(a.id)}
+                      k={moduleKey(a.app)}
                       label={appLabel(a)}
                       icon={a.icon}
-                      e={ds.effective[moduleKey(a.id)]}
-                      def={items.get(moduleKey(a.id))?.default ?? true}
-                      onChange={(v) => set(moduleKey(a.id), v)}
-                      onReset={() => set(moduleKey(a.id), null)}
+                      e={ds.effective[moduleKey(a.app)]}
+                      def={items.get(moduleKey(a.app))?.default ?? true}
+                      onChange={(v) => set(moduleKey(a.app), v)}
+                      onReset={() => set(moduleKey(a.app), null)}
                     />
                   ))}
                 </div>

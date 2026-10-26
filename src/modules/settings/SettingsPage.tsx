@@ -59,7 +59,7 @@ import { AccountsServers } from './AccountsServers';
 import { ADMIN_RINGING_ROUTE, AdminRinging } from './AdminRinging';
 import { ADMIN_PROTECTION_ROUTE, useHasPermission } from './AdminNav';
 import { AdminProtection } from '../mail/protection/admin/AdminProtection';
-import { prefKey, prefOfKey } from '@shared/desktop-settings';
+import { syncedPrefOf } from '@shared/desktop-settings';
 import { setDesktopSettings, useDesktopSettings } from '../../core/desktop-settings';
 import { SectionHeader, SettingRow, SettingsGroup, SettingsQuery, SettingsSearchBox } from './kit';
 import { FeaturesSettings } from './FeaturesSettings';
@@ -263,14 +263,13 @@ function Row({ label, hint, children, lock, onReset }: { label: string; hint?: R
  * Reset to default for a preference that syncs (`prefs.<name>`): offered while the person's own choice differs from
  * the default, and never for a key the organisation manages.
  */
-function usePrefReset(k: keyof Preferences, current: unknown): (() => void) | null {
+function usePrefReset(k: keyof Preferences, _current?: unknown): (() => void) | null {
   const ds = useDesktopSettings();
-  const key = prefKey(k);
-  if (!prefOfKey(key)) return null;
-  const e = ds.effective[key];
-  const def = ds.catalogue.find((c) => c.key === key)?.default;
-  if (e?.locked || def === undefined || def === null || current === undefined || JSON.stringify(current) === JSON.stringify(def)) return null;
-  return () => void setDesktopSettings({ [key]: null });
+  const p = syncedPrefOf(k);
+  const e = p ? ds.effective[p.key] : undefined;
+  // Offered while the value is the person's own synced choice; back to the organisation's default or the catalogue's.
+  if (!p || !e || e.locked || e.source !== 'user') return null;
+  return () => void setDesktopSettings({ [p.key]: null });
 }
 
 function Toggle({ k, prefs, label, hint, disabled }: { k: keyof Preferences; prefs: Preferences; label: string; hint?: string; disabled?: boolean }) {
@@ -364,6 +363,7 @@ function PreferencesSection({ prefs }: { prefs: Preferences }) {
       )}
       <Toggle k="notificationSounds" prefs={prefs} label="Sounds" />
       <Toggle k="hardwareAcceleration" prefs={prefs} label="Hardware acceleration" hint="Turn off if the window flickers or draws badly. Takes effect after a restart." />
+      <Toggle k="spellcheck" prefs={{ ...prefs, spellcheck: prefs.spellcheck !== false }} label="Check spelling as you type" />
       <Shortcuts prefs={prefs} />
     </>
   );

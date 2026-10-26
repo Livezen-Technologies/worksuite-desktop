@@ -15,12 +15,13 @@ person who has to live with the change — what it does, and where it bites.
 
 ### Added
 
-- **Features & apps, and the startup screen.** Settings has a new **Features & apps** section: the command palette,
-  search, the app launcher, desktop notifications, the tray, starting with the computer, tab restore and AI Quick Ask
-  can each be turned off, and so can every app. An app you turn off is gone from the launcher, the sidebar, search,
+- **Features & apps, and the startup screen.** Settings has a new **Features & apps** section: search in the app
+  launcher, the keys that open WorkSuite from other apps, opening WorkSuite links in the app, editing in WorkSuite
+  Office, Drive sync and offline files can each be turned off, and so can every app. An app you turn off is gone from the launcher, the sidebar, search,
   links, shortcuts, the command palette and the tray until you turn it on again; its data stays on the server.
-  **Desktop & startup** says what WorkSuite opens on — Home, where you left off, an app or a page — and has the start
-  and close switches that were under Preferences. On a personal account everything is on until you turn it off. In an
+  **Desktop & startup** says what WorkSuite opens on — Home, where you left off, an app or a page — (Home unless you choose), and has the start
+  and close switches that were under Preferences. Your theme, language, start and tray choices, notification
+  settings, spell check and hardware acceleration follow you too. On a personal account everything is on until you turn it off. In an
   organisation, IT can set any of this: what it manages is shown with a **Managed by your organization** lock (hover
   it for why) and cannot be changed; what it only suggests is marked as your organization's default and is yours to
   change. Your choices follow you to your other computers; offline, WorkSuite uses the settings as of the last sync

@@ -9,11 +9,14 @@ import type { Preferences } from './types';
  * The server keeps one document per person (`GET api/desktop/settings`): a catalogue of the keys there are, the
  * organisation's policy, the person's own preferences and what takes effect. Keys:
  *
- *   features.<id>            a feature on or off (the palette, the launcher, notifications …)
- *   modules.<appId>.enabled  an app on or off — off, it is gone from the launcher, the rail, links, shortcuts, the
- *                            command palette and the tray, exactly as an app the server does not give
- *   startup.screen           'home' | 'last' | 'app:<appId>' | 'route:<path>'
- *   prefs.<name>             one of the person's preferences (`Preferences`), synced across their devices
+ *   features.<id>            a feature on or off: launcherSearch, globalShortcut, itemLinks, officeEditing, fileSync,
+ *                            offlineFiles (DESKTOP_FEATURES says where each is enforced)
+ *   modules.<slug>.enabled   an app on or off, by its server `applications` slug (`AppDefinition.app`) — off, it is
+ *                            gone from the launcher, the rail, links, shortcuts, the command palette and the tray,
+ *                            exactly as an app the server does not give
+ *   startup.screen           'home' | 'last' | 'app:<slug>' | 'route:/<path>'
+ *   prefs.<name>             one of the person's preferences, synced across their devices (SYNCED_PREFS maps the
+ *                            server's names — `prefs.launchAtLogin`, `prefs.notifications.preview` … — to `Preferences`)
  *
  * Who decides (resolveSettings):
  *   - Enterprise: a `managed` policy entry decides and is locked; otherwise the person's preference; otherwise a
@@ -63,6 +66,8 @@ export interface DesktopSettingsDoc {
   mode: SettingsMode;
   org_id: string | number | null;
   version: number;
+  /** Raised by the server when a key is added, removed or changes type. */
+  catalogue_version?: number;
   catalogue: CatalogueItem[];
   policy: Record<string, PolicyEntry>;
   preferences: Record<string, SettingValue>;
@@ -99,10 +104,13 @@ export const MANAGED_REASON = 'Your organization manages this setting.';
 
 export const STARTUP_KEY = 'startup.screen';
 export const featureKey = (id: string): string => `features.${id}`;
-export const moduleKey = (appId: string): string => `modules.${appId}.enabled`;
+/** `modules.<slug>.enabled`: the server's application slug (`AppDefinition.app`), not the desktop's app id. */
+export const moduleKey = (slug: string): string => `modules.${slug}.enabled`;
 export const prefKey = (name: string): string => `prefs.${name}`;
 
-const KEY_RE = /^(features\.[a-z0-9_]{1,48}|modules\.[a-z0-9_-]{1,40}\.enabled|startup\.screen|prefs\.[A-Za-z0-9_]{1,48})$/;
+/** The key shapes; the same pattern guards `desktopSettings:set` (shared/ipc/contract.ts). */
+export const SETTING_KEY_PATTERN = /^(features\.[A-Za-z][A-Za-z0-9_]{0,47}|modules\.[a-z][a-z0-9_-]{0,39}\.enabled|startup\.screen|prefs\.[A-Za-z][A-Za-z0-9_.]{0,63})$/;
+const KEY_RE = SETTING_KEY_PATTERN;
 
 /** Whether a key is one of the four shapes the contract allows. */
 export function isSettingKey(key: string): boolean {
@@ -111,85 +119,131 @@ export function isSettingKey(key: string): boolean {
 
 /** The app id in `modules.<appId>.enabled`, or null. */
 export function moduleOfKey(key: string): string | null {
-  const m = /^modules\.([a-z0-9_-]{1,40})\.enabled$/.exec(key);
+  const m = /^modules\.([a-z][a-z0-9_-]{0,39})\.enabled$/.exec(key);
   return m ? m[1]! : null;
 }
 
 // ── what this desktop knows ──────────────────────────────────────────────
 
 /**
- * The features the desktop enforces. `prefs`: preferences a feature that is off holds off (and shows locked), so the
- * services that read them stop by themselves. The rest are enforced where they open (the overlays, Quick Ask).
+ * The features (the server's catalogue: `features.<id>`) and where the desktop enforces each. `overlay`: preferences a
+ * feature that is off holds as given, so the services that read them follow by themselves.
  */
 export interface DesktopFeature {
   id: string;
   label: string;
   description: string;
-  prefs?: ReadonlyArray<keyof Preferences>;
+  overlay?: Partial<Preferences>;
 }
 
 export const DESKTOP_FEATURES: readonly DesktopFeature[] = [
-  { id: 'command_palette', label: 'Command palette', description: 'Run commands and open apps by name from the keyboard.' },
-  { id: 'global_search', label: 'Search', description: 'Search across apps from the title bar and its shortcut.' },
-  { id: 'app_launcher', label: 'App launcher', description: 'The grid of every app, from the title bar, the sidebar and its shortcut.' },
-  { id: 'notifications', label: 'Desktop notifications', description: 'Banners and sounds on this computer, even with the window closed.', prefs: ['notificationsEnabled'] },
-  { id: 'background_tray', label: 'Keep running in the tray', description: 'Closing the window leaves WorkSuite running in the tray. Off: closing it quits.', prefs: ['minimizeToTray', 'startMinimized'] },
-  { id: 'start_with_os', label: 'Start with the computer', description: 'WorkSuite may start when you sign in to the computer.', prefs: ['startWithOs'] },
-  { id: 'restore_tabs', label: 'Reopen tabs', description: 'WorkSuite may bring back the tabs you had open.', prefs: ['restoreTabs'] },
-  { id: 'ai_quick_ask', label: 'AI Quick Ask', description: 'The assistant over any app, from its global shortcut.' },
+  // The launcher's "Find an app" box (src/app/overlays/Launcher.tsx).
+  { id: 'launcherSearch', label: 'Launcher search', description: 'Find an app by typing in the app launcher.' },
+  // Every key held for the whole computer that brings WorkSuite up: Quick Ask, Next contact, Support's quick reply,
+  // the Live keys (electron/main/index.ts `globalKeysOn`).
+  { id: 'globalShortcut', label: 'Global shortcut to open WorkSuite', description: 'Keys that open WorkSuite from any app.' },
+  // WorkSuite links open in the app (deep-link handling and Settings › Links).
+  { id: 'itemLinks', label: 'Open WorkSuite links in the app', description: 'Links to files, meetings, tasks and other items open here instead of the browser.', overlay: { links: { openInApp: false } } },
+  // Documents in WorkSuite Office: the DOC / Sheet / Slides tabs and the WorkSuite Office app.
+  { id: 'officeEditing', label: 'Edit documents in WorkSuite Office', description: 'Open and edit documents in WorkSuite DOC, Sheet and Slides.' },
+  // Drive sync (with the security policy's file_sync; the stricter wins).
+  { id: 'fileSync', label: 'Drive sync', description: 'Keep Drive folders in step with folders on this computer.' },
+  // Files kept on this computer to work on offline (`desktop.files.offline`, office:readOffline/writeOffline).
+  { id: 'offlineFiles', label: 'Offline files', description: 'Keep files on this computer to open without a connection.' },
 ];
 
-/**
- * Preferences that sync as `prefs.<name>`: scalar choices that mean the same on every computer. Paths, folders,
- * per-computer caches and the security settings (which have their own policy) stay on the computer, and the colour
- * profile and its mode sync on their own (appearance-sync, with the organisation's colour profile).
- */
-export const SYNCED_PREFS: ReadonlyArray<{ name: keyof Preferences; label: string; type: SettingType; options?: SettingOption[] }> = [
-  { name: 'density', label: 'Density', type: 'enum', options: [{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }] },
-  { name: 'sidebarMode', label: 'Sidebar', type: 'enum', options: [{ value: 'expanded', label: 'Expanded' }, { value: 'collapsed', label: 'Collapsed' }, { value: 'auto-hide', label: 'Auto-hide' }] },
-  { name: 'highContrast', label: 'High contrast', type: 'boolean' },
-  { name: 'restoreTabs', label: 'Reopen my tabs when WorkSuite starts', type: 'boolean' },
-  { name: 'startWithOs', label: 'Start with your computer', type: 'boolean' },
-  { name: 'startMinimized', label: 'Start minimized to the tray', type: 'boolean' },
-  { name: 'minimizeToTray', label: 'Closing the window keeps WorkSuite in the tray', type: 'boolean' },
-  { name: 'notificationsEnabled', label: 'Desktop notifications', type: 'boolean' },
-  { name: 'notificationSounds', label: 'Sounds', type: 'boolean' },
-  { name: 'badgeCount', label: 'Badge count', type: 'boolean' },
-  { name: 'openFilesLocally', label: 'Open downloaded files', type: 'enum', options: [{ value: 'ask', label: 'Ask' }, { value: 'always', label: 'Open locally' }, { value: 'never', label: 'Download only' }] },
-  { name: 'tabSuspendMinutes', label: 'Tab suspension', type: 'number' },
-  { name: 'dndEnabled', label: 'Do not disturb', type: 'boolean' },
-  { name: 'dndFrom', label: 'Do not disturb from', type: 'string' },
-  { name: 'dndTo', label: 'Do not disturb until', type: 'string' },
-];
-const SYNCED_PREF_NAMES = new Set<string>(SYNCED_PREFS.map((p) => p.name));
-
-/** The preference a `prefs.<name>` key is, when it is one this desktop applies. */
-export function prefOfKey(key: string): keyof Preferences | null {
-  const name = key.startsWith('prefs.') ? key.slice(6) : null;
-  return name && SYNCED_PREF_NAMES.has(name) ? (name as keyof Preferences) : null;
+/** One synced preference: the server's key and the local `Preferences` field it is, both ways. */
+export interface SyncedPref {
+  key: string;
+  pref: keyof Preferences;
+  label: string;
+  type: SettingType;
+  options?: SettingOption[];
+  /** The server's value as the local one; undefined: nothing to apply (e.g. language `system`). */
+  toLocal: (v: SettingValue) => unknown;
+  /** The local value as the server's; undefined: not one the server takes. */
+  toServer: (v: unknown) => SettingValue | undefined;
 }
 
-/** Apps that can never be turned off: the shell's own screens (Home, Settings …) and what has no app gate. */
-export function canDisableModule(appId: string): boolean {
-  return !SHELL_SCREENS.has(appId);
+const same = (v: unknown): SettingValue | undefined => (typeof v === 'boolean' || typeof v === 'string' || typeof v === 'number' ? v : undefined);
+const bool = (key: string, pref: keyof Preferences, label: string): SyncedPref => ({ key, pref, label, type: 'boolean', toLocal: (v) => (typeof v === 'boolean' ? v : undefined), toServer: (v) => (typeof v === 'boolean' ? v : undefined) });
+const PRIVACY: Record<string, string> = { full: 'FULL', sender_only: 'SENDER_ONLY', generic: 'GENERIC' };
+const LANGS = ['en', 'si', 'ta'];
+
+/**
+ * The server's `prefs.*` and the preferences they are here. Paths, folders, per-computer caches and the security
+ * settings (which have their own policy) stay on the computer.
+ */
+export const SYNCED_PREFS: readonly SyncedPref[] = [
+  { key: 'prefs.theme', pref: 'theme', label: 'Theme', type: 'enum', options: [{ value: 'system', label: 'Match the system' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }], toLocal: (v) => (v === 'system' || v === 'light' || v === 'dark' ? v : undefined), toServer: (v) => (v === 'system' || v === 'light' || v === 'dark' ? v : undefined) },
+  {
+    key: 'prefs.language',
+    pref: 'language',
+    label: 'Language',
+    type: 'enum',
+    options: [{ value: 'system', label: 'Match the system' }, { value: 'en', label: 'English' }, { value: 'si', label: 'Sinhala' }, { value: 'ta', label: 'Tamil' }],
+    toLocal: (v) => (typeof v === 'string' && LANGS.includes(v) ? v : undefined),
+    toServer: (v) => (typeof v === 'string' && LANGS.includes(v) ? v : undefined),
+  },
+  bool('prefs.launchAtLogin', 'startWithOs', 'Open WorkSuite when you sign in to the computer'),
+  bool('prefs.startMinimized', 'startMinimized', 'Start minimised'),
+  bool('prefs.minimizeToTray', 'minimizeToTray', 'Keep running in the tray when the window is closed'),
+  bool('prefs.notifications.enabled', 'notificationsEnabled', 'Desktop notifications'),
+  bool('prefs.notifications.sound', 'notificationSounds', 'Notification sounds'),
+  bool('prefs.notifications.badge', 'badgeCount', 'Unread count on the app icon'),
+  {
+    key: 'prefs.notifications.preview',
+    pref: 'notificationPrivacy',
+    label: 'What a notification shows',
+    type: 'enum',
+    options: [{ value: 'full', label: 'Sender and message' }, { value: 'sender_only', label: 'Sender only' }, { value: 'generic', label: 'Nothing but “New activity”' }],
+    toLocal: (v) => (typeof v === 'string' ? PRIVACY[v] : undefined),
+    toServer: (v) => same(Object.keys(PRIVACY).find((k) => PRIVACY[k] === v)),
+  },
+  bool('prefs.spellcheck', 'spellcheck', 'Check spelling as you type'),
+  bool('prefs.hardwareAcceleration', 'hardwareAcceleration', 'Use hardware acceleration'),
+];
+const SYNCED_BY_KEY = new Map(SYNCED_PREFS.map((p) => [p.key, p]));
+const SYNCED_BY_PREF = new Map(SYNCED_PREFS.map((p) => [p.pref as string, p]));
+
+/** The synced preference a `prefs.*` key is, when it is one this desktop applies. */
+export function prefOfKey(key: string): SyncedPref | null {
+  return SYNCED_BY_KEY.get(key) ?? null;
+}
+
+/** The synced preference a local `Preferences` field is, or null. */
+export function syncedPrefOf(pref: string): SyncedPref | null {
+  return SYNCED_BY_PREF.get(pref) ?? null;
+}
+
+/** Apps that can never be turned off: the shell's own screens (Home, Settings …) — they have no slug anyway. */
+export function canDisableModule(slug: string): boolean {
+  return !SHELL_SCREENS.has(slug);
+}
+
+/** The server slugs of the apps in a list, once each, with the first app's label. */
+export function moduleSlugs(apps: ReadonlyArray<Pick<AppDefinition, 'app' | 'label'>>): Array<{ slug: string; label: string }> {
+  const seen = new Map<string, string>();
+  for (const a of apps) if (a.app && canDisableModule(a.app) && !seen.has(a.app)) seen.set(a.app, a.label);
+  return [...seen].map(([slug, label]) => ({ slug, label }));
 }
 
 export const STARTUP_OPTIONS: SettingOption[] = [
   { value: 'home', label: 'Home' },
-  { value: 'last', label: 'Where I left off' },
+  { value: 'last', label: 'Where you left off' },
 ];
 
-/** The catalogue this desktop knows without a server: every feature, app, the startup screen and the synced prefs. */
-export function localCatalogue(apps: readonly AppDefinition[] = APP_CATALOGUE, defaults?: Partial<Preferences>): CatalogueItem[] {
-  // `last` until someone chooses: what WorkSuite did before there was a choice (the tabs back, the last one in front;
-  // Home when tab restore is off).
-  const out: CatalogueItem[] = [{ key: STARTUP_KEY, type: 'string', default: 'last', label: 'Startup screen', group: 'startup', options: STARTUP_OPTIONS }];
+/**
+ * The catalogue this desktop knows without a server — the same keys and defaults as the server's (DesktopSettings.php),
+ * every app with a server slug as a module. `defaults`: unused, kept for callers; a synced preference's default is the
+ * server's, and the local preference stands while nobody has chosen (preferenceOverlay ignores defaults).
+ */
+export function localCatalogue(apps: readonly AppDefinition[] = APP_CATALOGUE, _defaults?: Partial<Preferences>): CatalogueItem[] {
+  const out: CatalogueItem[] = [];
   for (const f of DESKTOP_FEATURES) out.push({ key: featureKey(f.id), type: 'boolean', default: true, label: f.label, description: f.description, group: 'features' });
-  for (const a of apps) if (canDisableModule(a.id) && !a.channelOf) out.push({ key: moduleKey(a.id), type: 'boolean', default: true, label: a.label, group: 'modules' });
-  for (const p of SYNCED_PREFS) {
-    const d = defaults?.[p.name];
-    out.push({ key: prefKey(p.name), type: p.type, default: d === undefined ? null : (d as SettingValue), label: p.label, group: 'prefs', ...(p.options ? { options: p.options } : {}) });
-  }
+  for (const m of moduleSlugs(apps)) out.push({ key: moduleKey(m.slug), type: 'boolean', default: true, label: m.label, group: 'modules' });
+  out.push({ key: STARTUP_KEY, type: 'string', default: 'home', label: 'Opens on launch', group: 'startup', options: STARTUP_OPTIONS });
+  for (const p of SYNCED_PREFS) out.push({ key: p.key, type: p.type, default: null, label: p.label, group: 'preferences', ...(p.options ? { options: p.options } : {}) });
   return out;
 }
 
@@ -227,7 +281,8 @@ export function validValue(item: CatalogueItem | undefined, v: unknown): v is Se
     case 'enum':
       return typeof v === 'string' && (!item.options?.length || item.options.some((o) => o.value === v));
     default:
-      return typeof v === 'string' && v.length <= 2048;
+      // A string with options takes one of them (as the server checks: DesktopSettings::valid).
+      return typeof v === 'string' && v.length <= 300 && (!item.options?.length || item.options.some((o) => o.value === v));
   }
 }
 
@@ -273,56 +328,55 @@ export function featureOn(effective: Record<string, EffectiveSetting> | null | u
 }
 
 /** Whether an app is on (`modules.<id>.enabled` is not false). The shell's screens always are. */
-export function moduleOn(effective: Record<string, EffectiveSetting> | null | undefined, appId: string): boolean {
-  if (!canDisableModule(appId)) return true;
-  return effective?.[moduleKey(appId)]?.value !== false;
+export function moduleOn(effective: Record<string, EffectiveSetting> | null | undefined, slug: string): boolean {
+  if (!canDisableModule(slug)) return true;
+  return effective?.[moduleKey(slug)]?.value !== false;
 }
 
-/** The apps turned off. */
+/** The server slugs of the apps turned off. */
 export function disabledModules(effective: Record<string, EffectiveSetting> | null | undefined): Set<string> {
   const out = new Set<string>();
   for (const [k, e] of Object.entries(effective ?? {})) {
-    const id = moduleOfKey(k);
-    if (id && e.value === false && canDisableModule(id)) out.add(id);
+    const slug = moduleOfKey(k);
+    if (slug && e.value === false && canDisableModule(slug)) out.add(slug);
   }
   return out;
 }
 
-/** Drops the apps turned off from a visible-apps list (and a channel whose host is off goes with it). */
-export function withoutDisabled<T extends Pick<AppDefinition, 'id' | 'channelOf'>>(apps: readonly T[], off: ReadonlySet<string>): T[] {
+/** Drops the apps whose server slug is turned off from a visible-apps list. An app without a slug is never off. */
+export function withoutDisabled<T extends Pick<AppDefinition, 'app'>>(apps: readonly T[], off: ReadonlySet<string>): T[] {
   if (off.size === 0) return apps as T[];
-  return apps.filter((a) => !off.has(a.id) && !(a.channelOf && off.has(a.channelOf)));
+  return apps.filter((a) => !(a.app && off.has(a.app)));
 }
 
 /** The same for a set of visible app ids (the main process's `visibleApps`). */
 export function withoutDisabledIds(ids: ReadonlySet<string>, off: ReadonlySet<string>): Set<string> {
   if (off.size === 0) return new Set(ids);
-  const hostOf = new Map(APP_CATALOGUE.filter((a) => a.channelOf).map((a) => [a.id, a.channelOf!]));
-  return new Set([...ids].filter((id) => !off.has(id) && !off.has(hostOf.get(id) ?? '')));
+  const slugOf = new Map(APP_CATALOGUE.map((a) => [a.id, a.app]));
+  return new Set([...ids].filter((id) => !off.has(slugOf.get(id) ?? '')));
 }
 
 /**
  * What the policy, a feature that is off, and the person's synced choices make of their preferences: values to put
- * over `Preferences`, and the keys to show locked with why. A managed `prefs.*` is locked; a feature that is off holds
- * its preferences off and locked (by the organisation, or by the person's own Features & apps).
+ * over `Preferences` (in its own shapes: `prefs.notifications.preview` `sender_only` is `SENDER_ONLY`), and the keys
+ * to show locked with why. A managed `prefs.*` is locked. A feature that is off puts its overlay (itemLinks: links
+ * open in the browser). Nobody's choice (`default`) puts nothing: the local preference stands.
  */
 export function preferenceOverlay(effective: Record<string, EffectiveSetting> | null | undefined): { values: Partial<Preferences>; locks: Array<{ key: keyof Preferences; reason: string }> } {
   const values: Record<string, unknown> = {};
   const locks: Array<{ key: keyof Preferences; reason: string }> = [];
   if (!effective) return { values: values as Partial<Preferences>, locks };
   for (const [key, e] of Object.entries(effective)) {
-    const name = prefOfKey(key);
-    if (!name || e.source === 'default' || e.value === null) continue;
-    values[name] = e.value;
-    if (e.locked) locks.push({ key: name, reason: MANAGED_REASON });
+    const p = prefOfKey(key);
+    if (!p || e.source === 'default' || e.value === null) continue;
+    const local = p.toLocal(e.value);
+    if (local === undefined) continue;
+    values[p.pref] = local;
+    if (e.locked) locks.push({ key: p.pref, reason: MANAGED_REASON });
   }
   for (const f of DESKTOP_FEATURES) {
-    const e = effective[featureKey(f.id)];
-    if (!f.prefs || e?.value !== false) continue;
-    for (const name of f.prefs) {
-      values[name] = false;
-      if (!locks.some((l) => l.key === name)) locks.push({ key: name, reason: e.locked ? `${MANAGED_REASON} ${f.label} is turned off.` : `${f.label} is turned off in Settings › Features & apps.` });
-    }
+    if (!f.overlay || effective[featureKey(f.id)]?.value !== false) continue;
+    for (const [k, v] of Object.entries(f.overlay)) values[k] = v && typeof v === 'object' ? { ...(values[k] as object), ...v } : v;
   }
   return { values: values as Partial<Preferences>, locks };
 }
@@ -342,10 +396,11 @@ export function migrationValues(
 ): Record<string, SettingValue> {
   const out: Record<string, SettingValue> = {};
   for (const p of SYNCED_PREFS) {
-    const v = prefs[p.name];
+    const v = prefs[p.pref];
     if (v === undefined || v === null || typeof v === 'object') continue;
-    if (JSON.stringify(v) === JSON.stringify(defaults[p.name])) continue;
-    out[prefKey(p.name)] = v as SettingValue;
+    if (JSON.stringify(v) === JSON.stringify(defaults[p.pref])) continue;
+    const server = p.toServer(v);
+    if (server !== undefined) out[p.key] = server;
   }
   // Choices made here before the server had desktop settings (features, apps, startup) go up too.
   for (const [k, v] of Object.entries(local)) if (isSettingKey(k) && v !== null) out[k] = v;
@@ -361,7 +416,8 @@ export function migrationValues(
 
 export type StartupChoice = { kind: 'home' } | { kind: 'last' } | { kind: 'app'; appId: string } | { kind: 'route'; path: string };
 
-const ROUTE_RE = /^\/[A-Za-z0-9][A-Za-z0-9/_.~%-]*(\?[A-Za-z0-9_.~%=&+,:-]*)?$/;
+/** An in-app path, as the server allows it: one leading slash, never `//host`, no scheme, spaces or quotes. */
+const ROUTE_RE = /^\/(?!\/)[A-Za-z0-9\-._~/?=&%#+:@!$,;]{0,255}$/;
 
 /** Reads `startup.screen`; null for anything that is not one of the four shapes (or a path that is not in-app). */
 export function parseStartup(v: unknown): StartupChoice | null {
@@ -374,14 +430,14 @@ export function parseStartup(v: unknown): StartupChoice | null {
   }
   if (v.startsWith('route:')) {
     const path = v.slice(6);
-    return path.length <= 512 && ROUTE_RE.test(path) && !path.startsWith('//') && !path.includes('..') ? { kind: 'route', path } : null;
+    return ROUTE_RE.test(path) && !path.includes('..') ? { kind: 'route', path } : null;
   }
   return null;
 }
 
 export interface StartupContext {
   /** The visible apps, after the ones turned off are taken out. */
-  apps: ReadonlyArray<Pick<AppDefinition, 'id' | 'route'>>;
+  apps: ReadonlyArray<Pick<AppDefinition, 'id' | 'route' | 'app'>>;
   /** Whether a desktop route may be opened (access and apps turned off). */
   canOpenRoute: (route: string) => boolean;
   /** The route of the tab that was in front when WorkSuite last closed, if tabs were brought back. */
@@ -402,7 +458,8 @@ export function startupTarget(screen: unknown, ctx: StartupContext): { route: st
     case 'last':
       return ctx.lastRoute && ctx.canOpenRoute(ctx.lastRoute) ? { route: null, fallback: null } : { route: ctx.home, fallback: null };
     case 'app': {
-      const a = ctx.apps.find((x) => x.id === choice.appId);
+      // `app:<slug>` (the server's) — or a desktop app id, for an app the server has no slug for (Home's, Activity's).
+      const a = ctx.apps.find((x) => x.app === choice.appId) ?? ctx.apps.find((x) => x.id === choice.appId);
       return a ? { route: appRoute(a), fallback: null } : { route: ctx.home, fallback: 'The app chosen to open at startup is not available, so WorkSuite opened Home.' };
     }
     case 'route':
@@ -411,8 +468,17 @@ export function startupTarget(screen: unknown, ctx: StartupContext): { route: st
 }
 
 /** The startup choices offered for the apps a person has. */
-export function startupOptions(apps: ReadonlyArray<Pick<AppDefinition, 'id' | 'label'>>): SettingOption[] {
-  return [...STARTUP_OPTIONS, ...apps.filter((a) => a.id !== 'home' && !SHELL_SCREENS.has(a.id)).map((a) => ({ value: `app:${a.id}`, label: a.label }))];
+export function startupOptions(apps: ReadonlyArray<Pick<AppDefinition, 'id' | 'label' | 'app'>>): SettingOption[] {
+  const seen = new Set<string>();
+  const out = [...STARTUP_OPTIONS];
+  for (const a of apps) {
+    if (a.id === 'home' || SHELL_SCREENS.has(a.id)) continue;
+    const value = `app:${a.app ?? a.id}`;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    out.push({ value, label: a.label });
+  }
+  return out;
 }
 
 /** The view a renderer gets when it has nothing from the desktop yet (a browser preview, tests). */

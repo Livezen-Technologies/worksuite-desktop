@@ -10,8 +10,8 @@ the root CHANGELOG.md.
 
 - Desktop settings — features, apps and the startup screen, with the organisation's policy over them (shared/desktop-settings.ts, electron/services/desktop-settings.ts). Enterprise: a managed policy entry decides and is locked, a default one is only a default; personal: everything on and the person's to change. Synced across the person's computers through api/desktop/settings, kept here with when it was last read for offline; a server without it (404) leaves this computer's choices alone.
 - Settings › Features & apps — features and every app on or off, what the organisation manages locked with its badge, its defaults marked, Reset to default, and whether it is synced or offline as of when.
-- Settings › Desktop & startup — Open at startup (Home, where I left off, an app or a page), applied when WorkSuite starts; the start and close switches moved here from Preferences.
-- An app turned off is gone from the launcher, the sidebar, links, deep links, shortcuts, the command palette and the tray; a feature turned off (the palette, search, the launcher, notifications, the tray, start with the computer, tab restore, Quick Ask) is off everywhere.
+- Settings › Desktop & startup — Open at startup (Home by default, where I left off, an app or a page), applied when WorkSuite starts; the start and close switches moved here from Preferences.
+- An app turned off (by its server `applications` slug) is gone from the launcher, the sidebar, links, deep links, shortcuts, the command palette and the tray; a feature turned off (launcher search, the global shortcuts, item links, WorkSuite Office editing, Drive sync, offline files) is off everywhere. The server's `prefs.*` (theme, language, launch at login, tray, notifications, spell check, hardware acceleration) map onto this computer's preferences, the new `spellcheck` among them.
 - The first sync uploads this computer's own preferences where the organisation does not manage them and no other computer chose.
 
 **Changed**

@@ -100,9 +100,9 @@ describe('LockBadge', () => {
 
 describe('Features & apps', () => {
   it('shows managed features and apps locked with the badge, disabled; the rest are the person’s', async () => {
-    app.set({ desktopSettings: view({ [featureKey('global_search')]: { value: false, enforcement: 'managed' }, [moduleKey('crm')]: { value: false, enforcement: 'managed' } }) });
+    app.set({ desktopSettings: view({ [featureKey('launcherSearch')]: { value: false, enforcement: 'managed' }, [moduleKey('crm')]: { value: false, enforcement: 'managed' } }) });
     wrap(<FeaturesSettings />);
-    const search = screen.getByRole('switch', { name: 'Search' });
+    const search = screen.getByRole('switch', { name: 'Launcher search' });
     expect(search.getAttribute('aria-checked')).toBe('false');
     expect(search).toHaveProperty('disabled', true);
     const crm = screen.getByRole('switch', { name: 'CRM' });
@@ -110,11 +110,11 @@ describe('Features & apps', () => {
     const crmRow = crm.closest<HTMLElement>('[data-setting-row]')!;
     expect(within(crmRow).getByText('Managed by your organization')).toBeTruthy();
     // Not managed: the person's to change.
-    const palette = screen.getByRole('switch', { name: 'Command palette' });
+    const palette = screen.getByRole('switch', { name: 'Drive sync' });
     expect(palette).toHaveProperty('disabled', false);
     expect(within(palette.closest<HTMLElement>('[data-setting-row]')!).queryByText('Managed by your organization')).toBeNull();
     await act(async () => void fireEvent.click(palette));
-    expect(bridge.call).toHaveBeenCalledWith('desktopSettings:set', { values: { [featureKey('command_palette')]: false } });
+    expect(bridge.call).toHaveBeenCalledWith('desktopSettings:set', { values: { [featureKey('fileSync')]: false } });
     expect(screen.getByText('Enterprise')).toBeTruthy();
   });
 
@@ -149,9 +149,10 @@ describe('Startup screen', () => {
   it('saves the person’s choice', async () => {
     app.set({ desktopSettings: view({}) });
     wrap(<StartupSettings />);
-    expect(screen.getByRole('radio', { name: /Where I left off/ }).getAttribute('aria-checked')).toBe('true');
-    await act(async () => void fireEvent.click(screen.getByRole('radio', { name: /Home/ })));
-    expect(bridge.call).toHaveBeenCalledWith('desktopSettings:set', { values: { [STARTUP_KEY]: 'home' } });
+    // The server's default: Home.
+    expect(screen.getByRole('radio', { name: /Home/ }).getAttribute('aria-checked')).toBe('true');
+    await act(async () => void fireEvent.click(screen.getByRole('radio', { name: /Where I left off/ })));
+    expect(bridge.call).toHaveBeenCalledWith('desktopSettings:set', { values: { [STARTUP_KEY]: 'last' } });
   });
 });
 

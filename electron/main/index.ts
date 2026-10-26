@@ -550,12 +550,25 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     db,
     online: () => !!sessionCtl?.isReady(),
     scope: desktopSettingsScope,
+    // The company open here; none (All organizations) is the person's home company, as the server picks it.
+    organizationId: () => sessionCtl?.organizationScope() ?? null,
     deviceId: () => device.current()?.id ?? null,
     prefs: () => settings.raw(),
     defaults: () => defaultPreferences(),
     resetPrefs: (patch) => void settings.update(patch),
   });
   settings.setDesktopOverlay(preferenceOverlay(desktopSettings.effective()));
+  /** `features.globalShortcut`: the keys held for the whole computer that bring WorkSuite up. */
+  const globalKeysOn = (): boolean => desktopSettings.feature('globalShortcut');
+  /** Spelling as you type (`prefs.spellcheck`), in every window's session. */
+  const applySpellcheck = (wc: Electron.WebContents): void => {
+    try {
+      wc.session.setSpellCheckerEnabled(settings.effective().spellcheck !== false);
+    } catch {
+      /* a session that has no spell checker */
+    }
+  };
+  app.on('web-contents-created', (_e, wc) => applySpellcheck(wc));
   // A call rings only for whoever may open Chat (calls are part of it).
   const calls = new CallService(
     windows,
@@ -1001,6 +1014,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (!b || !sessionCtl.isReady()) return { ok: false, reason: 'Sign in to WorkSuite to sync Drive folders.' };
     const why = syncRefusal(b.policy, device.getTrust(), device.getClassification());
     if (why) return { ok: false, reason: why };
+    // `features.fileSync` (desktop settings): with the security policy above, the stricter wins.
+    if (!desktopSettings.feature('fileSync')) return { ok: false, reason: desktopSettings.effective()['features.fileSync']?.locked ? 'Your organization has turned Drive sync off in WorkSuite Desktop.' : 'Drive sync is turned off in Settings › Features & apps.' };
     if (!sessionCtl.hasPermission('desktop.files.sync')) return { ok: false, reason: 'Drive sync on the desktop is not part of your role.' };
     return { ok: true, reason: null };
   };
@@ -1682,6 +1697,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         void openExternalSafely(url);
         return;
       }
+      // `features.itemLinks` off: links do not open items here at all.
+      if (!desktopSettings.feature('itemLinks')) {
+        broadcast('toast', { kind: 'warning', text: 'Opening WorkSuite links in the app is turned off.' });
+        return;
+      }
       log.info('item link', { type: item.link.type, action: item.link.action });
       navigate({ route: itemRoute(item.link), organizationId: item.link.org, source: 'deep-link', item: { link: item.link, source: item.link.source ?? 'external', app: itemApp(item.link) } });
       return;
@@ -1771,7 +1791,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void supportDesk.latest().then((id) => (id ? openQuickReply(id) : navigate({ route: '/support?view=mine', source: 'tray' })));
   };
   const syncSupportKeys = (): void => {
-    const want = sessionCtl.isReady() && !lock.isLocked() && canOpenApp('support', sessionCtl.visibleApps()) && supportNoticePrefs(settings.effective().supportNotices).quickShortcut;
+    const want = sessionCtl.isReady() && !lock.isLocked() && globalKeysOn() && canOpenApp('support', sessionCtl.visibleApps()) && supportNoticePrefs(settings.effective().supportNotices).quickShortcut;
     if (want && !supportKeyHeld) {
       try {
         supportKeyHeld = globalShortcut.register(SUPPORT_QUICK_SHORTCUT, quickLatest);
@@ -2443,7 +2463,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   let liveKeysHeld = false;
   const syncLiveKeys = (): void => {
     // Unless turned off in Settings › Notifications & calls › Shortcuts.
-    const want = settings.effective().webchatRinging.liveShortcuts !== false && !!livePulse.get() && !lock.isLocked() && !BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused());
+    const want = globalKeysOn() && settings.effective().webchatRinging.liveShortcuts !== false && !!livePulse.get() && !lock.isLocked() && !BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused());
     if (want === liveKeysHeld) return;
     if (want) {
       try {
@@ -2562,7 +2582,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     allowed: () => {
       const b = sessionCtl.isReady() && !lock.isLocked() ? sessionCtl.current() : null;
       const may = !!b && (b.permissions.includes('*') || b.permissions.includes('ai.write') || b.permissions.includes('ai.assistant.use'));
-      return may && ai.rules().quickAsk && desktopSettings.feature('ai_quick_ask');
+      return may && ai.rules().quickAsk && globalKeysOn();
     },
     register: (acc, fn) => globalShortcut.register(acc, fn),
     unregister: (acc) => globalShortcut.unregister(acc),
@@ -2595,7 +2615,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     state: () => {
       const pulse = marketingPulse.get();
       return {
-        signedIn: sessionCtl.isReady(),
+        signedIn: sessionCtl.isReady() && globalKeysOn(),
         locked: lock.isLocked(),
         marketing: marketingVisible(),
         agent: pulse ? pulse.queue !== null : null,
@@ -3169,12 +3189,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Apps turned off leave what the person may open; a change is enforced at once — the tray, the menu, windows and
   // every window's navigation (`desktopSettings:changed`) — and preferences a feature holds off follow.
   sessionCtl.disabledApps = () => desktopSettings.disabledModules();
+  sessionCtl.featureOn = (id) => desktopSettings.feature(id);
   let lastOff = [...desktopSettings.disabledModules()].sort().join(',');
   desktopSettings.onChange((view) => {
     const before = settings.effective();
     settings.setDesktopOverlay(preferenceOverlay(view.effective));
     const after = settings.effective();
     if (before.startWithOs !== after.startWithOs || before.startMinimized !== after.startMinimized) applyAutostart(after.startWithOs, after.startMinimized);
+    if (before.hardwareAcceleration !== after.hardwareAcceleration) writeBootConfig(paths().bootConfig, { hardwareAcceleration: after.hardwareAcceleration });
+    if (before.spellcheck !== after.spellcheck) for (const wc of webContents.getAllWebContents()) applySpellcheck(wc);
+    // Global keys and Drive sync follow their features.
+    nextContactKey.sync();
+    syncSupportKeys();
+    syncLiveKeys();
+    sync.kick('policy');
     broadcast('desktopSettings:changed', view);
     const off = [...desktopSettings.disabledModules()].sort().join(',');
     if (off !== lastOff) {

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useFeature } from '../core/desktop-settings';
 import { useCanOpen } from '../core/access';
 import { app } from '../core/app-state';
 import { call, isMac, on } from '../core/bridge';
@@ -70,8 +69,6 @@ export function TitleBar() {
   const activeApp = useStore(tabsStore, (s) => s.tabs.find((x) => x.id === s.activeId)?.app ?? null);
   // Linux: minimise, maximise and close are ours, on the side GNOME puts them (#409).
   const { layout: buttons, maximized } = useWindowButtons();
-  const launcherOn = useFeature('app_launcher');
-  const searchOn = useFeature('global_search');
 
   return (
     <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac ? macBarInsetFor('main', fullScreen) : buttons?.side === 'left' ? 10 : 14, paddingRight: buttons?.side === 'right' ? 10 : topBarPaddingRight(12) }}>
@@ -81,20 +78,17 @@ export function TitleBar() {
       </div>
 
       {/* The App Launcher: every app this person has, as tiles. */}
-      {/* Desktop settings may turn the launcher and search off: then their buttons are not there either. */}
-      {launcherOn ? <TopButton icon="grid" label={t('shell.apps')} onClick={() => openOverlay('launcher')} active={overlay === 'launcher'} /> : null}
+      <TopButton icon="grid" label={t('shell.apps')} onClick={() => openOverlay('launcher')} active={overlay === 'launcher'} />
 
-      {searchOn ? (
-        <button
-          type="button"
-          className="no-drag flex h-9 min-w-0 max-w-[560px] flex-1 items-center gap-2.5 rounded-[9px] bg-white/7 px-3 text-left text-[13.5px] text-navy-ink/80 hover:bg-white/10"
-          onClick={() => openOverlay('search')}
-        >
-          <Icon name="search" size={16} />
-          <span className="flex-1 truncate">{t('shell.search')}</span>
-          <kbd className="rounded-[5px] border border-white/15 px-1.5 py-0.5 font-mono text-[11px]">{prettyAccelerator('Mod+K')}</kbd>
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className="no-drag flex h-9 min-w-0 max-w-[560px] flex-1 items-center gap-2.5 rounded-[9px] bg-white/7 px-3 text-left text-[13.5px] text-navy-ink/80 hover:bg-white/10"
+        onClick={() => openOverlay('search')}
+      >
+        <Icon name="search" size={16} />
+        <span className="flex-1 truncate">{t('shell.search')}</span>
+        <kbd className="rounded-[5px] border border-white/15 px-1.5 py-0.5 font-mono text-[11px]">{prettyAccelerator('Mod+K')}</kbd>
+      </button>
 
       <div className="flex-1" />
 

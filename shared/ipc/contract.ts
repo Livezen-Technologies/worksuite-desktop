@@ -75,7 +75,7 @@ import { salesContract, type SalesOutputs } from '../sales';
 import { labelContract, type LabelOutputs } from '../label';
 import { chequeContract, type ChequeOutputs } from '../cheque';
 import { sinhalaContract, type SinhalaOutputs } from '../sinhala';
-import type { DesktopSettingsView } from '../desktop-settings';
+import { SETTING_KEY_PATTERN, type DesktopSettingsView } from '../desktop-settings';
 import { phoneContract, type PhoneOutputs } from '../phone';
 import { accountsContract, type AccountsOutputs, type ServiceHealthState } from '../accounts';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
@@ -186,6 +186,7 @@ export const preferencesPatchSchema = z
       .partial(),
     density: z.enum(['comfortable', 'compact']),
     hardwareAcceleration: z.boolean(),
+    spellcheck: z.boolean(),
     notificationSounds: z.boolean(),
     notificationPrivacy: z.enum(['FULL', 'SENDER_ONLY', 'GENERIC']),
     notificationsEnabled: z.boolean(),
@@ -1562,7 +1563,7 @@ export const contract = {
   'desktopSettings:set': ch(
     z.object({
       values: z
-        .record(z.string().regex(/^(features\.[a-z0-9_]{1,48}|modules\.[a-z0-9_-]{1,40}\.enabled|startup\.screen|prefs\.[A-Za-z0-9_]{1,48})$/), z.union([z.boolean(), z.number().finite(), z.string().max(2048), z.null()]))
+        .record(z.string().regex(SETTING_KEY_PATTERN), z.union([z.boolean(), z.number().finite(), z.string().max(300), z.null()]))
         .refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 200),
     }),
     { sensitive: true, rate: 20 },

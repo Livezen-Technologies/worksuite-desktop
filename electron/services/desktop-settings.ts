@@ -8,8 +8,8 @@ import {
   mergeCatalogue,
   migrationValues,
   moduleOn,
-  prefKey,
   prefOfKey,
+  syncedPrefOf,
   resolveSettings,
   STARTUP_KEY,
   validValue,
@@ -39,11 +39,19 @@ const log = logger('desktop-settings');
  * server gave stands, and changes wait here until it answers again. The first time a person syncs, the choices this
  * computer already had (its preferences, and anything chosen here before) go up — except where the organisation
  * manages the key or another device already chose.
+ *
+ * The server (worksuite `Modules\Desktop`, DesktopSettings.php): `?organization_id=` for the company open here;
+ * ETag `"ds-<version>-<hash>"`, a 304 with no body; 409 `{status:'error', message, error:'policy_locked', keys}`;
+ * 422 `{errors: {<key>: why}}` and nothing is taken (all or nothing); a `null` for a managed key removes the person's
+ * stored value without a 409; a 503 on a write means its tables are not made yet — the change stays here and is
+ * sent again later.
  */
 export const DESKTOP_SETTINGS_PATH = '/api/desktop/settings';
 export const DESKTOP_PREFERENCES_PATH = '/api/desktop/settings/preferences';
 /** A few clicks make one request. */
 export const SEND_DELAY_MS = 800;
+/** A write the server could not take yet (a 503, offline): tried again after this long. */
+export const RETRY_MS = 5 * 60_000;
 
 /** What is kept per account and person (`desktop_settings:<scope>`). */
 export interface StoredSettings {
@@ -66,12 +74,14 @@ export interface StoredSettings {
 const EMPTY: StoredSettings = { doc: null, etag: null, asOf: null, supported: null, failed: false, local: {}, pending: {}, migrated: false };
 
 export interface DesktopSettingsDeps {
-  http: { url(path: string): string; raw(method: string, url: string, init?: RequestInit & { timeoutMs?: number }): Promise<Response> };
+  http: { url(path: string, query?: Record<string, string | number | boolean | null | undefined>): string; raw(method: string, url: string, init?: RequestInit & { timeoutMs?: number }): Promise<Response> };
   db: { getConfig<T>(key: string): T | undefined; setConfig(key: string, value: unknown): void };
   /** Signed in and ready: the server may be asked. */
   online: () => boolean;
   /** `<account or origin>:<user id>` while someone is signed in; null otherwise (this computer's own choices). */
   scope: () => string | null;
+  /** The company open here (`?organization_id=`); null: the person's home company, as the server picks it. */
+  organizationId?: () => string | null;
   deviceId: () => string | null;
   /** The person's preferences as saved here (no policy applied), and their defaults: what migration uploads. */
   prefs: () => Partial<Preferences>;
@@ -89,8 +99,9 @@ export class DesktopSettingsService {
   private catalogueCache: CatalogueItem[] | null = null;
   private listeners = new Set<(v: DesktopSettingsView) => void>();
   private refreshing: Promise<void> | null = null;
-  private flushing: Promise<string[]> | null = null;
+  private flushing: Promise<Refused> | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private retry: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly deps: DesktopSettingsDeps) {
     this.load();
@@ -104,9 +115,22 @@ export class DesktopSettingsService {
     return `desktop_settings:${scope ?? 'device'}`;
   }
 
+  /** Whose copy: the person, and the company open (each company has its own policy). */
+  private currentScope(): string | null {
+    const scope = this.deps.scope();
+    if (!scope) return null;
+    const org = this.deps.organizationId?.() ?? null;
+    return org ? `${scope}:org-${org}` : scope;
+  }
+
+  private url(path: string): string {
+    const org = this.deps.organizationId?.() ?? null;
+    return this.deps.http.url(path, org ? { organization_id: org } : undefined);
+  }
+
   /** Reads what is kept for whoever is signed in now; call when the session's person or account changes. */
   load(): void {
-    const scope = this.deps.scope();
+    const scope = this.currentScope();
     if (this.loaded && scope === this.scopeKey) return;
     const switched = this.loaded;
     this.loaded = true;
@@ -218,7 +242,7 @@ export class DesktopSettingsService {
       try {
         const headers: Record<string, string> = {};
         if (this.stored.etag && this.stored.doc && this.stored.supported) headers['If-None-Match'] = this.stored.etag;
-        const res = await this.deps.http.raw('GET', this.deps.http.url(DESKTOP_SETTINGS_PATH), { headers });
+        const res = await this.deps.http.raw('GET', this.url(DESKTOP_SETTINGS_PATH), { headers });
         if (scope !== this.scopeKey) return;
         if (res.status === 404 || res.status === 405 || res.status === 501) {
           // An older server: personal mode on this computer's choices, which keep what was waiting.
@@ -257,8 +281,9 @@ export class DesktopSettingsService {
 
   private take(doc: DesktopSettingsDoc, etag: string | null): void {
     this.stored = { ...this.stored, doc, etag: etag ?? `"${doc.version}"`, asOf: new Date(this.now()).toISOString(), supported: true, failed: false };
-    // A wait for a key the organisation now manages is over: the policy decides it.
-    for (const k of Object.keys(this.stored.pending)) if (doc.mode === 'enterprise' && doc.policy?.[k]?.enforcement === 'managed') delete this.stored.pending[k];
+    // A wait for a key the organisation now manages is over: the policy decides it. (A reset — null — still goes up:
+    // it removes the person's stored value, which the server allows.)
+    for (const [k, v] of Object.entries(this.stored.pending)) if (v !== null && doc.mode === 'enterprise' && doc.policy?.[k]?.enforcement === 'managed') delete this.stored.pending[k];
     this.persist();
     this.changed();
   }
@@ -276,21 +301,21 @@ export class DesktopSettingsService {
     }
   }
 
-  /** Sends what waits. Returns the keys the server refused as managed. */
-  flush(): Promise<string[]> {
+  /** Sends what waits. Returns what the server refused: keys it manages (409), values it does not take (422). */
+  flush(): Promise<Refused> {
     if (this.flushing) return this.flushing.then(() => this.flush());
     const s = this.stored;
     const values = { ...s.pending };
-    if (!Object.keys(values).length || !s.supported || !this.deps.online() || !this.scopeKey) return Promise.resolve([]);
+    if (!Object.keys(values).length || !s.supported || !this.deps.online() || !this.scopeKey) return Promise.resolve(NONE);
     const scope = this.scopeKey;
-    this.flushing = (async (): Promise<string[]> => {
+    this.flushing = (async (): Promise<Refused> => {
       try {
         const device = this.deps.deviceId();
-        const res = await this.deps.http.raw('PUT', this.deps.http.url(DESKTOP_PREFERENCES_PATH), {
+        const res = await this.deps.http.raw('PUT', this.url(DESKTOP_PREFERENCES_PATH), {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ values, ...(device ? { device_id: device } : {}) }),
         });
-        if (scope !== this.scopeKey) return [];
+        if (scope !== this.scopeKey) return NONE;
         const body = await readJson(res);
         if (res.status === 409) {
           const keys = lockedKeys(body);
@@ -299,13 +324,23 @@ export class DesktopSettingsService {
           this.persist();
           this.changed();
           void this.refresh();
-          return keys;
+          return { locked: keys, invalid: {} };
+        }
+        if (res.status === 422) {
+          // All or nothing: the values it names are dropped; the rest goes again.
+          const invalid = invalidKeys(body);
+          const named = Object.keys(invalid);
+          for (const k of named.length ? named : Object.keys(values)) if (this.stored.pending[k] === values[k]) delete this.stored.pending[k];
+          this.persist();
+          this.changed();
+          if (named.length && Object.keys(this.stored.pending).length) this.schedule();
+          return { locked: [], invalid: named.length ? invalid : Object.fromEntries(Object.keys(values).map((k) => [k, 'Not an allowed value.'])) };
         }
         if (res.status === 404) {
           this.stored = { ...this.stored, supported: false, local: { ...this.stored.local, ...nonNull(this.stored.pending) }, pending: {} };
           this.persist();
           this.changed();
-          return [];
+          return NONE;
         }
         if (!res.ok) throw new Error(`desktop preferences answered ${res.status}`);
         // What was sent is taken; anything changed meanwhile still waits.
@@ -316,15 +351,26 @@ export class DesktopSettingsService {
           this.persist();
           this.changed();
         }
-        return [];
+        return NONE;
       } catch (e) {
+        // Offline, or a 503 (the server's tables are not made yet): the change stays here and goes later.
         log.debug('desktop preferences not sent', { error: String((e as Error)?.message ?? e) });
-        return [];
+        this.retryLater();
+        return NONE;
       } finally {
         this.flushing = null;
       }
     })();
     return this.flushing;
+  }
+
+  private retryLater(): void {
+    if (this.retry) return;
+    this.retry = setTimeout(() => {
+      this.retry = null;
+      void this.flush();
+    }, RETRY_MS);
+    (this.retry as { unref?: () => void }).unref?.();
   }
 
   private schedule(): void {
@@ -346,7 +392,8 @@ export class DesktopSettingsService {
     this.load();
     const eff = this.effective();
     const items = new Map(this.catalogue().map((c) => [c.key, c]));
-    const locked = Object.keys(values).filter((k) => isLockedKey(eff, k));
+    // A value for a managed key is refused; a reset (null) of one only removes the person's stored value.
+    const locked = Object.keys(values).filter((k) => values[k] !== null && isLockedKey(eff, k));
     if (locked.length) throw new DesktopError('POLICY_DENIED', 'Your organization manages this setting.', 409, { keys: locked });
     for (const [k, v] of Object.entries(values)) {
       if (!isSettingKey(k)) throw new DesktopError('IPC_VALIDATION_FAILED', `Unknown setting ${k}.`);
@@ -354,8 +401,8 @@ export class DesktopSettingsService {
     }
     const resets: Partial<Preferences> = {};
     for (const [k, v] of Object.entries(values)) {
-      const name = prefOfKey(k);
-      if (name && v === null) Object.assign(resets, { [name]: this.deps.defaults()[name] });
+      const p = prefOfKey(k);
+      if (p && v === null && !isLockedKey(eff, k)) Object.assign(resets, { [p.pref]: this.deps.defaults()[p.pref] });
     }
     if (this.stored.supported === false || !this.scopeKey) {
       const local = { ...this.stored.local };
@@ -371,7 +418,9 @@ export class DesktopSettingsService {
     if (Object.keys(resets).length) this.deps.resetPrefs?.(resets);
     this.changed();
     const refused = await this.flush();
-    if (refused.length) throw new DesktopError('POLICY_DENIED', 'Your organization manages this setting.', 409, { keys: refused });
+    if (refused.locked.length) throw new DesktopError('POLICY_DENIED', 'Your organization manages this setting.', 409, { keys: refused.locked });
+    const bad = Object.keys(refused.invalid);
+    if (bad.length) throw new DesktopError('IPC_VALIDATION_FAILED', refused.invalid[bad[0]!] ?? 'That setting was not accepted.', 422, refused.invalid);
     return this.view();
   }
 
@@ -384,10 +433,10 @@ export class DesktopSettingsService {
     const eff = this.effective();
     const next: Record<string, SettingValue> = {};
     for (const [name, v] of Object.entries(patch)) {
-      const key = prefKey(name);
-      if (!prefOfKey(key) || isLockedKey(eff, key)) continue;
-      if (v === null || v === undefined || typeof v === 'object') continue;
-      next[key] = v as SettingValue;
+      const p = syncedPrefOf(name);
+      if (!p || isLockedKey(eff, p.key)) continue;
+      const server = p.toServer(v);
+      if (server !== undefined) next[p.key] = server;
     }
     if (!Object.keys(next).length) return;
     if (this.stored.supported === false || !this.scopeKey) {
@@ -411,7 +460,8 @@ export class DesktopSettingsService {
   /** Signed out with its data removed: nothing of the person's stays. */
   forget(scope: string | null): void {
     this.deps.db.setConfig(this.configKey(scope), null);
-    if (scope === this.scopeKey) {
+    if (this.scopeKey && (scope === this.scopeKey || this.scopeKey.startsWith(`${scope}:org-`))) {
+      this.deps.db.setConfig(this.configKey(this.scopeKey), null);
       this.stored = { ...EMPTY };
       this.changed();
     }
@@ -419,8 +469,23 @@ export class DesktopSettingsService {
 
   dispose(): void {
     if (this.timer) clearTimeout(this.timer);
+    if (this.retry) clearTimeout(this.retry);
     this.timer = null;
+    this.retry = null;
   }
+}
+
+export interface Refused {
+  locked: string[];
+  invalid: Record<string, string>;
+}
+const NONE: Refused = { locked: [], invalid: {} };
+
+/** A 422's `errors: {<key>: why}`. */
+export function invalidKeys(body: unknown): Record<string, string> {
+  const e = (body as { errors?: unknown } | null)?.errors;
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return {};
+  return Object.fromEntries(Object.entries(e as Record<string, unknown>).map(([k, v]) => [k, typeof v === 'string' ? v : 'Not an allowed value.']));
 }
 
 function nonNull(values: Record<string, SettingValue | null>): Record<string, SettingValue> {
@@ -446,6 +511,7 @@ export function docOf(body: unknown): DesktopSettingsDoc | null {
     mode: d.mode,
     org_id: d.org_id ?? null,
     version: typeof d.version === 'number' ? d.version : Number(d.version) || 0,
+    ...(typeof d.catalogue_version === 'number' ? { catalogue_version: d.catalogue_version } : {}),
     catalogue: Array.isArray(d.catalogue) ? d.catalogue.filter((c) => c && typeof c === 'object' && typeof c.key === 'string') : [],
     policy: obj(d.policy),
     preferences: obj(d.preferences),

@@ -9,7 +9,6 @@ import { apiGet } from '../core/api';
 import { appLabel, t } from '../core/i18n';
 import { hideSidebarItem, orderSidebar, pinSidebarItem, useSidebarPrefs } from '../core/sidebar-prefs';
 import { useStore } from '../core/store';
-import { useFeature } from '../core/desktop-settings';
 import { navigate, tabsStore } from '../core/tabs';
 import { toast } from '../core/toasts';
 import { closeOverlay, openOverlay, ui } from '../core/ui';
@@ -54,7 +53,6 @@ interface MenuState {
  */
 export function Sidebar() {
   const apps = useStore(app, (s) => s.apps);
-  const launcherOn = useFeature('app_launcher');
   const status = useStore(app, (s) => s.status);
   const prefs = useStore(app, (s) => s.prefs);
   const personal = useStore(app, (s) => s.auth?.account?.kind === 'personal');
@@ -209,12 +207,12 @@ export function Sidebar() {
         {layout.business.length ? <div className="mx-2 my-3 border-t border-white/10" /> : null}
         <ul className="flex flex-col gap-0.5" data-list="business">
           {layout.business.map((a) => item(a, 'business'))}
-          {launcherOn ? <li>
+          <li>
             <button type="button" onClick={() => openOverlay('launcher')} className={cx('flex h-10 w-full items-center gap-3 rounded-[9px] px-3 text-[14px] font-medium hover:bg-white/8 hover:text-white', collapsed && 'h-11 justify-center px-0')} title={collapsed ? t('nav.moreApps') : undefined}>
               <Icon name="grid" size={collapsed ? 22 : 19} />
               {!collapsed && <span>{t('nav.moreApps')}</span>}
             </button>
-          </li> : null}
+          </li>
         </ul>
       </div>
 

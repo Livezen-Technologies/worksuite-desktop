@@ -33,6 +33,7 @@ export function defaultPreferences(): Preferences {
     appearance: normalizeAppearance(null),
     density: 'comfortable',
     hardwareAcceleration: true,
+    spellcheck: true,
     notificationSounds: true,
     notificationPrivacy: 'SENDER_ONLY',
     notificationsEnabled: true,
@@ -241,8 +242,12 @@ export class SettingsService {
   effective(): Preferences {
     const p = { ...this.prefs, ...this.overlay.values, backgroundServices: { ...this.prefs.backgroundServices } };
     const pol = this.policy;
+    // Desktop settings put nested preferences over the person's field by field (links: only `openInApp`).
+    if (this.overlay.values.links) p.links = { ...this.prefs.links, ...this.overlay.values.links };
     // The organisation's colour profile stands in for the person's until they pick one, or always when locked.
     p.appearance = withOrganisation(this.prefs.appearance!, this.orgProfile(), pol?.appearance_locked === true);
+    // A synced or managed `prefs.theme` is the mode the colour profiles show.
+    if (this.overlay.values.theme) p.appearance = { ...p.appearance, mode: this.overlay.values.theme };
     if (!pol) return p;
     if (pol.locked_answer_calls === false) p.lockedAnswerCalls = false;
     if (pol.locked_show_caller_details === false) p.lockedShowCallerDetails = false;

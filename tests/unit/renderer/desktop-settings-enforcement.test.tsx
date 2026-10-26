@@ -12,7 +12,6 @@ vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => undefined),
 
 const { app, appsFor } = await import('../../../src/core/app-state');
 const { canOpen, canFollowLink, canOpenDesktopRoute } = await import('../../../src/core/access');
-const { openOverlay, ui } = await import('../../../src/core/ui');
 const { applyStartupScreen } = await import('../../../src/core/startup');
 const { activeTab, tabsStore } = await import('../../../src/core/tabs');
 
@@ -25,15 +24,16 @@ function view(prefs: Record<string, boolean | string>, policy: Record<string, { 
 
 beforeEach(() => {
   tabsStore.set({ tabs: [], activeId: null, closed: [], sideId: null, split: 0.5 });
-  ui.set({ overlay: null });
 });
 afterEach(() => app.set({ desktopSettings: null }));
 
 describe('apps turned off', () => {
   it('leave what the person may open: tabs, routes and links are refused like apps not given', () => {
-    const ds = view({ [moduleKey('mail')]: false }, { [moduleKey('crm')]: { value: false, enforcement: 'managed' } });
+    // By the server's slugs: `drive` is Files and its Office part.
+    const ds = view({ [moduleKey('mail')]: false, [moduleKey('drive')]: false }, { [moduleKey('crm')]: { value: false, enforcement: 'managed' } });
     const apps = appsFor(BOOT, ds);
     expect(apps.some((a) => a.id === 'mail' || a.id === 'crm')).toBe(false);
+    expect(apps.some((a) => a.id === 'files' || a.id === 'office')).toBe(false);
     expect(apps.some((a) => a.id === 'tasks')).toBe(true);
     app.set({ apps, desktopSettings: ds });
     expect(canOpen('mail')).toBe(false);
@@ -50,14 +50,14 @@ describe('apps turned off', () => {
 });
 
 describe('features turned off', () => {
-  it('the palette, search and the launcher do not open', () => {
-    app.set({ desktopSettings: view({ [featureKey('command_palette')]: false, [featureKey('app_launcher')]: false }) });
-    openOverlay('palette');
-    expect(ui.get().overlay).toBeNull();
-    openOverlay('launcher');
-    expect(ui.get().overlay).toBeNull();
-    openOverlay('search');
-    expect(ui.get().overlay).toBe('search');
+  it('officeEditing off: WorkSuite Office’s document tabs do not open, though Files does', () => {
+    const apps = appsFor(BOOT, null);
+    app.set({ apps, desktopSettings: view({ [featureKey('officeEditing')]: false }) });
+    expect(canOpen('office')).toBe(false);
+    expect(canOpenDesktopRoute('/office/drive/4')).toBe(false);
+    expect(canOpen('files')).toBe(true);
+    app.set({ desktopSettings: view({}) });
+    expect(canOpen('office')).toBe(true);
   });
 });
 
@@ -68,6 +68,10 @@ describe('the startup screen', () => {
     app.set({ apps: visible, desktopSettings: view({ [STARTUP_KEY]: 'app:tasks' }) });
     expect(applyStartupScreen(false)).toBe('/tasks');
     expect(activeTab()?.route).toBe('/tasks');
+    // By slug: `drive` opens Files.
+    app.set({ apps: [...visible, ...APP_CATALOGUE.filter((a) => a.id === 'files')], desktopSettings: view({ [STARTUP_KEY]: 'app:drive' }) });
+    expect(applyStartupScreen(false)).toBe('/files');
+    expect(activeTab()?.route).toBe('/files');
   });
 
   it('opens Home when the chosen app is not there', () => {

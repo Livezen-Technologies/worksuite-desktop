@@ -172,6 +172,9 @@ export class SessionController {
    */
   disabledApps: () => ReadonlySet<string> = () => new Set();
 
+  /** Desktop settings' features (`features.<id>`): `fileSync` and `offlineFiles` take their permissions away. */
+  featureOn: (id: string) => boolean = () => true;
+
   /**
    * The catalogue ids of the apps the person may open (shared/access.ts):
    * what the renderer shows as `app.apps`, for the main process's own
@@ -751,7 +754,9 @@ export class SessionController {
       case 'desktop.offline.write':
         return caps.offlineQueue === 'allowed';
       case 'desktop.files.sync':
-        return syncRefusal(b.policy, this.device.getTrust(), this.device.getClassification()) === null;
+        return this.featureOn('fileSync') && syncRefusal(b.policy, this.device.getTrust(), this.device.getClassification()) === null;
+      case 'desktop.files.offline':
+        return this.featureOn('offlineFiles');
       default:
         return true;
     }
