@@ -9,6 +9,7 @@ release/
 # Release signing keys never enter the repository.
 *.pem
 keys/
+*.provisionprofile
 coverage/
 test-results/
 playwright-report/

@@ -133,6 +133,18 @@ module.exports = {
       LSMultipleInstancesProhibited: true,
     },
   },
+  // Mac App Store / TestFlight (docs/TESTFLIGHT.md): `npm run dist:mas`. Sandboxed, signed with the Apple Distribution
+  // and Mac Installer Distribution certificates of team 7KQULK6DSS, with a Mac App Store provisioning profile. No
+  // hardened runtime (the App Store does not use it) and no notarization (App Store Connect checks the upload).
+  mas: {
+    type: 'distribution',
+    hardenedRuntime: false,
+    notarize: false,
+    entitlements: 'build/entitlements.mas.plist',
+    entitlementsInherit: 'build/entitlements.mas.inherit.plist',
+    provisioningProfile: process.env.WS_MAS_PROVISIONING_PROFILE || 'build/embedded.provisionprofile',
+    ...(process.env.WS_MAS_BUILD_NUMBER ? { bundleVersion: process.env.WS_MAS_BUILD_NUMBER } : {}),
+  },
   dmg: { sign: false, title: 'WorkSuite ${version}' },
   pkg: { isRelocatable: false, allowAnywhere: false, allowCurrentUserHome: false, installLocation: '/Applications' },
 
