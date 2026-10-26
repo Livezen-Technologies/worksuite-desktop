@@ -18,17 +18,25 @@ import { appForWebPath, resolveWebLink } from '@shared/links';
  * a web path, a link and a notification.
  */
 const boot = (apps: string[] | '*' | null, permissions: string[] = [], serverApps: string[] | null = null) => ({ apps, permissions, serverApps });
-// Somebody not set up: the everyday apps, and HR (no app slug).
-const everyday = visibleAppIds(boot(['mail', 'chat', 'calendar', 'tasks', 'notes', 'drive']));
+// Somebody not set up: the everyday apps (the server's AppGate::DEFAULTS, Telephony among them), and HR (no app slug).
+const everyday = visibleAppIds(boot(['mail', 'chat', 'calendar', 'tasks', 'notes', 'drive', 'telephony']));
 
 describe('what a bootstrap allows', () => {
   it('is the everyday apps, HR, the Phone and Home for somebody not set up — nothing else', () => {
     // PDF Studio needs no app: a PDF from this computer is anyone's to read (a Drive file is still the server's to allow).
-    // Office is a part of Files: its tile shows with the Drive. The Phone has no app slug on the server yet (G-13), like
-    // the web's: it asks the server what the person may do (no extension, no PBX) and says so. Social Media Manager
-    // likewise, until a server has its module and app row (WS-SMM-SRS-001).
+    // Office is a part of Files: its tile shows with the Drive. The Phone is the server's `telephony` application, one
+    // of its defaults. Social Media Manager has no app slug until a server has its module and app row (WS-SMM-SRS-001).
     expect([...everyday].sort()).toEqual(['calendar', 'chat', 'files', 'home', 'hr', 'mail', 'notes', 'office', 'pdf', 'phone', 'social-media', 'tasks']);
     expect(visibleAppIds(null).size).toBe(0);
+  });
+
+  it('shows the Phone only with the server’s telephony application (G-03; audit D-G24)', () => {
+    const noPhone = visibleAppIds(boot(['mail', 'chat', 'calendar', 'tasks', 'notes', 'drive']));
+    expect(canOpenApp('phone', noPhone)).toBe(false);
+    expect(canOpenRoute('/phone/calls', noPhone)).toBe(false);
+    expect(canOpenApp('phone', visibleAppIds(boot(['telephony'], [], ['telephony'])))).toBe(true);
+    expect(canOpenApp('phone', visibleAppIds(boot(['mail', 'telephony'], [], ['mail'])))).toBe(false);
+    expect(canOpenApp('phone', visibleAppIds(boot('*', ['*'])))).toBe(true);
   });
 
   it('keeps an installation without the catalogue fully open (apps: null)', () => {

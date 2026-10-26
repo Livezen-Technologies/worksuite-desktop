@@ -479,7 +479,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                     className={cx('grid cursor-default items-center border-b border-line/70 px-6 py-1.5 select-none', cols, on ? 'bg-selection' : 'hover:bg-ground', isFolder && dragOver === item.f.id && 'outline-2 -outline-offset-2 outline-primary')}
                   >
                     {/* The lead column every list shares (worksuite-desktop#290); the list shows its boxes all the time. */}
-                    <span onClick={(e) => e.stopPropagation()}>
+                    <span role="presentation" onClick={(e) => e.stopPropagation()}>
                       <RowLead checked={on} selecting onPick={() => toggle(item)} label={`Select ${item.f.name}`} />
                     </span>
                     <span role="cell" className="flex min-w-0 items-center gap-2.5">

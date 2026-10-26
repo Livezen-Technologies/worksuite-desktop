@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { PdfSessionView } from '@shared/pdf';
 import { cx } from '../../components/ui';
 import { Thumb } from './Panels';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Organize (PDF Studio, stage D2): every page as a thumbnail, to select —
@@ -38,6 +39,8 @@ export function Organize({ view, selected, onSelect, onMove, onOpen, disabled }:
           <div
             key={p}
             role="option"
+            tabIndex={0}
+            onKeyDown={clickOnKey}
             aria-selected={selected.includes(p)}
             draggable={!disabled}
             onDragStart={(e) => {

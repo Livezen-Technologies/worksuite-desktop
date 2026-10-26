@@ -12,6 +12,7 @@ import type { Place } from './Rail';
 import { FileIcon } from './Thumb';
 import { Select } from '../../components/Select';
 import { OrgSwitcher } from '../../components/OrgSwitcher';
+import { clickOnKey } from '../../components/press';
 
 const LEVEL: Record<string, [string, string]> = { view: ['Can view', 'text-ink-2'], comment: ['Can comment', 'text-ink-2'], edit: ['Can edit', 'text-primary'], full: ['Full access', 'text-success'] };
 const KINDS: Array<[string, string]> = [['', 'Any type'], ['document', 'Documents'], ['spreadsheet', 'Spreadsheets'], ['presentation', 'Presentations'], ['pdf', 'PDFs'], ['image', 'Images'], ['video', 'Video'], ['audio', 'Audio'], ['archive', 'Archives']];
@@ -139,6 +140,8 @@ export function Shared({ onPlace }: { onPlace: (p: Place) => void }) {
                   <div
                     key={f.id}
                     role="row"
+                    tabIndex={0}
+                    onKeyDown={clickOnKey}
                     aria-selected={on}
                     onClick={() => setChosen(fileItem(f))}
                     onDoubleClick={() => d.open(fileItem(f), files)}

@@ -94,7 +94,7 @@ export default function Commission() {
               <tr key={r.id}>
                 <td className={td}><Checkbox aria-label={`Select ${r.number}`} checked={sel.has(r.id)} onChange={() => setSel((s) => { const n = new Set(s); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })} /></td>
                 <td className={td}>{r.date}</td>
-                <td className={cx(td, 'cursor-pointer font-mono text-[11.5px] hover:underline')} onClick={() => desk.open(r.appointment_id)}>{r.number}</td>
+                <td className={td}><button type="button" className="font-mono text-[11.5px] hover:underline" onClick={() => desk.open(r.appointment_id)}>{r.number}</button></td>
                 <td className={td}>{r.provider}</td>
                 <td className={td}>{r.description}</td>
                 <td className={tdr}>{money(r.base)}</td>

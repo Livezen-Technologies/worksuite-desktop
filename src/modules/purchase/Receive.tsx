@@ -12,6 +12,7 @@ import { fetchOrders, fetchReceipt, KB, orderAct, postReceipt, REJECT_REASONS, t
 import { Head } from './parts';
 import { PoChip } from './Purchasing';
 import { EMPTY, isOrderCode, lineDone, postLines, rcvReducer, receiveBody, totals, type RcvLine } from './scan';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Receiving by scan (S-06; the "Desktop receiving" design; SRS-PUR-001 G-21, G-07). One box takes every scan — the
@@ -267,7 +268,7 @@ function LineCard({ l, active, onFocus, onSet }: { l: RcvLine; active: boolean; 
   const pct = l.expected ? Math.min(100, (counted / l.expected) * 100) : 100;
   const state = l.hold ? 'quality hold' : complete ? 'complete' : active ? 'scanning' : '';
   return (
-    <div data-line={l.lineId} onClick={onFocus} className={cx('flex flex-col gap-1 rounded-[10px] bg-surface p-3.5', active ? 'border-2 border-[#23349e]' : 'border border-line')}>
+    <div data-line={l.lineId} role="button" tabIndex={0} aria-pressed={active} onKeyDown={clickOnKey} onClick={onFocus} className={cx('flex flex-col gap-1 rounded-[10px] bg-surface p-3.5', active ? 'border-2 border-[#23349e]' : 'border border-line')}>
       <div className="flex items-center gap-2">
         <b className="min-w-0 flex-1 truncate text-ink">{l.name}</b>
         <span className={cx('text-[12px]', l.hold ? 'text-[#9A4A06] dark:text-warning' : complete ? 'text-[#166534] dark:text-success' : 'text-[#23349e] dark:text-primary')}>{state}</span>
@@ -282,7 +283,7 @@ function LineCard({ l, active, onFocus, onSet }: { l: RcvLine; active: boolean; 
       {l.rejected ? <span className="text-[12px] text-danger">{l.rejected} rejected · {REJECT_REASONS.find((r) => r.value === l.reason)?.label.toLowerCase() ?? l.reason}</span> : null}
       {l.hold ? <span className="text-[12px] text-[#9A4A06] dark:text-warning">Into QC hold until tested</span> : null}
       {active ? (
-        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-2" onClick={(e) => e.stopPropagation()}>
+        <div role="presentation" className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-2" onClick={(e) => e.stopPropagation()}>
           <label className="flex items-center gap-1">
             Kept
             <input className={input + ' !h-[26px] !w-[56px] text-right tabular-nums'} value={String(l.accepted)} onChange={(e) => onSet({ accepted: Number(e.target.value) || 0 })} aria-label={`Kept ${l.code ?? l.name}`} disabled={l.tracking === 'serial'} />

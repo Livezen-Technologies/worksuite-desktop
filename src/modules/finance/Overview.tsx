@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
+import { StatCard, type StatTone } from '../../components/StatCard';
 import { Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Field, Sheet } from '../hr/parts';
 import { fetchCurrencies, isNegative, isZero, K, longDate, money, MONTHS, openBooks, refusal, type Company, type Dashboard, type Owed } from './api';
@@ -75,11 +76,15 @@ export default function Overview({ company, data, onGo, onOpened }: { company: C
 
       {figures && d.year ? (
         <section className="mt-9">
-          <Caps>Result for the year</Caps>
-          <div className="text-[11.5px] text-ink-3">
-            {d.year.name} · {longDate(d.year.starts_on)} to {longDate(d.year.ends_on)}
-          </div>
-          <div className={cx('mt-2.5 text-[34px] leading-none font-bold tracking-tight tabular-nums', isNegative(d.year.net) ? 'text-danger' : 'text-ink')}>{m(d.year.net)}</div>
+          <StatCard
+            size="lg"
+            label="Result for the year"
+            value={m(d.year.net)}
+            sub={`${d.year.name} · ${longDate(d.year.starts_on)} to ${longDate(d.year.ends_on)}`}
+            icon={isNegative(d.year.net) ? 'trending-down' : 'trending-up'}
+            tone={isNegative(d.year.net) ? 'red' : 'green'}
+            data-year-result=""
+          />
           <Qualification d={d} />
           <dl className="mt-4 mb-0 flex flex-col gap-1.5 text-[13.5px]">
             <Row label="Revenue" value={m(d.year.revenue)} />
@@ -100,10 +105,12 @@ export default function Overview({ company, data, onGo, onOpened }: { company: C
         <section className="mt-9 border-t border-line pt-5">
           <Caps>What is owed</Caps>
           <div className="mt-3 grid grid-cols-2 gap-6">
-            {d.receivables ? <OwedBlock title="Owed to us" owed={d.receivables} cur={cur} onClick={() => onGo('receivables')} /> : null}
+            {d.receivables ? <OwedBlock title="Owed to us" icon="hand-coins" tone="green" owed={d.receivables} cur={cur} onClick={() => onGo('receivables')} /> : null}
             {d.payables ? (
               <OwedBlock
                 title="Owed by us"
+                icon="receipt"
+                tone="amber"
                 owed={d.payables}
                 cur={cur}
                 onClick={() => onGo('payables')}
@@ -149,10 +156,8 @@ function BankSection({ d, cur, onGo }: { d: Dashboard; cur: string; onGo: (v: Fi
     return (
       <section className="mt-9 border-t border-line pt-5">
         <Caps>Cash and bank</Caps>
-        <button type="button" onClick={() => onGo('banks')} className="mt-2 block text-left">
-          <div className="text-[22px] font-bold text-ink tabular-nums">{m(b?.ledger ?? null)}</div>
-          <p className="mt-1 mb-0 max-w-[62ch] text-[13px] text-ink-3">What the ledger says. No bank statement has been loaded, so there is nothing to compare it against.</p>
-        </button>
+        <StatCard className="mt-2" label="What the ledger says" value={m(b?.ledger ?? null)} icon="landmark" tone="blue" onClick={() => onGo('banks')} />
+        <p className="mt-1.5 mb-0 max-w-[62ch] text-[13px] text-ink-3">No bank statement has been loaded, so there is nothing to compare it against.</p>
       </section>
     );
   }
@@ -213,16 +218,15 @@ const BUCKETS: Array<[string, string, string]> = [
   ['d90plus', 'Over 90 days', 'bg-danger'],
 ];
 
-function OwedBlock({ title, owed, cur, onClick, hideTie, note, warn }: { title: string; owed: Owed; cur: string; onClick: () => void; hideTie?: boolean; note?: string; warn?: string }) {
+function OwedBlock({ title, icon, tone, owed, cur, onClick, hideTie, note, warn }: { title: string; icon: string; tone: StatTone; owed: Owed; cur: string; onClick: () => void; hideTie?: boolean; note?: string; warn?: string }) {
   const b = owed.buckets;
   // Proportions only; the figures beside them stay strings.
   const sum = b ? BUCKETS.reduce((a, [k]) => a + Math.abs(Number(b[k] ?? 0)), 0) : 0;
   const old = b ? !isZero(b.d90plus) && !isNegative(b.d90plus) : false;
   const tie = hideTie ? null : owed.tie_out;
   return (
-    <button type="button" onClick={onClick} className="block w-full text-left">
-      <div className="text-[13px] text-ink-3">{title}</div>
-      <div className="mt-0.5 text-[22px] font-bold text-ink tabular-nums">{money(owed.total, cur)}</div>
+    <div className="min-w-0">
+      <StatCard label={title} value={money(owed.total, cur)} icon={icon} tone={tone} onClick={onClick} />
       {b && sum > 0 ? (
         <>
           <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-subtle">
@@ -238,7 +242,7 @@ function OwedBlock({ title, owed, cur, onClick, hideTie, note, warn }: { title: 
       {warn ? <p className="mt-1 mb-0 max-w-[62ch] text-[11.5px] text-[#9A4A06] dark:text-warning">{warn}</p> : null}
       {tie && tie.agrees === false ? <p className="mt-1 mb-0 text-[11.5px] text-danger">This does not agree with its control account. One of the two is wrong.</p> : null}
       {tie && tie.agrees === true ? <p className="mt-1 mb-0 text-[11.5px] text-ink-3">Agrees with the control account.</p> : null}
-    </button>
+    </div>
   );
 }
 

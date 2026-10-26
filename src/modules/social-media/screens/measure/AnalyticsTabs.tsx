@@ -7,6 +7,7 @@ import { logStamp } from '../../lib/time';
 import { compact, delta, full, Kpi, NativeSelect, NetChip, NotOffered, OptionalView, Panel, Pill, Table, TD, TR } from '../../parts';
 import { cx } from '../../../../components/ui';
 import { StatGrid } from '../../../../components/StatCard';
+import { clickOnKey } from '../../../../components/press';
 
 /**
  * W07's other tabs: Posts (SMM-ANL-003), Audience and Inbox & response (SMM-ANL-004), Campaigns (SMM-CPG-003).
@@ -51,7 +52,7 @@ export function PostsTab({ query }: { query: AnalyticsQuery }) {
           rows.length ? (
             <Table head={['Post', 'Published', 'Reach', 'Engagements', 'Clicks']} minWidth={640}>
               {rows.map((p) => (
-                <tr key={p.target_id} className={ROW} onClick={() => go(`/social-media/posts/${p.post_id}`)}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={p.target_id} className={ROW} onClick={() => go(`/social-media/posts/${p.post_id}`)}>
                   <td className={TD}>
                     <button type="button" className="flex min-w-0 items-center gap-2 text-left">
                       <NetChip network={p.network} />
@@ -166,7 +167,7 @@ export function CampaignsTab({ brandId }: { brandId: number | null }) {
               {rows.map((c) => {
                 const s = CAMPAIGN_STATUS[c.status] ?? { label: c.status, tone: 'muted' as const };
                 return (
-                  <tr key={c.id} className={ROW} onClick={() => go(`/social-media/campaigns/${c.id}`)}>
+                  <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} className={ROW} onClick={() => go(`/social-media/campaigns/${c.id}`)}>
                     <td className={TD}>
                       <button type="button" className="text-left font-semibold text-ink">
                         {c.name}

@@ -225,6 +225,18 @@ describe('desktop policy (§11.2, FR-SEC-09)', () => {
     // No key pinned in the build: applied, and recorded as unsigned.
     expect(acceptSignedPolicy({ ...doc, signature: null }, null)).toMatchObject({ file_sync: 'disabled', signed: false });
   });
+  it('in a release build, refuses every policy when there is no key to check it with; a development build applies it unsigned (D-G05)', () => {
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const pem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    const doc = { version: 15, downloads: 'disabled' };
+    const signature = sign(null, Buffer.from(canonicalJson(doc)), privateKey).toString('base64');
+    const release = { requireSignature: true };
+    expect(acceptSignedPolicy({ ...doc }, null, release)).toBeNull();
+    expect(acceptSignedPolicy({ ...doc, signature }, null, release)).toBeNull();
+    expect(acceptSignedPolicy({ ...doc, signature }, pem, release)).toMatchObject({ downloads: 'disabled', signed: true });
+    expect(acceptSignedPolicy({ ...doc }, pem, release)).toBeNull();
+    expect(acceptSignedPolicy({ ...doc }, null, { requireSignature: false })).toMatchObject({ downloads: 'disabled', signed: false });
+  });
   it('takes the stricter notification privacy', () => {
     expect(stricterPrivacy('FULL', 'SENDER_ONLY')).toBe('SENDER_ONLY');
     expect(stricterPrivacy('GENERIC', 'FULL')).toBe('GENERIC');

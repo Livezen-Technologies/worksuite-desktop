@@ -8,6 +8,7 @@ import { CompanySelect, orgParam, useOrgParam } from '../company';
 import { openWeb } from '../parts';
 import { errorText, pk, preads, projectPath, pwrites, shortMoney, usePermission, type Client } from '../portfolio';
 import { Chip, ErrorLine, Failed, Field, Loading, Mono, Nothing, PageHead, Panel, ProjectStatusChip, TD, TH, areaClass, inputClass, needsConnection, useAsk } from './kit';
+import { clickOnKey } from '../../../components/press';
 
 /**
  * W16 · Clients (PRJ-CLI): who the projects are for, each with its live and total project counts and whether it is
@@ -92,7 +93,7 @@ export function ClientsView({ id, offline, onGo, onOffline }: { id: number | nul
                 {rows.map((c) => {
                   const on = c.id === id;
                   return (
-                    <tr key={c.id} aria-selected={on} onClick={() => onGo(`/projects/clients/${c.id}`)} className={cx('cursor-pointer border-t border-line/70', on ? 'bg-selection' : 'hover:bg-subtle')}>
+                    <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} aria-selected={on} onClick={() => onGo(`/projects/clients/${c.id}`)} className={cx('cursor-pointer border-t border-line/70', on ? 'bg-selection' : 'hover:bg-subtle')}>
                       <td className={TD}>
                         <button type="button" onClick={(e) => (e.stopPropagation(), onGo(`/projects/clients/${c.id}`))} className="text-start font-semibold text-ink hover:text-primary hover:underline">
                           {c.name}

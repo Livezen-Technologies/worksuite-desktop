@@ -58,7 +58,8 @@ const { Launcher } = await import('../../../src/app/overlays/Launcher');
 
 const PATH = '/api/sidebar/prefs';
 const SERVER = 'https://ws.example.test';
-const ALL = ['mail', 'chat', 'tasks', 'calendar', 'crm', 'billing', 'projects'];
+// Telephony as a current server grants it to everybody (AppGate::DEFAULTS), so the Phone shows.
+const ALL = ['mail', 'chat', 'tasks', 'calendar', 'crm', 'billing', 'projects', 'telephony'];
 const PERMS = ['crm.view', 'billing.view'];
 
 /** The server, as the contract says it behaves: the whole state in every answer, one per organisation (`?org=`). */

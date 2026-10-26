@@ -11,6 +11,7 @@ import { CALENDAR_BUCKETS, TONE_CLASS, TONE_SOLID, type CalendarBucket } from '.
 import { excerpt } from '../../lib/text';
 import { hhmm, WEEKDAYS_SHORT } from '../../lib/time';
 import { dayHead, dayLong, DRAG_TYPE, HOUR_PX, minutesAt, readDrag, WEEK_FROM, WEEK_TO, writeDrag, type DragPayload, type Placed } from './calendar-model';
+import { clickOnKey } from '../../../../components/press';
 
 const TONE_OF = Object.fromEntries(CALENDAR_BUCKETS.map((b) => [b.id, b.tone])) as Record<CalendarBucket, (typeof CALENDAR_BUCKETS)[number]['tone']>;
 
@@ -108,6 +109,8 @@ function MonthCell({ ymd, inMonth, byDay, today, hoverOf, onOpen, onCompose, onD
   return (
     <div
       role="gridcell"
+      tabIndex={canCompose ? 0 : undefined}
+      onKeyDown={canCompose ? clickOnKey : undefined}
       data-day={ymd}
       aria-label={dayLong(ymd)}
       {...handlers}
@@ -197,6 +200,9 @@ function WeekColumn({ ymd, byDay, hoverOf, onOpen, onCompose, onDrop, canCompose
       data-day={ymd}
       aria-label={dayLong(ymd)}
       {...handlers}
+      role="button"
+      tabIndex={canCompose ? 0 : undefined}
+      onKeyDown={canCompose ? clickOnKey : undefined}
       onClick={() => canCompose && onCompose(ymd)}
       className={cx('relative border-l border-line', over && 'bg-selection')}
       style={{ height: HOURS.length * HOUR_PX, backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${HOUR_PX - 1}px, var(--color-line) ${HOUR_PX - 1}px, var(--color-line) ${HOUR_PX}px)` }}

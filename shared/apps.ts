@@ -130,9 +130,12 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'board', label: 'Board', group: 'work', icon: 'landmark', app: 'board', perm: 'board.access', webPath: '/board', surface: 'native', sidebar: 'business', order: 142, keywords: 'board directors governance meetings packs papers agenda resolutions votes circulars minutes signing committee' },
   { id: 'recruitment', label: 'Recruitment', group: 'people', icon: 'user-plus', app: 'recruitment', perm: 'recruitment.access', webPath: '/recruitment', surface: 'native', sidebar: 'business', order: 141, keywords: 'recruitment hiring jobs vacancies candidates applicants pipeline interviews scorecards offers requisitions ats talent' },
 
-  // Phone (WS-VOIP-SRS-001): the web's `/phone`, open to everyone signed in like the web's catalogue — the server has
-  // no `voip` row in `applications` yet (G-13); the screens ask the server what the person may do.
-  { id: 'phone', label: 'Phone', group: 'communication', icon: 'phone', webPath: '/phone', surface: 'native', sidebar: 'work', order: 43, keywords: 'voip sip call extension pbx dial softphone voicemail' },
+  // Phone (WS-VOIP-SRS-001): the web's `/phone`, gated on the server's application `telephony` (not `voip`): Voip 1.2.0
+  // registers it (`RegisterTelephonyApp`, permission audit G-03) and Core 1.17.0 puts it in `AppGate::DEFAULTS`, so
+  // everybody has it unless an administrator takes it away — as the web's catalogue (`'/phone': 'telephony'`). Without
+  // it the phone does not connect, ring or notify (canOpenApp('phone') in main). The screens still ask the server what
+  // the person may do (an extension, a PBX).
+  { id: 'phone', label: 'Phone', group: 'communication', icon: 'phone', app: 'telephony', webPath: '/phone', surface: 'native', sidebar: 'work', order: 43, keywords: 'voip sip call extension pbx dial softphone voicemail' },
   { id: 'meet', label: 'Meet', group: 'communication', icon: 'video', app: 'meet', webPath: '/meet', surface: 'native', sidebar: 'work', order: 45, keywords: 'video call meeting join code', guest: 'local' },
   // Agendas, attendance and minutes. Not an application on the server — the
   // `meeting.view` permission is its only gate (AppGate::CORE notes).

@@ -450,7 +450,7 @@ export function ImageViewer({ files, start, onClose, onEdit }: ViewerProps) {
                 const nb = o?.neighbours?.find((y) => y.id === x.id);
                 return (
                   <button key={x.id} type="button" role="listitem" aria-current={n === i ? 'true' : undefined} title={x.name} onClick={() => setI(n)} className={cx('relative flex h-[56px] w-[78px] shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-subtle', n === i ? 'outline-2 outline-offset-2 outline-primary' : 'opacity-70 hover:opacity-100')}>
-                    {nb?.url ? <img src={sourceUrl(nb.url) ?? undefined} alt="" loading="lazy" className="h-full w-full object-cover" /> : <FileIcon f={x} size={40} />}
+                    {nb?.url ? <img src={sourceUrl(nb.url) ?? undefined} alt={x.name} loading="lazy" className="h-full w-full object-cover" /> : <FileIcon f={x} size={40} />}
                     {nb?.edited ? <span className="absolute right-0.5 bottom-0.5 rounded-[4px] bg-black/70 px-1 text-[9px] font-bold text-white">{`Edited · v${nb.version ?? ''}`}</span> : null}
                   </button>
                 );

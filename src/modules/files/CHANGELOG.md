@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.4 — 2026-10-26
+
+**Fixed**
+
+- the Shared with me rows are reached with Tab and opened with Enter or Space; the preview's picture zooms from the keyboard too; the image viewer's and editor's thumbnails are named by their file (D-G21)
+
 ## 1.11.3 — 2026-10-21
 
 **Changed**

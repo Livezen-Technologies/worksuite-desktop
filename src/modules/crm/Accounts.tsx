@@ -20,6 +20,7 @@ import { NewDeal } from './Pipeline';
 import { ScheduleFollowUp } from './Schedule';
 import { CompanyField, orgIdFor, useCrmScope } from './scope';
 import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Accounts (CrmAccounts, desk-account): the customers, prospects and
@@ -143,7 +144,7 @@ export default function Accounts({ openId, creating, initialQuery = '', onOpen, 
         <div className="min-h-0 overflow-y-auto scroll-thin">
           {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
           {rows.map((a) => (
-            <div key={a.id} data-account={a.id} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle', openId === a.id && 'bg-selection')} onClick={() => onOpen(a.id)}>
+            <div key={a.id} data-account={a.id} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle', openId === a.id && 'bg-selection')} role="button" tabIndex={0} onKeyDown={clickOnKey} onClick={() => onOpen(a.id)}>
               <span className="flex w-[240px] min-w-0 shrink-0 flex-col">
                 <b className="truncate text-ink">{a.name}</b>
                 <span className="truncate text-[11.5px] text-ink-3">{[a.industry, a.email ?? a.contact_person].filter(Boolean).join(' · ') || '—'}</span>

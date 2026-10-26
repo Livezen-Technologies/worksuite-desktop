@@ -9,6 +9,7 @@ import { fetchAsset, fetchAssets, resolveCode, toCsv, type Asset, type Can } fro
 import { printLabels } from './labelSheets';
 import { Badge, Btn, Card, Kbd, PageHead, Pills, Table, amt, td, useReadOnly } from './parts';
 import type { AssetView } from './Rail';
+import { clickOnKey } from '../../components/press';
 
 /**
  * The register (D01): a filter box that also takes a scan from the USB scanner (an exact code, barcode or serial
@@ -123,7 +124,7 @@ export default function Register({ org, can, active, status: initial, onOpen, on
           <div ref={body} tabIndex={0} role="grid" aria-label="Assets" onKeyDown={onKey} className="outline-none">
             <Table head={['Code', 'Name', 'Holder / location', 'Company', 'Status']}>
               {items.map((a, i) => (
-                <tr key={a.id} aria-selected={a.id === sel?.id} onClick={() => setAt(i)} onDoubleClick={() => onOpen(a.id, 'tab')} className={cx('cursor-default', a.id === sel?.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={a.id} aria-selected={a.id === sel?.id} onClick={() => setAt(i)} onDoubleClick={() => onOpen(a.id, 'tab')} className={cx('cursor-default', a.id === sel?.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
                   <td className={td}><span className="font-mono text-[11px]">{a.asset_code}</span></td>
                   <td className={td}><b>{a.name}</b></td>
                   <td className={td}>{a.holder ?? <span className="text-ink-3">{a.location ?? '—'}</span>}</td>

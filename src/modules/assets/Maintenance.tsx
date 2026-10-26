@@ -7,6 +7,7 @@ import { ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
 import { BASE, fetchAssets, saveJob, statusLabel, type Can, type Job } from './api';
 import { Badge, Btn, Card, Field, PageHead, Pills, Table, amt, input, td, tdr, useReadOnly } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Maintenance & repairs (D14): the jobs by state, Start / Cancel for several at once, the selected job's completion
@@ -59,7 +60,7 @@ export default function Maintenance({ can, onAsset }: { org: number; can: Can; a
           {q.isLoading ? <Spinner /> : q.error ? <div className="p-3"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div> : null}
           <Table head={['', 'Job', 'Asset', 'Kind', 'Due', 'Who', ['Cost', 'r'], 'Status']}>
             {jobs.map((j) => (
-              <tr key={j.id} onClick={() => setSel(j.id)} className={cx('cursor-default', j.id === sel ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={j.id} onClick={() => setSel(j.id)} className={cx('cursor-default', j.id === sel ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
                 <td className={td}><Checkbox aria-label={`Select job ${j.id}`} checked={picked.has(j.id)} onClick={(e) => e.stopPropagation()} onChange={() => setPicked((p) => { const x = new Set(p); if (x.has(j.id)) x.delete(j.id); else x.add(j.id); return x; })} /></td>
                 <td className={td}><span className="font-mono text-[11px]">{`MJ-${String(j.id).padStart(4, '0')}`}</span></td>
                 <td className={td}><button type="button" className="font-semibold text-primary hover:underline" onClick={() => onAsset(j.asset_id)}>{j.asset}</button></td>

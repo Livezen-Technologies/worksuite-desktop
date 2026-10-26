@@ -25,10 +25,11 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest: Electron runs under xvfb here on that image's libraries.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -48,12 +49,14 @@ jobs:
             target: --mac
           - os: windows-latest
             target: --win
-          - os: ubuntu-latest
+          # ubuntu-24.04, not ubuntu-latest: the .deb/.rpm/AppImage take that image's packaging tools and glibc
+          # baseline. Move it on only after checking the packages built on the newer image (audit D-G25).
+          - os: ubuntu-24.04
             target: --linux
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -61,6 +64,16 @@ jobs:
       - name: Linux packaging tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y rpm libarchive-tools
+      - name: Policy key
+        shell: bash
+        env:
+          MAIN_VITE_POLICY_PUBLIC_KEY: ${{ secrets.WS_POLICY_PUBLIC_KEY }}
+        # A packaged build without a policy key applies no desktop policy at all unless the account has its own
+        # discovery_key (POLICY_UNSIGNED_REFUSED, audit D-G05; docs/BACKEND.md "Signed policies"). Said here, not found later.
+        run: |
+          if [ -z "$MAIN_VITE_POLICY_PUBLIC_KEY" ]; then
+            echo "::warning title=No policy key::WS_POLICY_PUBLIC_KEY is not set: this build refuses every unsigned desktop policy and applies none unless the account has its own discovery_key."
+          fi
       - run: npm run build
         env:
           # electron-vite build exceeds Node's default ~2 GB heap and aborts with exit 134; macos-14 has 7 GB RAM.
@@ -103,7 +116,40 @@ jobs:
           # and WORKSUITE_REPO_GPG_PUBLIC_KEY (the ASCII-armoured public key). Unset, the .deb/.rpm add no package source.
           WORKSUITE_LINUX_REPO: ${{ vars.WORKSUITE_LINUX_REPO }}
           WORKSUITE_REPO_GPG_PUBLIC_KEY: ${{ vars.WORKSUITE_REPO_GPG_PUBLIC_KEY }}
-      - uses: actions/upload-artifact@v4
+      - name: Sign Linux packages (GPG)
+        if: runner.os == 'Linux'
+        shell: bash
+        # Optional (audit D-G18): runs only when the LINUX_GPG_PRIVATE_KEY secret exists (ASCII-armoured private key;
+        # LINUX_GPG_PASSPHRASE if it has one). The .rpm gets an embedded signature (rpmsign, checked by dnf/zypper
+        # with gpgcheck); the .deb and the AppImage get a detached .asc beside them. docs/RELEASING.md "Signing Linux packages".
+        env:
+          LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
+          LINUX_GPG_PASSPHRASE: ${{ secrets.LINUX_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "$LINUX_GPG_PRIVATE_KEY" ]; then
+            echo "::notice title=Linux packages unsigned::LINUX_GPG_PRIVATE_KEY is not set: the .deb, .rpm and AppImage are not GPG-signed."
+            exit 0
+          fi
+          export GNUPGHOME="$(mktemp -d)"
+          chmod 700 "$GNUPGHOME"
+          trap 'gpgconf --kill all || true; rm -rf "$GNUPGHOME"' EXIT
+          printf '%s\n' "$LINUX_GPG_PRIVATE_KEY" | gpg --batch --import
+          pass="$GNUPGHOME/passphrase"
+          printf '%s' "$LINUX_GPG_PASSPHRASE" > "$pass"
+          key="$(gpg --batch --list-secret-keys --with-colons | awk -F: '/^fpr/ { print $10; exit }')"
+          [ -n "$key" ] || { echo "::error::LINUX_GPG_PRIVATE_KEY holds no secret key"; exit 1; }
+          shopt -s nullglob
+          for f in release/*/*.rpm; do
+            rpmsign --addsign --define "_gpg_name $key" \
+              --define "_gpg_sign_cmd_extra_args --batch --pinentry-mode loopback --passphrase-file $pass" "$f"
+            rpm -qp --qf '%{NAME}-%{VERSION}: %{RSAHEADER:pgpsig}\n' "$f"
+          done
+          for f in release/*/*.deb release/*/*.AppImage; do
+            gpg --batch --yes --pinentry-mode loopback --passphrase-file "$pass" --local-user "$key" --armor --detach-sign "$f"
+            gpg --batch --verify "$f.asc" "$f"
+          done
+      - uses: actions/upload-artifact@v6
         with:
           name: worksuite-${{ runner.os }}
           path: |
@@ -115,6 +161,7 @@ jobs:
             release/*/*.AppImage
             release/*/*.deb
             release/*/*.rpm
+            release/*/*.asc
           if-no-files-found: error
 
   manifest:
@@ -126,18 +173,18 @@ jobs:
     env:
       WS_RELEASE_PRIVATE_KEY: ${{ secrets.WS_RELEASE_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
       - name: Sign release manifest
         if: env.WS_RELEASE_PRIVATE_KEY != ''
         run: node scripts/release-manifest.mjs --dir dist --channel ${{ inputs.channel || 'stable' }} --base-url ./
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: worksuite-release
           path: dist

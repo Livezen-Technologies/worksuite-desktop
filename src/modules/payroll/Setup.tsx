@@ -7,6 +7,7 @@ import { refusal, shortDate } from '../finance/api';
 import { humanise } from '../hr/parts';
 import { fetchComponents, fetchGroups, fetchPeriods, fetchStructures, generatePeriods } from './api';
 import { Badge, Card, NotYet, Pills, Table, td, useReadOnly } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Setup (D18–D20): components, structures, pay groups with their calendars (and Generate <year>), and GL mapping.
@@ -45,7 +46,7 @@ function Components() {
       <Card>
         <Table head={['Code', 'Name', 'Type', 'Method', 'Ver.']}>
           {list.map((c) => (
-            <tr key={c.id} onClick={() => setSel(c.id)} className={cx('cursor-default', c.id === sel ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+            <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} onClick={() => setSel(c.id)} className={cx('cursor-default', c.id === sel ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
               <td className={cx(td, 'font-mono text-[11px] font-bold')}>{c.code}</td>
               <td className={td}>{c.name}</td>
               <td className={td}>{humanise(c.kind)}</td>

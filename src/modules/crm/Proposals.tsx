@@ -33,6 +33,7 @@ import {
 } from './proposalLogic';
 import { useCrmScope } from './scope';
 import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Proposals (CRM SRS v1.3 §17, desk-proposals): the list for the company the
@@ -143,6 +144,8 @@ export default function Proposals({ openId, onOpen, onOpenDeal, onOpenEstimate }
                 <div
                   key={r.id}
                   role="row"
+                  tabIndex={0}
+                  onKeyDown={clickOnKey}
                   data-proposal={r.id}
                   aria-selected={r.id === openId}
                   onClick={() => onOpen(r.id === openId ? null : r.id)}

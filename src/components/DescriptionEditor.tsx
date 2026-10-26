@@ -5,7 +5,8 @@ import { RichTextEditor } from './RichTextEditor';
 
 const richClass = 'break-words whitespace-pre-wrap text-[13px] leading-[1.6] text-ink [&_a]:text-primary [&_a]:underline [&_h1]:text-2xl [&_h2]:text-xl [&_h3]:text-lg [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-bold [&_h4]:font-bold [&_h5]:font-bold [&_h6]:font-bold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5';
 export function DescriptionView({ value }: { value: string }) {
-  return <div className={richClass} onClick={(e) => {
+  // Its links are <a> elements: Tab reaches them and Enter's click bubbles here, so the div itself is no control.
+  return <div className={richClass} role="presentation" onClick={(e) => {
     const link = (e.target as HTMLElement).closest('a');
     if (link) {
       e.preventDefault();

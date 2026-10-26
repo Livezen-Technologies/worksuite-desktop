@@ -121,6 +121,8 @@ export function GuideHtml({ html, className }: { html: string | null | undefined
   if (!clean) return null;
   return (
     <div
+      // Links are <a> elements: Tab reaches them and Enter's click bubbles here.
+      role="presentation"
       className={cx('ws-guide-html text-[13.5px] leading-relaxed text-ink [&_a]:text-primary [&_a]:underline [&_li]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5', className)}
       onClick={(e) => {
         const a = (e.target as HTMLElement).closest('a');

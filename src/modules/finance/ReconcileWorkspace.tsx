@@ -5,6 +5,7 @@ import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
+import { StatCard } from '../../components/StatCard';
 import { Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, input, Seg, SidePanel } from '../hr/parts';
 import { Pill } from '../inventory/parts';
@@ -170,16 +171,16 @@ export default function ReconcileWorkspace({
       {/* ── the one number ── */}
       <section aria-label="Difference" className={cx('rounded-[14px] border p-4', good ? 'border-[#B9E2C8] bg-[#EFF8F2] dark:border-success/40 dark:bg-success-bg' : 'border-[#F5D48A] bg-[#FFF8E6] dark:border-warning/40 dark:bg-warning-bg')}>
         <div className="flex flex-wrap items-end justify-between gap-5">
-          <div>
-            <div className={cx('text-[11px] font-bold tracking-[.12em] uppercase', toneText)}>
-              {shortDate(r.period_start)} – {shortDate(r.period_end)}
-              {locked ? ' · locked' : ''}
-            </div>
-            <div data-testid="difference" className={cx('mt-1 text-[30px] leading-tight font-bold tabular-nums', toneText)}>
-              {m(r.difference)}
-            </div>
-            <div className={cx('text-[12px]', toneText)}>{agreed ? 'agreed — the two sides meet' : 'unexplained'}</div>
-          </div>
+          <StatCard
+            className="min-w-[220px]"
+            size="lg"
+            label={`Difference · ${shortDate(r.period_start)} – ${shortDate(r.period_end)}${locked ? ' · locked' : ''}`}
+            value={<span data-testid="difference">{m(r.difference)}</span>}
+            empty={agreed}
+            sub={agreed ? 'agreed — the two sides meet' : 'unexplained'}
+            icon={good ? 'check-circle' : 'scale'}
+            tone={good ? 'green' : 'amber'}
+          />
           {/* Four figures, not three: money reaches each side before the other in both directions. */}
           <dl className="m-0 grid grid-cols-4 gap-x-6 gap-y-0.5 text-right">
             <Fig label="The bank says" value={m(r.statement_closing)} sub="its closing balance" />

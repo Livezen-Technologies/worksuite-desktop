@@ -13,6 +13,7 @@ import { btn, btnPrimary, CAMPAIGN_PILL, Card, CardLink, Kpi, Line, Meter, n, Pa
 import type { Go } from './routes';
 import type { Campaign, DashboardWide, Options, Readiness, ReadinessItem } from './types';
 import { StatGrid } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 const PERIODS = [7, 30, 90] as const;
 type Period = (typeof PERIODS)[number];
@@ -364,7 +365,7 @@ function RecentCampaigns({ rows, onOpen, canCreate }: { rows: Campaign[]; onOpen
             const reached = c.stats ? c.stats.sent - c.stats.bounced : 0;
             const rate = (part: number) => (c.stats && reached > 0 ? `${Math.round((part / reached) * 1000) / 10}%` : '—');
             return (
-              <tr key={c.id} className="cursor-pointer hover:bg-subtle" onClick={() => onOpen(c.id)}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} className="cursor-pointer hover:bg-subtle" onClick={() => onOpen(c.id)}>
                 <td className={cx(TD, 'pl-4')}>
                   <button type="button" onClick={(e) => (e.stopPropagation(), onOpen(c.id))} className="text-left font-semibold text-ink hover:underline">
                     {c.name}

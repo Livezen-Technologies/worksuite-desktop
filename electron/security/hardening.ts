@@ -176,6 +176,71 @@ export async function openExternalSafely(raw: string, parent?: Electron.BrowserW
 }
 
 /**
+ * The links in messages this process handed each window (`mail:link`, below), by WebContents id: the URL and when.
+ * `mail:openLink` with `confirmed` opens without a dialog only a link that is here — one the person really clicked in
+ * a message, and that the window then checked and warned about (DMO-SEC-03). A window cannot vouch for any other
+ * address by saying it was confirmed: that one gets the main process's own question first (audit D-G16).
+ */
+const handedMailLinks = new Map<number, Map<string, number>>();
+export const MAIL_LINK_TTL_MS = 15 * 60_000;
+const MAIL_LINKS_PER_WINDOW = 64;
+
+export function noteHandedMailLink(contentsId: number, url: string, now = Date.now()): void {
+  for (const [id, links] of handedMailLinks) {
+    for (const [u, at] of links) if (now - at > MAIL_LINK_TTL_MS) links.delete(u);
+    if (!links.size) handedMailLinks.delete(id);
+  }
+  const links = handedMailLinks.get(contentsId) ?? new Map<string, number>();
+  links.delete(url);
+  links.set(url, now);
+  while (links.size > MAIL_LINKS_PER_WINDOW) links.delete(links.keys().next().value!);
+  handedMailLinks.set(contentsId, links);
+}
+
+export function wasHandedMailLink(contentsId: number, url: string, now = Date.now()): boolean {
+  const at = handedMailLinks.get(contentsId)?.get(url);
+  return at !== undefined && now - at <= MAIL_LINK_TTL_MS;
+}
+
+/** Forget a window's links (it closed). */
+export function forgetHandedMailLinks(contentsId: number): void {
+  handedMailLinks.delete(contentsId);
+}
+
+/**
+ * A link from a message, after the window's safe-link check (`mail:openLink`). Not confirmed: as any outside link.
+ * Confirmed: http or https only, never with a name hidden before the host, and without a question only when this
+ * process handed that very address to that window; anything else asks here, in the main process, first.
+ */
+export async function openMailLink(raw: string, confirmed: boolean, contentsId: number, parent?: Electron.BrowserWindow | null, now = Date.now()): Promise<boolean> {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (!confirmed) return openExternalSafely(u.toString(), parent);
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+  u.username = '';
+  u.password = '';
+  if (!wasHandedMailLink(contentsId, raw, now)) {
+    log.warn('mail link not handed to this window: asking', { host: u.hostname });
+    const opts = {
+      type: 'warning' as const,
+      buttons: ['Open in browser', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      message: 'Open this link in your browser?',
+      detail: `${u.toString().slice(0, 500)}\n\nWorkSuite cannot match this address to a link you clicked in a message. Open it only if you trust where it goes.`,
+    };
+    const { response } = parent ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
+    if (response !== 0) return false;
+  }
+  await shell.openExternal(u.toString());
+  return true;
+}
+
+/**
  * Where a WebContents that is not the shell may go: the Office editor's view
  * (office-policy.ts) names its own rules — its page, and the Document
  * Server's frames. Every other WebContents keeps the shell's.
@@ -193,7 +258,10 @@ export function hardenWebContents(contents: WebContents): void {
     // A link in a message: the window checks it first and shows a warning when it is suspicious (ENH-MAIL-03 DMO-SEC-03).
     const link = parseSafeLink(url);
     if (link) {
-      if (!contents.isDestroyed()) contents.send('mail:link', link);
+      if (!contents.isDestroyed()) {
+        noteHandedMailLink(contents.id, link.url);
+        contents.send('mail:link', link);
+      }
       return { action: 'deny' };
     }
     // New windows are created by the window manager, never by content.
@@ -211,6 +279,8 @@ export function hardenWebContents(contents: WebContents): void {
     const rule = navigationRules.get(contents);
     if (rule ? !rule(event.url, event.isMainFrame) : !isTrustedShellUrl(url)) event.preventDefault();
   });
+  const contentsId = contents.id;
+  contents.on('destroyed', () => forgetHandedMailLinks(contentsId));
   contents.on('will-attach-webview', (event) => {
     // <webview> is forbidden (§3.3).
     event.preventDefault();

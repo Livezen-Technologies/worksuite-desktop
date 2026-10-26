@@ -17,6 +17,7 @@ import { bulkSummary, isMissing, pageOf, statusLine, type BulkAnswer, type PageM
 import { exportCrmCsv } from './exportCsv';
 import { ScheduleFollowUp } from './Schedule';
 import { CompanyField, orgIdFor, useCrmScope } from './scope';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Leads (CrmLeads, CrmLeadDrawer, CrmLeadExtras, desk-leads): the list for
@@ -228,7 +229,7 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
         <div className="min-h-0 overflow-y-auto scroll-thin">
           {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
           {rows.map((r) => (
-            <div key={r.id} data-lead={r.id} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle', selected.has(r.id) && 'bg-[#F4F6FE] dark:bg-selection/40', openId === r.id && 'bg-selection')} onClick={() => onOpen(r.id)}>
+            <div key={r.id} data-lead={r.id} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle', selected.has(r.id) && 'bg-[#F4F6FE] dark:bg-selection/40', openId === r.id && 'bg-selection')} role="button" tabIndex={0} onKeyDown={clickOnKey} onClick={() => onOpen(r.id)}>
               <Checkbox aria-label={`Select ${r.name}`} disabled={!canManage && !canLead} checked={selected.has(r.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.id)} />
               <span className="flex w-[210px] min-w-0 shrink-0 flex-col">
                 <b className="truncate text-ink">{r.name}</b>

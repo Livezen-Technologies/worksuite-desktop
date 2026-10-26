@@ -138,8 +138,12 @@ The server signs `desktop_policy` with Ed25519 over canonical JSON when
 `desktop.policySigningKey` is set in its `.env`. `php spark desktop:keys` makes a key
 and prints the public half; build the app with it as
 `MAIN_VITE_POLICY_PUBLIC_KEY`. A build with a pinned key refuses unsigned or
-wrongly signed policies and keeps the last one it accepted. A build without
-one applies policies as unsigned, the same trust as the rest of the API.
+wrongly signed policies and keeps the last one it accepted. A release (packaged)
+build without one — and without the account's own `discovery_key` — refuses every
+desktop policy the same way and logs `POLICY_UNSIGNED_REFUSED`: there is nothing
+to tell a real policy from a forged one. Only a development build applies a
+policy as unsigned (`signed: false` in Diagnostics), so it runs against any
+server.
 Changing the key is a coordinated change: builds pinned to the old key refuse
 every new policy until they are updated.
 

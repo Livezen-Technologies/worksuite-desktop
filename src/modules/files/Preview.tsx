@@ -11,6 +11,7 @@ import { isSlidesFile } from '../office/slides/overlay';
 import { fetchBytes } from '../office/slides/render';
 import { SlidesViewer } from '../office/slides/SlidesViewer';
 import { topBarPaddingRight } from '../../core/window-chrome';
+import { clickOnKey } from '../../components/press';
 
 /**
  * The viewer (DriveMedia): the file as big as it goes — a picture, a video,
@@ -114,7 +115,7 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
               <Unavailable f={f} why={p.status === 'blocked' ? 'This file was held back by the virus check.' : 'This file can’t be shown here.'} />
             ) : null}
             {p?.status === 'ready' && how === 'image' && src ? (
-              <img src={src} alt={f.name} onClick={() => setZoom(zoom === 'fit' ? 'full' : 'fit')} className={cx('cursor-zoom-in rounded-[6px] shadow-2xl', zoom === 'fit' ? 'max-h-full max-w-full object-contain' : 'max-w-none cursor-zoom-out')} />
+              <img src={src} alt={f.name} role="button" tabIndex={0} onKeyDown={clickOnKey} title={zoom === 'fit' ? 'Show at full size' : 'Fit to the window'} onClick={() => setZoom(zoom === 'fit' ? 'full' : 'fit')} className={cx('cursor-zoom-in rounded-[6px] shadow-2xl', zoom === 'fit' ? 'max-h-full max-w-full object-contain' : 'max-w-none cursor-zoom-out')} />
             ) : null}
             {p?.status === 'ready' && how === 'video' && src ? <video key={src} src={src} poster={mediaUrl(p.poster_url) ?? undefined} controls autoPlay className="max-h-full max-w-full rounded-[8px] bg-black shadow-2xl" /> : null}
             {p?.status === 'ready' && how === 'audio' && src ? (
