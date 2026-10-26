@@ -11,6 +11,12 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased
+
+### Fixed
+
+- Sign out of an account: the Sign out button was drawn white on white, so the dialog seemed to offer only Cancel. It is now the dialog's primary button, next to Cancel.
+
 ## 0.2.281 — 2026-10-26
 ### Added
 - **Preferred name** (#432): Profile settings has a field for an additional name you go by. Your name stays as it is; the preferred name is saved with your profile and shown under it ("Goes by …"). Empty means you go by your name alone. It needs a server with Users 1.5.0; an older server does not offer it. (desktop module account 1.4.0)
