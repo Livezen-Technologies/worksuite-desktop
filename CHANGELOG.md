@@ -53,6 +53,15 @@ The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G1
   focus with a timer nothing cancelled, so closing the composer in that moment set state on an unmounted editor — in
   CI, after the test's page was gone. The timer is now cleared with the editor. (D-G15)
 
+### Added
+
+- **Documents, Forms, Rental and Diagrams in the launcher.** The server's own apps with no desktop module yet are now in
+  the app launcher and search, marked *opens in your browser*: **Documents** (`/documents`,
+  with `docs.view`), **Forms** (`/forms`, with `forms.view`), **Rental** (`/rental`, with `rental.access`) and
+  **Diagrams** (`/diagrams`). Each shows only to people the server gives that app (its `docs`, `forms`, `rental` or
+  `diagram` app) and the permission its screens need — exactly where the web shows it — and a link into one of them
+  (a notification, a chat card) opens it in the browser.
+
 ## 0.2.282 — 2026-10-26
 
 Needs the server with **Hosting 1.1.0** (Hosting & Domains) and **Desktop 1.13.0** (desktop settings) for those screens; on an older server they stay hidden or show "needs a server update".
