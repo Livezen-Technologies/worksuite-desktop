@@ -17,6 +17,7 @@ import { MAIL_DRAG } from './TodoPane';
 import { rowFormat } from './ReadingSettings';
 import type { MailPrefs, Mailbox, MessageRow } from './types';
 import { SortMenu, sortLabel } from './SortMenu';
+import { FilterChips } from './FilterChips';
 import type { EmptyReason } from './listLoading';
 
 /**
@@ -189,10 +190,11 @@ export function MessageList(p: MessageListProps) {
 
   const densitySections = viewMenuSections(p);
   return (
-    <section aria-label="Messages" className={cx('relative flex min-h-0 flex-col bg-surface', p.fill ? 'min-w-0 flex-1' : cx('shrink-0 border-r border-line', !p.resize && 'w-[420px]'))} style={!p.fill && p.resize ? { width: p.resize.width } : undefined}>
+    <section aria-label="Messages" data-mail-list-pane className={cx('relative isolate z-[1] flex min-h-0 min-w-0 flex-col bg-surface', p.fill ? 'min-w-0 flex-1' : cx('shrink-0 border-r border-line', !p.resize && 'w-[420px]'))} style={!p.fill && p.resize ? { width: p.resize.width } : undefined}>
       {/* Beside the reading pane, its width is the person's: drag the edge (#304). */}
       {!p.fill && p.resize ? <ResizeDivider state={p.resize} label={text('Resize the message list')} /> : null}
-      <div className="px-4 pt-3 pb-2">
+      {/* Nothing in the header reaches past the list edge into the reading pane (#428); menus are portalled above it. */}
+      <div data-mail-list-head className="min-w-0 overflow-hidden px-4 pt-3 pb-2 [contain:layout_paint]">
         <div className="flex items-center gap-2">
           <h1 className="min-w-0 flex-1 truncate text-[19px] font-bold text-ink selectable" title={p.aside ? `${p.title} · ${p.aside}` : p.title}>
             {p.title}
@@ -280,34 +282,26 @@ export function MessageList(p: MessageListProps) {
             ) : null}
           </div>
         ) : null}
-        <div className="mt-2 flex items-center">
+        <div className="mt-2 flex min-w-0 items-center">
           {/* Select all (#290): in the rows' lead column, so it lines up with their checkboxes. */}
           {p.selectAll ? (
             <span className="-mr-1.5 -ml-1 flex w-7 shrink-0 items-center justify-center">
               <Checkbox aria-label={text('Select all')} title={text('Select all')} checked={p.selectAll.state === 'all'} indeterminate={p.selectAll.state === 'some'} disabled={flat.length === 0} onChange={p.selectAll.onToggle} />
             </span>
           ) : null}
-          {/* The chips wrap and the sort control goes to its own line rather than past the list's edge in a narrow list (#423). */}
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1.5" role="group" aria-label="Quick filters">
-            {CHIPS.map((c) => {
-              const on = p.chips.includes(c.id);
-              return (
-                <button key={c.id} type="button" aria-pressed={on} data-chip={c.id} onClick={() => p.onChips(on ? p.chips.filter((x) => x !== c.id) : [...p.chips, c.id])} className={cx('inline-flex h-[26px] shrink-0 items-center gap-1 rounded-full border px-2.5 text-[12.5px] font-semibold', on ? 'border-primary bg-primary text-white' : 'border-line text-ink hover:bg-subtle')}>
-                  {on ? <Icon name="check" size={12} /> : null}
-                  {c.label}
-                </button>
-              );
-            })}
-            {p.onClearFilters ? (
-              <button type="button" onClick={p.onClearFilters} className="shrink-0 px-1 text-[12.5px] font-semibold text-primary hover:underline">
-                {text('Clear filters')}
-              </button>
-            ) : null}
-            <button ref={sortChip} type="button" data-sort-chip aria-haspopup="menu" aria-expanded={menu === 'sort' && sortAt === 'chip'} onClick={() => toggleSort('chip')} title={text('Sort and group')} className={cx('ml-auto inline-flex h-[26px] min-w-0 max-w-full items-center gap-1 rounded-[6px] px-1.5 text-[12.5px] leading-none text-ink-3 hover:bg-subtle hover:text-ink', menu === 'sort' && sortAt === 'chip' && 'bg-subtle text-ink')}>
-              <Icon name="transfers" size={13} className="shrink-0" />
-              <span className="min-w-0 truncate">{sortLabel(p.prefs)}</span>
+          {/* One row that never wraps (#428): chips that do not fit go into "More filters"; the sort control has its own line (#423). */}
+          <FilterChips chips={CHIPS} label="Quick filters" isOn={(id) => p.chips.includes(id as ChipId)} onToggle={(id) => p.onChips(p.chips.includes(id as ChipId) ? p.chips.filter((x) => x !== id) : [...p.chips, id as ChipId])} />
+          {p.onClearFilters ? (
+            <button type="button" onClick={p.onClearFilters} className="ml-1 shrink-0 whitespace-nowrap px-1 text-[12.5px] font-semibold text-primary hover:underline">
+              {text('Clear filters')}
             </button>
-          </div>
+          ) : null}
+        </div>
+        <div className="mt-1 flex min-w-0 justify-end">
+          <button ref={sortChip} type="button" data-sort-chip aria-haspopup="menu" aria-expanded={menu === 'sort' && sortAt === 'chip'} onClick={() => toggleSort('chip')} title={text('Sort and group')} className={cx('inline-flex h-[26px] min-w-0 max-w-full items-center gap-1 rounded-[6px] px-1.5 text-[12.5px] leading-none text-ink-3 hover:bg-subtle hover:text-ink', menu === 'sort' && sortAt === 'chip' && 'bg-subtle text-ink')}>
+            <Icon name="transfers" size={13} className="shrink-0" />
+            <span className="min-w-0 truncate">{sortLabel(p.prefs)}</span>
+          </button>
         </div>
         {p.notice ? <p className="mt-1.5 text-[12px] text-ink-3">{p.notice}</p> : null}
       </div>
@@ -398,9 +392,10 @@ function EmptyList({ reason, onClearFilters }: { reason: EmptyReason; onClearFil
 
 function GroupHead({ g }: { g: RowGroup & { items: ListRow[] } }) {
   return (
-    <div role="presentation" data-group-head={g.key} className="flex h-7 items-center justify-between border-b border-line bg-subtle px-4 text-[11.5px] font-bold uppercase tracking-wide text-ink-2">
-      <span className="truncate">{g.label}</span>
-      <span className="tabular">{g.items.length}</span>
+    <div role="presentation" data-group-head={g.key} className="flex h-7 min-w-0 items-center gap-3 overflow-hidden border-b border-line bg-subtle px-4 text-[11.5px] font-bold uppercase tracking-wide text-ink-2">
+      {/* The label truncates at the start side; the count keeps its place at the end (#428). */}
+      <span className="min-w-0 flex-1 truncate text-start">{g.label}</span>
+      <span className="tabular shrink-0 text-end">{g.items.length}</span>
     </div>
   );
 }
