@@ -752,6 +752,11 @@ const api = {
     launcherDefaults: call('settings:launcherDefaults'),
     appearanceDefaults: call('settings:appearanceDefaults'),
   },
+  desktopSettings: {
+    get: call('desktopSettings:get'),
+    set: call('desktopSettings:set'),
+    refresh: call('desktopSettings:refresh'),
+  },
   status: {
     snapshot: call('status:snapshot'),
   },

@@ -1,6 +1,8 @@
 import { PayrollReminders } from '../services/payroll-reminders';
 import { AssetAlerts } from '../services/assets-alerts';
 import { assetsCached, type TrayAssets } from '@shared/assets';
+import { HostingAlerts } from '../services/hosting-alerts';
+import { hostingBadge, hostingCached, type TrayHosting } from '@shared/hosting';
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
@@ -131,7 +133,9 @@ import { RealtimeService } from '../services/realtime';
 import { ConnectionMonitor, tcpHandshake, timeFetch } from '../services/connection-quality';
 import { ApiTimings } from '@shared/connection';
 import { SecureStore } from '../services/secure-store';
-import { SettingsService } from '../services/settings';
+import { SettingsService, defaultPreferences } from '../services/settings';
+import { DesktopSettingsService } from '../services/desktop-settings';
+import { preferenceOverlay, withoutDisabledIds } from '@shared/desktop-settings';
 import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
 import { MeetRecorder } from '../services/meet-recorder';
@@ -536,6 +540,37 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // between the person's devices.
   installAppearance({ settings, windows, ipc: ipcMain, nativeTheme });
   const appearanceSync = new AppearanceSync({ http, settings, online: () => sessionCtl.isReady() });
+  // Desktop settings (shared/desktop-settings.ts): features, apps and the startup screen, with the organisation's
+  // policy over them, synced for the person and kept here "as of" the last read for offline. Kept per person in the
+  // account's database.
+  const desktopSettingsScope = (): string | null => {
+    const s = sessionCtl?.get();
+    return s && (s.stage === 'ready' || s.stage === 'expired') && s.user?.id ? `${registry.activeId() ?? s.server?.origin ?? ''}:${s.user.id}` : null;
+  };
+  const desktopSettings = new DesktopSettingsService({
+    http,
+    db,
+    online: () => !!sessionCtl?.isReady(),
+    scope: desktopSettingsScope,
+    // The company open here; none (All organizations) is the person's home company, as the server picks it.
+    organizationId: () => sessionCtl?.organizationScope() ?? null,
+    deviceId: () => device.current()?.id ?? null,
+    prefs: () => settings.raw(),
+    defaults: () => defaultPreferences(),
+    resetPrefs: (patch) => void settings.update(patch),
+  });
+  settings.setDesktopOverlay(preferenceOverlay(desktopSettings.effective()));
+  /** `features.globalShortcut`: the keys held for the whole computer that bring WorkSuite up. */
+  const globalKeysOn = (): boolean => desktopSettings.feature('globalShortcut');
+  /** Spelling as you type (`prefs.spellcheck`), in every window's session. */
+  const applySpellcheck = (wc: Electron.WebContents): void => {
+    try {
+      wc.session.setSpellCheckerEnabled(settings.effective().spellcheck !== false);
+    } catch {
+      /* a session that has no spell checker */
+    }
+  };
+  app.on('web-contents-created', (_e, wc) => applySpellcheck(wc));
   // A call rings only for whoever may open Chat (calls are part of it).
   const calls = new CallService(
     windows,
@@ -622,6 +657,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // The tray is made later in start(); its line follows the count once it exists.
   let assetsTray: ((t: TrayAssets | null) => void) | null = null;
   const assetAlerts = new AssetAlerts(http, notifications, (t) => assetsTray?.(t));
+  // Hosting & Domains (HDM-DSK-04): monitors down and what expires within 7 days, on the tray badge and as notices.
+  let hostingTray: ((t: TrayHosting | null) => void) | null = null;
+  // The last counts, for the status snapshot: the renderer paints them onto the macOS Dock icon with the rest.
+  let hostingCounts: TrayHosting | null = null;
+  const hostingAlerts = new HostingAlerts(http, notifications, (t) => {
+    hostingCounts = t;
+    hostingTray?.(t);
+  });
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
   // New-mail alerts (ENH-MAIL-05): one per message on this computer — the row's "New" in Mail, the in-app card while
   // WorkSuite is in front, the system's notification while it is not — and the tray's mail lines, pause and badge.
@@ -981,6 +1024,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (!b || !sessionCtl.isReady()) return { ok: false, reason: 'Sign in to WorkSuite to sync Drive folders.' };
     const why = syncRefusal(b.policy, device.getTrust(), device.getClassification());
     if (why) return { ok: false, reason: why };
+    // `features.fileSync` (desktop settings): with the security policy above, the stricter wins.
+    if (!desktopSettings.feature('fileSync')) return { ok: false, reason: desktopSettings.effective()['features.fileSync']?.locked ? 'Your organization has turned Drive sync off in WorkSuite Desktop.' : 'Drive sync is turned off in Settings › Features & apps.' };
     if (!sessionCtl.hasPermission('desktop.files.sync')) return { ok: false, reason: 'Drive sync on the desktop is not part of your role.' };
     return { ok: true, reason: null };
   };
@@ -1662,6 +1707,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         void openExternalSafely(url);
         return;
       }
+      // `features.itemLinks` off: links do not open items here at all.
+      if (!desktopSettings.feature('itemLinks')) {
+        broadcast('toast', { kind: 'warning', text: 'Opening WorkSuite links in the app is turned off.' });
+        return;
+      }
       log.info('item link', { type: item.link.type, action: item.link.action });
       navigate({ route: itemRoute(item.link), organizationId: item.link.org, source: 'deep-link', item: { link: item.link, source: item.link.source ?? 'external', app: itemApp(item.link) } });
       return;
@@ -1751,7 +1801,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void supportDesk.latest().then((id) => (id ? openQuickReply(id) : navigate({ route: '/support?view=mine', source: 'tray' })));
   };
   const syncSupportKeys = (): void => {
-    const want = sessionCtl.isReady() && !lock.isLocked() && canOpenApp('support', sessionCtl.visibleApps()) && supportNoticePrefs(settings.effective().supportNotices).quickShortcut;
+    const want = sessionCtl.isReady() && !lock.isLocked() && globalKeysOn() && canOpenApp('support', sessionCtl.visibleApps()) && supportNoticePrefs(settings.effective().supportNotices).quickShortcut;
     if (want && !supportKeyHeld) {
       try {
         supportKeyHeld = globalShortcut.register(SUPPORT_QUICK_SHORTCUT, quickLatest);
@@ -1867,7 +1917,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
     const hasMail = canOpenApp('mail', visible);
-    const counts = { ...raw, mailBadge: hasMail ? mailAlerts.unread() : 0, mailNotices: hasMail ? raw.mailNotices : 0, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: hasMail ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0, salesApprovals: canOpenApp('sales', visible) ? raw.salesApprovals : 0, salesNotices: canOpenApp('sales', visible) ? raw.salesNotices : 0, purchaseApprovals: canOpenApp('purchase', visible) ? purchaseDesk.count() : 0, purchaseNotices: canOpenApp('purchase', visible) ? raw.purchaseNotices : 0 };
+    const counts = { ...raw, mailBadge: hasMail ? mailAlerts.unread() : 0, mailNotices: hasMail ? raw.mailNotices : 0, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: hasMail ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0, salesApprovals: canOpenApp('sales', visible) ? raw.salesApprovals : 0, salesNotices: canOpenApp('sales', visible) ? raw.salesNotices : 0, purchaseApprovals: canOpenApp('purchase', visible) ? purchaseDesk.count() : 0, purchaseNotices: canOpenApp('purchase', visible) ? raw.purchaseNotices : 0, hosting: canOpenApp('hosting', visible) ? hostingBadge(hostingCounts) : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
@@ -1965,6 +2015,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }
     // `access.changed` (the person's apps changed) and `profile.updated`: fetch the bootstrap again.
     accessWatch.onEvent(e);
+    // `desktop.settings.changed` {version}: the policy or the person's choices changed elsewhere.
+    desktopSettings.handleRealtime(e as { type?: string; version?: unknown });
     // A desktop release was published: ask the Update Center now rather than at the next 4-hourly check.
     if ((e as { type?: string }).type === 'desktop.release.published') void updater.check();
   };
@@ -1972,6 +2024,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     broadcast('realtime:resync');
     // Events may have been missed while the socket was down, `access.changed` among them.
     if (sessionCtl.isReady()) void accessWatch.refresh('resync');
+    if (sessionCtl.isReady()) void desktopSettings.refresh();
     // Announcing what the push missed, chat included: not just taking it as already seen (#114).
     void notifications.refreshList(true);
     void notifications.catchUpChat();
@@ -2207,6 +2260,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
   });
   assetsTray = (t) => tray.update({ assets: t });
+  hostingTray = (t) => {
+    tray.update({ hosting: t });
+    emitStatus();
+  };
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
   const JOIN_SHORTCUT = 'CommandOrControl+Shift+J';
@@ -2420,7 +2477,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   let liveKeysHeld = false;
   const syncLiveKeys = (): void => {
     // Unless turned off in Settings › Notifications & calls › Shortcuts.
-    const want = settings.effective().webchatRinging.liveShortcuts !== false && !!livePulse.get() && !lock.isLocked() && !BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused());
+    const want = globalKeysOn() && settings.effective().webchatRinging.liveShortcuts !== false && !!livePulse.get() && !lock.isLocked() && !BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused());
     if (want === liveKeysHeld) return;
     if (want) {
       try {
@@ -2539,7 +2596,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     allowed: () => {
       const b = sessionCtl.isReady() && !lock.isLocked() ? sessionCtl.current() : null;
       const may = !!b && (b.permissions.includes('*') || b.permissions.includes('ai.write') || b.permissions.includes('ai.assistant.use'));
-      return may && ai.rules().quickAsk;
+      return may && ai.rules().quickAsk && globalKeysOn();
     },
     register: (acc, fn) => globalShortcut.register(acc, fn),
     unregister: (acc) => globalShortcut.unregister(acc),
@@ -2572,7 +2629,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     state: () => {
       const pulse = marketingPulse.get();
       return {
-        signedIn: sessionCtl.isReady(),
+        signedIn: sessionCtl.isReady() && globalKeysOn(),
         locked: lock.isLocked(),
         marketing: marketingVisible(),
         agent: pulse ? pulse.queue !== null : null,
@@ -2842,7 +2899,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
    * (Every window gets it as `session:changed`; the Shell closes those tabs.)
    */
   const applyAccess = (b: Bootstrap | null): void => {
-    const visible = visibleAppIds(b);
+    const visible = withoutDisabledIds(visibleAppIds(b), desktopSettings.disabledModules());
     tray.update({ apps: [...visible] });
     rebuildMenu(visible);
     // Marketing given or taken away (or another organisation): its counts, reminders and key follow.
@@ -2885,6 +2942,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.start(uid);
     payrollReminders.start();
     assetAlerts.start();
+    hostingAlerts.start();
     mailAlerts.start();
     supportNotices.start();
     supportDesk.start();
@@ -2986,6 +3044,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.stop();
     payrollReminders.stop();
     assetAlerts.stop();
+    hostingAlerts.stop();
     purchaseDesk.reset();
     mailAlerts.stop();
     supportNotices.stop();
@@ -3049,6 +3108,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         officeFiles.forget();
         // The app-lock PIN goes with the rest of what this computer kept for the person.
         lockPin.clear(uid);
+        // And their desktop settings' copy; waiting choices go only when unsynced work goes too.
+        if (!keepUnsynced) desktopSettings.forget(`${registry.activeId() ?? auth.getServer()?.origin ?? ''}:${uid}`);
         // PDF Studio's working copies and thumbnails (PDF-OFF-005).
         void pdfStudio.wipe();
       }
@@ -3092,6 +3153,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       lockPin.setServerScope(s.server?.origin ?? null);
       // Per person and account (`<account>:<uid>`, §1.5 step 4); the server's origin before any account exists.
       settings.setUserLanguageScope(registry.activeId() ?? s.server?.origin ?? null, s.user?.id ?? null);
+      // Whose desktop settings apply: this person's copy, at once (before the server is asked).
+      desktopSettings.load();
       accountFollowsSession(s);
       broadcast('auth:changed', s);
       emitStatus();
@@ -3105,6 +3168,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       desktopAccounts.update(desktopAccountOf(sessionCtl.isReady()));
       if (b) settings.setPolicy(b.policy);
       if (b) void appearanceSync.pull();
+      // The person's desktop settings and their organisation's policy, with every bootstrap (sign-in, a switch, the
+      // periodic check); offline the copy kept here stands.
+      if (b) void desktopSettings.refresh();
       // Office's Local AI policy follows the session: refreshed with the bootstrap, cleared when nobody is signed in.
       void (b ? officeAiPolicy.sync() : officeAiPolicy.clear()).catch(() => undefined);
       // Policy or trust may have turned sync on or off.
@@ -3135,6 +3201,32 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   auth.onDeviceRevoked = (message) => void sessionCtl.wipe(message);
+
+  // Apps turned off leave what the person may open; a change is enforced at once — the tray, the menu, windows and
+  // every window's navigation (`desktopSettings:changed`) — and preferences a feature holds off follow.
+  sessionCtl.disabledApps = () => desktopSettings.disabledModules();
+  sessionCtl.featureOn = (id) => desktopSettings.feature(id);
+  let lastOff = [...desktopSettings.disabledModules()].sort().join(',');
+  desktopSettings.onChange((view) => {
+    const before = settings.effective();
+    settings.setDesktopOverlay(preferenceOverlay(view.effective));
+    const after = settings.effective();
+    if (before.startWithOs !== after.startWithOs || before.startMinimized !== after.startMinimized) applyAutostart(after.startWithOs, after.startMinimized);
+    if (before.hardwareAcceleration !== after.hardwareAcceleration) writeBootConfig(paths().bootConfig, { hardwareAcceleration: after.hardwareAcceleration });
+    if (before.spellcheck !== after.spellcheck) for (const wc of webContents.getAllWebContents()) applySpellcheck(wc);
+    // Global keys and Drive sync follow their features.
+    nextContactKey.sync();
+    syncSupportKeys();
+    syncLiveKeys();
+    sync.kick('policy');
+    broadcast('desktopSettings:changed', view);
+    const off = [...desktopSettings.disabledModules()].sort().join(',');
+    if (off !== lastOff) {
+      lastOff = off;
+      applyAccess(sessionCtl.isReady() ? sessionCtl.current() : null);
+    }
+    quickAsk.sync();
+  });
 
   // Torn-off windows (FR-NAV-05/07) are remembered per person, encrypted like the tabs.
   windows.onRecordsChanged = (list) => {
@@ -3330,7 +3422,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       userId: () => sessionCtl.userId(),
       cacheModuleFor: (path) => {
         const clean = path.split('?')[0]!;
-        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : eventsCached(clean) ? 'events' : assetsCached(clean) ? 'assets' : null);
+        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : eventsCached(clean) ? 'events' : assetsCached(clean) ? 'assets' : hostingCached(clean) ? 'hosting' : null);
         // Neither saved nor served for an app the person may not open.
         return module && canOpenApp(module, sessionCtl.visibleApps()) ? module : null;
       },
@@ -3420,6 +3512,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const ctx: AppContext = {
     boot,
+    desktopSettings,
     osMode: OS_MODE ? { signIn: () => openOsSession() } : undefined,
     db,
     vault: getVault,

@@ -1137,3 +1137,27 @@ html:lang(si) .ws-localized-control, html:lang(ta) .ws-localized-control { white
   --pos-blind: #2a1f4d;
   --pos-blind-ink: #c4b5fd;
 }
+
+/*
+ * Settings (src/modules/settings/kit.tsx): rows written straight under a section's header, outside a SettingsGroup,
+ * join into one card per run — the same card a group draws — so every settings screen reads as grouped cards.
+ */
+@layer components {
+  [data-setting-row][data-loose] {
+    background-color: var(--ws-surface);
+    border-inline: 1px solid var(--ws-line);
+    border-bottom: 1px solid var(--ws-line);
+  }
+  [data-setting-row][data-loose]:first-child,
+  :not([data-setting-row][data-loose]) + [data-setting-row][data-loose] {
+    margin-top: 4px;
+    border-top: 1px solid var(--ws-line);
+    border-start-start-radius: 14px;
+    border-start-end-radius: 14px;
+  }
+  [data-setting-row][data-loose]:not(:has(+ [data-setting-row][data-loose])) {
+    margin-bottom: 20px;
+    border-end-start-radius: 14px;
+    border-end-end-radius: 14px;
+  }
+}

@@ -463,6 +463,10 @@ export const INVOKE_CHANNELS = [
   'settings:set',
   'settings:launcherDefaults',
   'settings:appearanceDefaults',
+  // Desktop settings: features, apps and the startup screen, with the organisation's policy (shared/desktop-settings.ts).
+  'desktopSettings:get',
+  'desktopSettings:set',
+  'desktopSettings:refresh',
 
   'status:snapshot',
 
@@ -530,6 +534,7 @@ export const EVENT_CHANNELS = [
   'update:changed',
   'update:prepare',
   'settings:changed',
+  'desktopSettings:changed',
   'appearance:changed',
   'organization:changed',
   'windows:changed',

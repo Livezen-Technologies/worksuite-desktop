@@ -89,7 +89,7 @@ export function LicensePage() {
   if (!b) {
     return (
       <div className="rounded-[12px] border border-line bg-surface p-5 text-[13.5px] text-ink-2">
-        <h2 className="text-[22px] font-bold text-ink">License</h2>
+        <h2 className="text-[20px] leading-tight font-bold text-ink">License</h2>
         <p className="mt-2">Sign in to see your organization's license on this computer.</p>
       </div>
     );

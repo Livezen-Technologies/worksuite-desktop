@@ -9,6 +9,7 @@ import { Select } from '../../components/Select';
 import { Button, Chip, Modal, Switch } from '../../components/ui';
 import { UpdateActions, updateHint } from '../../app/screens/UpdateScreens';
 import { useTab } from '../../core/tab-context';
+import { SettingRow } from './kit';
 
 /**
  * The one updates card, shown in Settings › About and Settings › Desktop (worksuite-desktop#204, #205): the update
@@ -19,13 +20,9 @@ import { useTab } from '../../core/tab-context';
 
 function AboutRow({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-6 border-b border-line py-3.5">
-      <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-semibold text-ink">{label}</div>
-        {hint ? <div className="mt-0.5 text-[12.5px] text-ink-3">{hint}</div> : null}
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
+    <SettingRow label={label} hint={hint}>
+      {children}
+    </SettingRow>
   );
 }
 

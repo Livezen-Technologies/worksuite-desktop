@@ -1449,6 +1449,76 @@ about it beyond "Saved on this computer" in Settings › Sidebar.
 those (`PUT …/pin`, in their order), once; the setting stays in the settings file but the sidebar no longer reads it.
 The server's own one-time import of the web's `shell.sidebar` pins runs first, so where the web had pins, those stand.
 
+## Desktop settings: features, apps and the startup screen
+
+Which features and apps a person has on the desktop, and which screen it opens on, with the organisation's policy
+over them (WorkSuite Desktop – Feature Enable/Disable Settings; worksuite PR #269, `Modules\Desktop`
+`DesktopSettings.php`, `SettingsController.php`). One document per person and company; every call is authenticated.
+The desktop's side is `shared/desktop-settings.ts` (the keys, the mapping and resolution) and
+`electron/services/desktop-settings.ts` (the calls, the copy kept here).
+
+| Call | Body | What it answers |
+| --- | --- | --- |
+| `GET /api/desktop/settings?organization_id=<id>` | | The document. `ETag: "ds-<version>-<hash>"`; the desktop sends `If-None-Match` and takes `304` (empty body) as "unchanged". |
+| `PUT /api/desktop/settings/preferences?organization_id=<id>` | `{values: {<key>: value \| null}, device_id?}` | The document after the change. All or nothing. |
+
+`organization_id` is the company open in the desktop; without it (All organizations) the server takes the person's
+home company. Refusals of a `PUT`: `409 {status:'error', message, error:'policy_locked', keys}` for a value for a
+managed key (a `null` for one is allowed: it removes the person's stored value); `422 {errors: {<key>: why}}` for an
+unknown key or a value the catalogue does not allow, and nothing is taken; `503` while the server's tables are not
+made yet.
+
+```json
+{ "status": "success", "message": "", "data": {
+  "mode": "enterprise", "org_id": 7, "version": 12, "catalogue_version": 1,
+  "catalogue": [ { "key": "modules.crm.enabled", "type": "bool", "default": true, "label": "CRM", "group": "modules" },
+                 { "key": "prefs.theme", "type": "string", "default": "system", "label": "Theme", "group": "preferences",
+                   "options": [ { "value": "system", "label": "Match the system" } ] } ],
+  "policy": { "modules.crm.enabled": { "value": false, "enforcement": "managed" },
+              "startup.screen": { "value": "app:mail", "enforcement": "default" } },
+  "preferences": { "features.launcherSearch": false },
+  "effective": { "modules.crm.enabled": { "value": false, "source": "policy", "locked": true } },
+  "updated_at": "2026-10-26T09:00:00Z" } }
+```
+
+Keys, and what the desktop does with each:
+
+| Key | Here |
+| --- | --- |
+| `features.launcherSearch` | The app launcher's "Find an app" box. |
+| `features.globalShortcut` | The keys held for the whole computer that bring WorkSuite up: Quick Ask, Marketing's Next contact, Support's quick reply, the Live keys. |
+| `features.itemLinks` | WorkSuite links open in the app (off: a web link goes to the browser, a `worksuite://` item link is refused; Settings › Links' switch shows off). |
+| `features.officeEditing` | WorkSuite Office: its DOC / Sheet / Slides tabs (`/office/…`) and the WorkSuite Office app. |
+| `features.fileSync` | Drive sync (`desktop.files.sync`), with the security policy's `file_sync` — the stricter wins. |
+| `features.offlineFiles` | Files kept on this computer for offline (`desktop.files.offline`, Office's offline read and write). |
+| `modules.<slug>.enabled` | The server's `applications` slug (`AppDefinition.app`): every desktop app of that slug (`drive` is Files and Office) is treated as not given — launcher, sidebar, search, links, deep links, shortcuts, the command palette, the tray, notifications. Apps without a slug (Home, Activity, Settings) cannot be turned off. |
+| `startup.screen` | `home` (the default), `last`, `app:<slug>` (or a desktop app id for an app without a slug), `route:/<path>`. |
+| `prefs.theme` | `theme` (and the colour profiles' mode). |
+| `prefs.language` | `language`; `system` changes nothing here. |
+| `prefs.launchAtLogin`, `prefs.startMinimized`, `prefs.minimizeToTray` | `startWithOs`, `startMinimized`, `minimizeToTray`. |
+| `prefs.notifications.enabled`, `.sound`, `.badge` | `notificationsEnabled`, `notificationSounds`, `badgeCount`. |
+| `prefs.notifications.preview` | `notificationPrivacy`: `full` / `sender_only` / `generic` ↔ `FULL` / `SENDER_ONLY` / `GENERIC` (the security policy's minimum still applies). |
+| `prefs.spellcheck`, `prefs.hardwareAcceleration` | `spellcheck`, `hardwareAcceleration`. |
+
+The realtime event `desktop.settings.changed {version}` makes the desktop read the document again when the version is
+newer than its copy.
+
+What the desktop relies on:
+
+- **Who decides.** Enterprise: a `managed` policy entry, locked; else the person's preference; else a `default`
+  policy entry; else the catalogue's default. Personal: no policy at all. The desktop resolves this itself from
+  `catalogue`, `policy` and `preferences` (so a change made offline takes effect at once), the same as
+  `DesktopSettings::resolve`. A value that does not fit its key (`type`, `options`) is passed over.
+- **Nobody's choice changes nothing here**: a key at its catalogue default leaves this computer's preference as it is.
+- **Reset to default** is a `null` value.
+- **First sync.** The first time a person's document is read on a computer, the preferences that computer already
+  had (those that differ from their defaults, under the server's names), and anything chosen there before the server
+  had desktop settings, are sent — except keys the policy manages and keys the server already has a preference for.
+
+**Without it** (`404`, an older server), personal mode on that computer alone: nothing more is sent. Offline, the last
+copy is used and Settings says "as of" when; changes wait and are sent when the server answers again. A `503` on a
+write keeps the change here and tries again five minutes later.
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is

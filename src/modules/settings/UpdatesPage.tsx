@@ -27,7 +27,17 @@ import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 function Tile({ label, value, sub, tone, icon, accent }: { label: string; value: ReactNode; sub: ReactNode; tone?: 'primary' | 'success' | 'danger'; icon?: string; accent?: StatTone }) {
   // `tone` says what the line under the figure means; the chip takes it too, or `accent` when there is nothing to say.
   const chip: StatTone | undefined = tone === 'primary' ? 'blue' : tone === 'success' ? 'green' : tone === 'danger' ? 'red' : accent;
-  return <StatCard label={label} value={value} sub={<span className={cx(tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-danger' : undefined)}>{sub}</span>} icon={icon} tone={chip} />;
+  // Drawn as the Settings kit's cards are (kit.tsx, SettingsGroup): 14px round with its faint shadow.
+  return (
+    <StatCard
+      label={label}
+      value={value}
+      sub={<span className={cx(tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-danger' : undefined)}>{sub}</span>}
+      icon={icon}
+      tone={chip}
+      className="rounded-[14px] shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/0.04)]"
+    />
+  );
 }
 
 const STEP_LABEL: Record<PipelineStep['id'], string> = { manifest: 'Manifest', download: 'Download', sha256: 'SHA-256', codesign: 'Code signature', stage: 'Stage' };
@@ -300,7 +310,7 @@ export function UpdatesPage({ onDiagnostics }: { onDiagnostics?: () => void }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <h2 className="text-[22px] font-bold text-ink">Updates</h2>
+        <h2 className="text-[20px] leading-tight font-bold text-ink">Updates</h2>
         <Chip tone={state.tone}>{state.word.toUpperCase()}</Chip>
         <div className="flex-1" />
         <Button loading={checking || u?.state === 'CHECKING'} disabled={u?.state === 'DOWNLOADING' || u?.state === 'INSTALLING'} onClick={check}>

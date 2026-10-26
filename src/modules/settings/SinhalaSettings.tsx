@@ -9,8 +9,8 @@ import { queryClient } from '../../core/query';
 import { SINHALA_KEY, useSinhalaProfiles, useSinhalaStatus } from '../../core/sinhala';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
-import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
+import { SectionHeader, SettingRow } from './kit';
 import { Button, Chip } from '../../components/ui';
 
 /**
@@ -28,22 +28,12 @@ export function electronAccelerator(acc: string | null): string | null {
 
 const shown = (acc: string) => prettyAccelerator(acc.replace(/^(CommandOrControl|CmdOrCtrl)\+/, 'Mod+'));
 
+/** A row of the Settings kit; `locked`: the organisation sets it (its badge, with why). */
 function Row({ label, hint, locked, children }: { label: string; hint?: ReactNode; locked?: boolean; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-6 border-b border-line py-3.5">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-[14px] font-semibold text-ink">
-          {label}
-          {locked ? (
-            <Chip tone="warning">
-              <Icon name="lock" size={11} /> Set by your organization
-            </Chip>
-          ) : null}
-        </div>
-        {hint ? <div className="mt-0.5 text-[12.5px] text-ink-3">{hint}</div> : null}
-      </div>
-      <div className="min-w-0 max-w-[60%] shrink-0 break-words">{children}</div>
-    </div>
+    <SettingRow label={label} hint={hint} lock={locked ? { reason: 'Your organization sets this for everyone.' } : null}>
+      {children}
+    </SettingRow>
   );
 }
 
@@ -53,10 +43,7 @@ export function SinhalaSettings() {
   const on = status.data?.availability === 'ok';
   return (
     <div>
-      <div className="mb-5">
-        <h2 className="text-[22px] font-bold text-ink">Language & Sinhala</h2>
-        <p className="mt-1 text-[13.5px] text-ink-3">The interface language, and Sinhala Tools on this computer.</p>
-      </div>
+      <SectionHeader title="Language & Sinhala" hint="The interface language, and Sinhala Tools on this computer." />
       <Row label="Language" hint="Choose your interface language. Some screens still use English.">
         <Select label="Language" value={prefs.language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(v) => void updatePrefs({ language: v })} />
       </Row>

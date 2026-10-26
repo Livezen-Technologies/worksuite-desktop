@@ -107,7 +107,7 @@ export function AdminRinging() {
       <main className="min-w-0 flex-1 overflow-y-auto px-10 py-6 scroll-thin">
         <div className="flex max-w-[840px] flex-col gap-3.5">
           <div>
-            <h2 className="text-[22px] font-bold text-ink">Website chat ringing</h2>
+            <h2 className="text-[20px] leading-tight font-bold text-ink">Website chat ringing</h2>
             <p className="mt-1.5 text-[14px] text-ink-2">Who is rung, and when. Each person picks their own tone and device.</p>
           </div>
           {/* The fixed rule (RING-01, RING-02): no ring time to set any more. */}

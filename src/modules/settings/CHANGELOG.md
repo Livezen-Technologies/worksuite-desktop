@@ -4,11 +4,25 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.43.1 — 2026-10-26
+## 1.44.1 — 2026-10-26
 
 **Changed**
 
-- the figure cards (KPI, stat and summary tiles) are the shared StatCard — compact, a tinted icon chip and the label above a calm figure, a muted line under it, zero shown muted; cards that open a list are buttons with a focus ring and a soft lift; the same figures and actions as before
+- the figure cards (KPI, stat and summary tiles) are the shared StatCard — compact, a tinted icon chip and the label above a calm figure, a muted line under it, zero shown muted; cards that open a list are buttons with a focus ring and a soft lift; the same figures and actions as before — Settings › Updates' four cards drawn as the Settings kit's cards
+
+## 1.44.0 — 2026-10-26
+
+**Added**
+
+- Desktop settings — features, apps and the startup screen, with the organisation's policy over them (shared/desktop-settings.ts, electron/services/desktop-settings.ts). Enterprise: a managed policy entry decides and is locked, a default one is only a default; personal: everything on and the person's to change. Synced across the person's computers through api/desktop/settings, kept here with when it was last read for offline; a server without it (404) leaves this computer's choices alone.
+- Settings › Features & apps — features and every app on or off, what the organisation manages locked with its badge, its defaults marked, Reset to default, and whether it is synced or offline as of when.
+- Settings › Desktop & startup — Open at startup (Home by default, where I left off, an app or a page), applied when WorkSuite starts; the start and close switches moved here from Preferences.
+- An app turned off (by its server `applications` slug) is gone from the launcher, the sidebar, links, deep links, shortcuts, the command palette and the tray; a feature turned off (launcher search, the global shortcuts, item links, WorkSuite Office editing, Drive sync, offline files) is off everywhere. The server's `prefs.*` (theme, language, launch at login, tray, notifications, spell check, hardware acceleration) map onto this computer's preferences, the new `spellcheck` among them.
+- The first sync uploads this computer's own preferences where the organisation does not manage them and no other computer chose.
+
+**Changed**
+
+- Every settings screen in one look (kit.tsx): a left section list with search across settings, grouped cards, the same row everywhere (label, description, control), radio cards, 'Managed by your organization' lock badges with why as the tooltip, Reset to default; light and dark from the same tokens.
 
 ## 1.43.0 — 2026-10-24
 

@@ -67,9 +67,12 @@ export async function paint(label: string): Promise<string> {
   return canvas.toDataURL('image/png');
 }
 
-/** The count on the icon: what needs you, and the included inboxes' unread mail (ENH-MAIL-05 MNA-TRY-03). */
+/**
+ * The count on the icon: what needs you, and the included inboxes' unread mail (ENH-MAIL-05 MNA-TRY-03), plus Hosting's
+ * monitors down and what expires within 7 days (HDM-DSK-04) — the same share the tray's badge adds on Windows and Linux.
+ */
 export function badgeCount(u: StatusSnapshot['unread']): number {
-  return attentionCount(u.chat + (u.webchat ?? 0) + (u.ringing ?? 0), u.notifications, u.support ?? 0, u.supportNotices ?? 0, u.mailBadge ?? 0, u.mailNotices ?? 0, (u.salesApprovals ?? 0) + (u.purchaseApprovals ?? 0), (u.salesNotices ?? 0) + (u.purchaseNotices ?? 0));
+  return attentionCount(u.chat + (u.webchat ?? 0) + (u.ringing ?? 0), u.notifications, u.support ?? 0, u.supportNotices ?? 0, u.mailBadge ?? 0, u.mailNotices ?? 0, (u.salesApprovals ?? 0) + (u.purchaseApprovals ?? 0), (u.salesNotices ?? 0) + (u.purchaseNotices ?? 0)) + Math.max(0, u.hosting ?? 0);
 }
 
 /** Called with every status push; repaints only when the label changes. */

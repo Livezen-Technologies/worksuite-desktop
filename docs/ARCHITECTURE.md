@@ -290,6 +290,34 @@ start-up a stored refresh token resumes the session; if the server is
 unreachable the cached bootstrap starts the app offline and read-only until it
 revalidates.
 
+## Desktop settings and the Settings screens
+
+Features, apps and the startup screen, per person, with the organisation's policy (docs/BACKEND.md › Desktop
+settings):
+
+- `shared/desktop-settings.ts` — the keys, the desktop's own catalogue, `resolveSettings` (managed policy › the
+  person › a default policy entry › the catalogue), `preferenceOverlay`, `migrationValues` and `startupTarget`. Pure,
+  used by both processes.
+- `electron/services/desktop-settings.ts` — the server's document per account and person in the profile database
+  (`desktop_settings:<scope>`, with `asOf`, the ETag and the changes not yet sent), refreshed with every bootstrap, on
+  `desktop.settings.changed` and on a realtime resync. IPC: `desktopSettings:get|set|refresh`, event
+  `desktopSettings:changed`.
+- **Enforcement.** `SessionController.disabledApps` takes the apps whose server slug is turned off out of
+  `visibleApps()` (the tray, the menu, windows, links, notifications), and the renderer's `appsFor` out of `app.apps`
+  (the launcher, the sidebar, search, the palette, tabs — `closeTabsForApps` closes theirs).
+  `SettingsService.setDesktopOverlay` puts managed and synced `prefs.*` (mapped by `SYNCED_PREFS`) and a feature's
+  overlay (itemLinks: links open in the browser) over the preferences, with locks, so `settings:set` refuses them and
+  every service that reads `settings.effective()` follows. The features: launcherSearch in the launcher,
+  globalShortcut in `globalKeysOn` (main), itemLinks in the deep-link handler, officeEditing in `core/access`
+  (`office`) and `office:open` / `office:openInDesktopApp`, fileSync in `syncAllowed` and `desktop.files.sync`,
+  offlineFiles in `desktop.files.offline` and `office:readOffline|writeOffline`.
+- **Startup.** After the tabs are restored, `core/startup.ts` opens `startup.screen` in front (`last` keeps the tab
+  in front; an app turned off or not given opens Home and says so).
+- **Settings UI.** `src/modules/settings/kit.tsx` is the one look for every settings screen: `SectionHeader`,
+  `SettingsGroup` cards, `SettingRow` (label, description, control; `LockBadge` "Managed by your organization" with the
+  reason as tooltip; `ResetButton`), `RadioCards`, and the sidebar's search over `search-index.ts`. Rows written
+  straight under a header are joined into cards by `styles.css` (`[data-setting-row][data-loose]`).
+
 ## Server API families
 
 `probeServer` decides per server:
@@ -626,6 +654,34 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   printed here are stamped (`labels/printed`); a licence names the Expense subscription paying for it
   (`licenses/{id}/subscription`, list from `/api/expense/subscriptions`); a consumable kept in Inventory moves at a
   warehouse (`warehouse_id`, list from `/api/inventory/warehouses`).
+- Hosting & Domains (`modules/hosting`, main process `electron/services/hosting-alerts.ts`, rules in
+  `shared/hosting.ts`; Hosting & Domains SRS v1.0 HDM-DSK-01…05, the desktop boards D-01…D-08) over `/api/hosting`
+  (the server's `app/Modules/Hosting`). `api.ts` reads the controllers' own shapes: `{status, message, data}`, a list
+  as `{<key>: [...], summary, meta: {total, page, per_page, pages, sort}}` (`pageOf`), one domain or server with what
+  its page shows, the overview as `Overview::build` writes it. The shell (`HostingShell.tsx`,
+  `/hosting?tab=overview|domains|expiring|dns|certificates|servers|monitors|costs|accounts|history|new|register|import|
+  reports`; one domain as `/hosting?domain=<id>&view=overview|dns|certificates|monitors|costs|activity`, one server as
+  `/hosting?server=<id>`, a certificate selected with `&certificate=<id>` — the web's deep links) has an 88 px rail
+  (`Rail.tsx`), ⌘N / ⌘⇧S / F5 / Alt+1…0 and command palette entries while it is open; domains and servers open in
+  tabs or record windows (`openInWindow`). Lists tick rows for `POST bulk` (`Bulk.tsx`) and have a right-click menu
+  (`ContextMenu`); Export is the server's file (`export/{kind}?format=csv|xlsx`, saved with `files:saveText` or, for a
+  workbook, `office:saveCopy`), the renewal schedule prints from `print/renewals` with `print:print`, and an import
+  file is read with `assets:openFile` and sent as multipart to `import/preview` / `import/apply` (`Import.tsx`).
+  Links are picked from `domains/lookups` — the row's own company (`Links.tsx`, `ServerForm.tsx`). The DNS editor
+  (`DnsEditor.tsx`) checks a record by type and the CNAME rule (`recordProblem`) before the server checks it again,
+  sends `host` and, on a change or delete, the record as it was seen (`was`), shows the fresh copy a refusal sends
+  (`refusedCopy`), compares the copy with public resolvers (`domains/{id}/lookup`) and exports the copy as BIND
+  (`toBind`). Renew, the transfer code, register and power off answer 428 `errors.step_up` until the same request
+  carries `current_password` or `totp_code`: `withStepUp` (`StepUp.tsx`) asks and sends it again. Power off needs
+  the server's name typed (`confirmsName`). "Explain with AI" is `GET certificates/{id}/explain` or
+  `GET domains/{id}/explain?record=` → `{text, ai}` and hides itself for the session on a 404. Routes an older
+  server lacks go through `orNull`: a 404 is "needs a server update". Offline the READ_CACHE keeps the GETs
+  `hostingCached()` allows — never a transfer code, a live lookup, metrics or an export — `ReadOnly` turns every
+  change off, and the banner gives the oldest saved answer's time (`asOf`, from the proxy's `x-ws-cached-at`). The
+  alerts poll the domains, certificates and servers expiring within 7 days, the monitors down (`state=down`) and the
+  overview (`monitors.down`) every 10 minutes while signed in, raise each once (per subject and rung, per outage a
+  day) and feed the tray's Hosting line and badge (`hostingBadge`), and — through the status snapshot's
+  `unread.hosting` — the Dock icon macOS gets painted (`core/dock-badge`).
 - Cheque Manager (`modules/cheque`, main process `electron/services/cheque-print.ts` and the shared
   `electron/services/core-print.ts`, data and schemas in `shared/cheque.ts`; Cheque SRS v1.0, the desktop boards
   D01–D06): the certified print station over `/api/cheque` as the server's `docs/cheque-api.md` describes it. The

@@ -15,7 +15,7 @@ import { billingExportPath } from '@shared/billing';
 import { purchaseExportPath } from '@shared/purchase';
 import { projectReportPath, projectsReportPath } from '@shared/projects';
 import { safeFileName } from '@shared/filename';
-import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
+import type { AppInfo, BusyReport, DetachedWindow, Preferences, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
 import { windowRoute } from '../windows/manager';
 import { attachmentRisk } from '@shared/attachments';
@@ -393,6 +393,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('session:switchOrganization', async (input) => {
     const organizationId = await ctx.session.switchOrganization(input.organizationId);
     broadcast('organization:changed', { organizationId });
+    // Each company has its own policy: its copy at once, then the server's.
+    ctx.desktopSettings.load();
+    void ctx.desktopSettings.refresh();
     return { organizationId, closedTabs: 0 };
   });
 
@@ -855,7 +858,18 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     pmsDownload({ mayDownload: () => ctx.session.hasPermission('desktop.downloads'), download: (path, name, open, fileId) => ctx.transfers.download(path, name, open, fileId) }, input),
   );
   // Office documents: the editor's view (office-editor.ts) and copies opened in other apps (office-external.ts).
-  router.handle('office:open', (input, c) => ctx.office.open(c.sender, input));
+  // `features.officeEditing` off: no document opens in WorkSuite Office (its tabs, or the app).
+  const officeOn = (): void => {
+    if (!ctx.desktopSettings.feature('officeEditing')) throw new DesktopError('POLICY_DENIED', 'Editing documents in WorkSuite Office is turned off.');
+  };
+  // `features.offlineFiles` off: files kept on this computer are not opened or written offline.
+  const offlineOn = (): void => {
+    if (!ctx.desktopSettings.feature('offlineFiles')) throw new DesktopError('POLICY_DENIED', 'Offline files are turned off.');
+  };
+  router.handle('office:open', (input, c) => {
+    officeOn();
+    return ctx.office.open(c.sender, input);
+  });
   router.handle('office:place', (input, c) => ctx.office.place(c.sender, input.viewId, input.bounds, input.visible));
   router.handle('office:snapshot', (input, c) => ctx.office.snapshot(c.sender, input.viewId));
   router.handle('office:command', (input, c) => ctx.office.command(c.sender, input.viewId, input.command.type === 'start' && input.events ? { ...input.command, events: input.events } : input.command, input.sessionId));
@@ -864,7 +878,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('office:externalApps', (input) => ctx.officeLocal.apps(input.extension));
   router.handle('office:openExternal', (input) => ctx.officeLocal.open(input));
   router.handle('office:desktopApp', () => ctx.officeApp.status());
-  router.handle('office:openInDesktopApp', (input) => ctx.officeApp.open(input));
+  router.handle('office:openInDesktopApp', (input) => {
+    officeOn();
+    return ctx.officeApp.open(input);
+  });
   router.handle('office:localCopies', () => ctx.officeLocal.list());
   router.handle('office:uploadLocal', (input) => ctx.officeLocal.upload(input.id, input.how));
   router.handle('office:forgetLocal', (input) => ctx.officeLocal.forget(input.id));
@@ -888,11 +905,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('office:readFile', (input) => ctx.officeFiles.read(input.handle));
   router.handle('office:readOffline', async (input) => {
+    offlineOn();
     const at = ctx.officeLocal.localPath(input.fileId);
     if (!at) throw new DesktopError('NOT_FOUND', 'This file is not on this computer, so it cannot be edited offline.');
     return new Uint8Array(await readFile(at.path));
   });
   router.handle('office:writeOffline', async (input) => {
+    offlineOn();
     const at = ctx.officeLocal.localPath(input.fileId);
     if (!at) throw new DesktopError('NOT_FOUND', 'This file is no longer on this computer.');
     await writeAtomically(at.path, input.bytes);
@@ -1408,6 +1427,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
 
   // ── settings ───────────────────────────────────────────────────────────
   router.handle('settings:get', () => ({ preferences: ctx.settings.effective(), locks: ctx.settings.locks() }));
+  // Desktop settings (shared/desktop-settings.ts): what takes effect, the person's choices (a managed key is refused).
+  router.handle('desktopSettings:get', () => ctx.desktopSettings.view());
+  router.handle('desktopSettings:set', (input) => ctx.desktopSettings.set(input.values));
+  router.handle('desktopSettings:refresh', async () => {
+    await ctx.desktopSettings.refresh();
+    return ctx.desktopSettings.view();
+  });
   router.handle('settings:set', async (input) => {
     const { verificationPassword, ...choices } = input;
     if (choices.appLockEnabled === false && ctx.settings.effective().appLockEnabled === true) {
@@ -1416,6 +1442,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const locked = new Set(ctx.settings.locks().map((l) => l.key));
     const patch = Object.fromEntries(Object.entries(choices).filter(([k]) => k === 'appLockMinutes' || !locked.has(k as never)));
     const before = ctx.settings.raw();
+    // The synced ones wait to go up to the person's desktop settings first, so what takes effect is the new choice.
+    ctx.desktopSettings.notePreferences(patch as Partial<Preferences>);
     const prefs = ctx.settings.update(patch);
     if (before.startWithOs !== prefs.startWithOs || before.startMinimized !== prefs.startMinimized) applyAutostart(prefs.startWithOs, prefs.startMinimized);
     if (before.hardwareAcceleration !== prefs.hardwareAcceleration) writeBootConfig(paths().bootConfig, { hardwareAcceleration: prefs.hardwareAcceleration });

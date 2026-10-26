@@ -1,6 +1,7 @@
 import type { Preferences } from '@shared/types';
 import { linkPrefs, type LinkPrefs } from '@shared/link-prefs';
 import { updatePrefs } from '../../core/app-state';
+import { useFeature } from '../../core/desktop-settings';
 import { Switch } from '../../components/ui';
 import { Select } from '../../components/Select';
 
@@ -12,14 +13,20 @@ import { Select } from '../../components/Select';
  */
 export function LinksSettings({ prefs }: { prefs: Preferences }) {
   const l = linkPrefs(prefs);
-  const set = (patch: Partial<LinkPrefs>) => void updatePrefs({ links: { ...l, ...patch } });
+  // `features.itemLinks` off (desktop settings): links open in the browser, and the switch says so.
+  const itemLinks = useFeature('itemLinks');
+  const set = (patch: Partial<LinkPrefs>) => {
+    const { openInApp, ...rest } = { ...l, ...patch };
+    // While it is off, the person's own "open in the app" is left as they saved it (links merge field by field).
+    void updatePrefs({ links: itemLinks ? { ...rest, openInApp } : rest });
+  };
   return (
     <section aria-labelledby="settings-links" className="mt-8">
       <h3 id="settings-links" className="mb-1 text-[15px] font-bold text-ink">
         Links
       </h3>
       <Line label="Open WorkSuite links in the desktop app" hint="Links to files, meetings, tasks and other WorkSuite items open here instead of the browser.">
-        <Switch label="Open WorkSuite links in the desktop app" checked={l.openInApp} onChange={(v) => set({ openInApp: v })} />
+        <Switch label="Open WorkSuite links in the desktop app" checked={l.openInApp} disabled={!itemLinks} onChange={(v) => set({ openInApp: v })} />
       </Line>
       <Line label="Open links from Mail in" hint="Where a WorkSuite link clicked in an email opens.">
         <Select

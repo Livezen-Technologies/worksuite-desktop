@@ -376,6 +376,8 @@ export interface Preferences {
   appearance?: AppearancePrefs;
   density: Density;
   hardwareAcceleration: boolean;
+  /** Spelling is checked as you type in every window (desktop settings `prefs.spellcheck`). Unset: on. */
+  spellcheck?: boolean;
   notificationSounds: boolean;
   notificationPrivacy: NotificationPrivacy;
   notificationsEnabled: boolean;
@@ -1055,6 +1057,8 @@ export interface StatusSnapshot {
     purchaseApprovals?: number;
     /** Unread bell entries about those: counted once, as Purchasing's queue, on the badge. */
     purchaseNotices?: number;
+    /** Hosting & Domains (HDM-DSK-04): monitors down plus domains, certificates and servers expiring within 7 days. */
+    hosting?: number;
   };
   /** Mail alerts are paused on this computer (MNA-TRY-02): the Mail footer says so. */
   mailAlertsPaused?: string | null;

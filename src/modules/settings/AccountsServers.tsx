@@ -127,7 +127,7 @@ export function AccountsServers() {
 function Heading() {
   return (
     <div className="mb-5">
-      <h2 className="text-[22px] font-bold text-ink">Accounts &amp; Servers</h2>
+      <h2 className="text-[20px] leading-tight font-bold text-ink">Accounts &amp; Servers</h2>
       <p className="mt-1 text-[13.5px] text-ink-3">Personal and Enterprise accounts on this computer, side by side. Each keeps its own data, sign-in and settings.</p>
     </div>
   );
