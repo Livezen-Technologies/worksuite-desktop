@@ -723,7 +723,7 @@ answers 404 and the screen says so.
 |---|---|---|
 | FR-HW-01 | Done | OS print dialog with preview; print to PDF |
 | FR-DIAG-01..07 | Done | Health checks, redacted previewed bundle, Safe Mode after 3 crashes / 10 min, session restore, hardware-acceleration toggle, virtualized lists, hashing in a utility process |
-| FR-L10N-01 | Partial | EN complete; SI/TA/AR/HI shell strings (need native review); RTL for Arabic |
+| FR-L10N-01 | Partial | EN complete; SI/TA: 5,139 of 21,127 catalogue phrases (24%), 80% of the shell, Settings, My account and the ten most-used modules — 3,920 of them machine-drafted and listed for native review in `docs/localization/review.json`; AR/HI shell strings (need native review); RTL for Arabic |
 | FR-L10N-02 | Done | User → organization → OS time zone; WorkSuite's UTC vs wall-clock rules |
 | FR-L10N-03 | Partial | Keyboard navigation, focus rings, ARIA roles, reduced motion, high contrast; a full screen-reader audit is still to do |
 

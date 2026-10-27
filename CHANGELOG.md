@@ -41,6 +41,18 @@ person who has to live with the change — what it does, and where it bites.
   policy, and an email's own styles carry no nonce. SECURITY.md says why, and what moving mail to its own origin would
   take. (D-G17)
 
+### Changed (localization round)
+
+- **Sinhala and Tamil cover far more of the app — as drafts.** 3,920 phrases were added to each of
+  `shared/locales/si.json` and `ta.json`: the shell and navigation, common actions, Settings, My account, and Home,
+  Mail, Chat, Calendar, Tasks, Files, Meet, Calls, Contacts and Notifications. Across those areas coverage rose from
+  19% (1,270 of 6,806 phrases) to 80% (5,465); across the whole app from 1,132 to 5,139 of 21,127 phrases (5% to
+  24%). The new phrases are machine-drafted: `docs/localization/review.json` lists every one of them under
+  `machineDrafted` as "needs native review", and the languages stay in preview until a fluent speaker has been
+  through them. Sentence fragments the code glues together, website chat, channels and the image editor were left
+  in English rather than guessed at. The checked-in coverage report (`docs/localization/coverage.json`), which still
+  showed 256 of 11,743, is regenerated. (D-G10)
+
 ## 0.2.283 — 2026-10-27
 
 Needs the server with **Core 1.32.0** (`/api/capabilities`), **SocialMedia 1.0.0** for Social Media, and **Voip 2.0.1** for company-scoped Phone; on an older server those screens stay hidden or fall back.
