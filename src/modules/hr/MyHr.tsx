@@ -5,7 +5,7 @@ import { attendanceTime } from './attendance';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { STATE_LABEL, type Profile } from './api';
 import { dayLong, dayShort, minutesLabel } from './dates';
-import { btn, btnPrimary, Cell, Empty, Facts, Grid, humanise, Kpi, Panel, row, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Facts, Grid, humanise, Kpi, Panel, row, StatusChip, THead } from '../../components/PageKit';
 import type { HrView } from './Rail';
 import { NewRequestSheet } from './Requests';
 import { StatGrid } from '../../components/StatCard';

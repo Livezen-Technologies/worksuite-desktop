@@ -5,7 +5,7 @@ import { clientLabel } from '../../../src/modules/account/api';
 import { avatarSvg, initialsFrom, normalise } from '../../../src/modules/account/avatarArt';
 import { clamp, initial, minScale, MAX_ZOOM, rotate } from '../../../src/modules/account/crop';
 import { refusal, typeList } from '../../../src/modules/account/PictureEditor';
-import { daysAgo, weekdays } from '../../../src/modules/account/parts';
+import { daysAgo, weekdays } from '../../../src/components/CardKit';
 import { zoneFacts } from '../../../src/modules/account/Profile';
 
 /**

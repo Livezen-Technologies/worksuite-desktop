@@ -5,7 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { EMPLOYMENT_TYPES, pickable, SETTABLE_STATUSES, type EmployeeRow, type Profile } from './api';
 import { ymd } from './dates';
-import { btn, btnPrimary, Field, humanise, input, Sheet } from './parts';
+import { btn, btnPrimary, Field, humanise, input, Sheet } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 
 /**

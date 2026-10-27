@@ -7,7 +7,7 @@ import { call, errorMessage, on } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { CallAvatar } from './parts';
+import { CallAvatar } from '../../components/CallKit';
 import { answerCall } from './start';
 import { playTone, ringVolume, saveRingVolume } from './tones';
 import { BrandMark } from '../../components/BrandMark';

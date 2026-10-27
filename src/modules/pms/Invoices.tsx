@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { Select } from '../../components/Select';
 import { Button, ErrorNote, Spinner } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { input, Section } from '../garage/parts';
-import { PageHead } from '../hr/parts';
+import { input, Section } from '../../components/FormKit';
+import { PageHead } from '../../components/PageKit';
 import { day, errorText, K, pGet, pPost, stamp, type FolioShape, type OutboxRow } from './api';
 import { Money, NoAccess, Refusal, usePms } from './parts';
 

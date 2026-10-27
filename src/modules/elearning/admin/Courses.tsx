@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { Select } from '../../../components/Select';
 import { Button, ErrorNote, Modal, Spinner } from '../../../components/ui';
 import { toast } from '../../../core/toasts';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { eGet, ePost, errorText, K, labelOf, newKey, refusal, when, type Category, type Course, type CourseCard, type Paged } from '../api';
 import { CourseStatusPill, Field, input, Refusal, useEl } from '../parts';
 import { Checkbox } from '../../../components/Checkbox';

@@ -5,7 +5,7 @@ import { useStore } from '../../core/store';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { type HrOverview } from './api';
 import { dayShort, parseYmd, ymd } from './dates';
-import { btn, btnPrimary, Empty, humanise, Initials, Kpi, PageHead, Panel, StatusChip } from './parts';
+import { btn, btnPrimary, Empty, humanise, Initials, Kpi, PageHead, Panel, StatusChip } from '../../components/PageKit';
 import { can, type HrView } from './Rail';
 import { StatGrid } from '../../components/StatCard';
 

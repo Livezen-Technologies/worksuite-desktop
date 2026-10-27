@@ -1,6 +1,6 @@
 {
     "module": "pms",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "paths": [
         "electron/services/pms-download.ts",
         "electron/services/pms-locks"

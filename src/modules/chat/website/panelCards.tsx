@@ -7,7 +7,7 @@ import { Select } from '../../../components/Select';
 import { Button, Modal, TextField } from '../../../components/ui';
 import { Checkbox } from '../../../components/Checkbox';
 import { SharedFiles, type SharedFile } from '../kit/SharedFiles';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { ApiError, apiPatch, apiPost } from '../../../core/api';
 import { tagList, websiteAction, WEBSITE, type WebsiteVisitor } from './api';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING } from './rowParts';

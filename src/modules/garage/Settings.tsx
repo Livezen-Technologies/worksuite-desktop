@@ -1,6 +1,6 @@
 import { ModuleSettingsForm } from '../../components/ModuleSettingsForm';
 import { Button } from '../../components/ui';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { useGarage } from './parts';
 
 /**

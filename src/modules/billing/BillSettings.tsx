@@ -9,7 +9,7 @@ import { Icon } from '../../components/Icon';
 import { ModuleSettingsForm } from '../../components/ModuleSettingsForm';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Panel, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Panel, Sheet } from '../../components/PageKit';
 import { can, K, METHODS, useBillingOrgs } from './api';
 import {
   addRate,

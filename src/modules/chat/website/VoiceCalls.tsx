@@ -7,7 +7,7 @@ import { dayKey, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Select } from '../../../components/Select';
 import { Avatar, Button, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { WEBSITE } from './api';
 import { CallbackBoard, dial } from './Callbacks';
 import { Segmented, Tile } from './live/LiveDashboard';

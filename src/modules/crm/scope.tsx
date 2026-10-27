@@ -2,7 +2,7 @@ import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { Select } from '../../components/Select';
 import type { Organization } from '@shared/types';
-import { Field } from '../hr/parts';
+import { Field } from '../../components/PageKit';
 import { scopeParams } from './logic';
 
 /**

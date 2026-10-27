@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Select } from '../../../components/Select';
 import { Button, ErrorNote, Spinner } from '../../../components/ui';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { eGet, K, when, type GradingItem } from '../api';
 import { Pill, WorkPill, useEl } from '../parts';
 

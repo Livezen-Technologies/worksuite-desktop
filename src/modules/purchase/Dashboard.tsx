@@ -1,8 +1,8 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnPrimary, Kpi, Panel } from '../hr/parts';
+import { btnPrimary, Kpi, Panel } from '../../components/PageKit';
 import { short, whole } from '../inventory/api';
-import { Line, ListPanel } from '../inventory/parts';
+import { Line, ListPanel } from '../../components/ListKit';
 import type { PurchaseDashboard, QueueItem } from './api';
 import { Head } from './parts';
 import type { PurView } from './Rail';

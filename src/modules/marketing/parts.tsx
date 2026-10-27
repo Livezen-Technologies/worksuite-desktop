@@ -11,7 +11,7 @@ import type { CampaignStatus } from './types';
  * because the person's appearance profile changes primary and the ground: the
  * design's "slate and #2563eb" are the tokens here (`text-ink`, `bg-primary`).
  */
-export { Kpi, Panel, Seg, Field, THead, Cell, row, Initials, Sheet, Empty, btn, btnPrimary, btnSmall, btnBad, input, humanise } from '../hr/parts';
+export { Kpi, Panel, Seg, Field, THead, Cell, row, Initials, Sheet, Empty, btn, btnPrimary, btnSmall, btnBad, input, humanise } from '../../components/PageKit';
 
 /** Where the reader is, what this is, and what they can do from here (the 22px heading of every screen). */
 export function PageHeader({ crumbs = [], title, sub, actions, onCrumb }: { crumbs?: string[]; title: ReactNode; sub?: ReactNode; actions?: ReactNode; onCrumb?: (i: number) => void }) {

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { eGetMeta, K, when, type LearningItem, type MyLearning as Data } from './api';
 import { CourseTile, Pill, Section, Tile, WorkPill, useEl } from './parts';
 import { StatGrid } from '../../components/StatCard';

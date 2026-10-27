@@ -3,7 +3,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { ApiError, apiGet, apiPut } from '../core/api';
 import { errorMessage } from '../core/bridge';
 import { toast } from '../core/toasts';
-import { btn, btnPrimary, Field, input, Panel } from '../modules/hr/parts';
+import { btn, btnPrimary, Field, input, Panel } from './PageKit';
 import { Select } from './Select';
 import { ErrorNote, Spinner } from './ui';
 import { Checkbox } from './Checkbox';

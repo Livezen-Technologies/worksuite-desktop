@@ -3,7 +3,7 @@ import { request } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { cx } from '../../components/ui';
-import { StatusChip } from './parts';
+import { StatusChip } from '../../components/PageKit';
 
 /**
  * Onboarding's shared pieces (HrOnboarding, HrSelfService "My onboarding"):

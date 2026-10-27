@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
-import { btnPrimary, btnSmall, Empty, input, Panel } from '../hr/parts';
+import { btnPrimary, btnSmall, Empty, input, Panel } from '../../components/PageKit';
 import { K, money, type Budget as Data } from './api';
 import { amount, KE, overBy, saveBidBudget, varianceLine, type BidCostSummary } from './bidcost';
 import { addBudgetLine, budgetLineBody, COST_KINDS, fetchCosts, K2, labelOf, removeBudgetLine } from './work';

@@ -1,8 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import { Icon } from '../../components/Icon';
-import { cx } from '../../components/ui';
-import { btn, btnPrimary, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { Icon } from './Icon';
+import { cx } from './ui';
+import { btn, btnPrimary, Sheet } from './PageKit';
+import { Pill } from './ListKit';
+
+/** Notices, confirm and reason sheets, amounts and pills first drawn for Finance (it was `finance/parts`), shared by
+ * Expenses, Payroll, Assets, Cheque Manager and Label (audit D-G08). */
 
 /**
  * A read that failed. Never "no accounts" or "open the books first": a failed

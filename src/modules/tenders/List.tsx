@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet } from '../../components/PageKit';
 import { bulkTenders, fetchList, K, moneyList, money, NOT_IN_BULK, PER_PAGE, presetOf, PRIORITIES, SORTS, STAGE_GROUPS, useOwners, VIEWS, type Band, type BulkAction, type Filters, type ListView, type StageDef, type TenderRow } from './api';
 import { Left, OutcomePill, PriorityPill, Score, StagePill } from './parts';
 import { Checkbox } from '../../components/Checkbox';

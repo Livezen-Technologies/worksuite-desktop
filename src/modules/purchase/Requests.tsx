@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../../components/PageKit';
 import { qty, type Warehouse } from '../inventory/api';
 import { pick, ProductPick, WarehousePick } from '../inventory/pickers';
 import { createRequest, OFFLINE_WRITE, refreshPurchase, rfqFromRequest, usePurchaseCan, usePurchaseOffline } from './api';

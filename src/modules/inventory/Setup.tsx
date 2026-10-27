@@ -5,9 +5,9 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../../components/PageKit';
 import { cost, num, qty } from './api';
-import { minWidth, Pill } from './parts';
+import { minWidth, Pill } from '../../components/ListKit';
 import { pick } from './pickers';
 import {
   archiveWarehouse,

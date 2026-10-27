@@ -4,7 +4,7 @@ import { errorMessage } from '../../core/bridge';
 import { todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Sheet } from '../../components/PageKit';
 import { type Warehouse } from './api';
 import { openingBody, recordOpening, type Pickable } from './control';
 import { ProductPick, WarehousePick } from './pickers';

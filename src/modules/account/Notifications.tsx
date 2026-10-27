@@ -7,9 +7,9 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, Switch } from '../../components/ui';
-import { input } from '../hr/parts';
+import { input } from '../../components/PageKit';
 import { K, useHasApp } from './api';
-import { Card, Head, Note, SettingRow } from './parts';
+import { Card, Head, Note, SettingRow } from '../../components/CardKit';
 import { computerZone, useZones } from './regional';
 import { Checkbox } from '../../components/Checkbox';
 

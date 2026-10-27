@@ -5,10 +5,10 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { Empty, PageHead, Panel } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { Empty, PageHead, Panel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, refusal } from './api';
-import { LoadFailed, Notice } from './parts';
+import { LoadFailed, Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { accountLabel, fetchPurchaseAccounts, forbiddenWhy, KS, saveMapping, sameId, type MappingAccount, type MappingKind } from './setup';
 

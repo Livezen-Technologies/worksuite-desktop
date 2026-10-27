@@ -1,5 +1,5 @@
 import { ModuleSettingsForm } from '../../../components/ModuleSettingsForm';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { useEl } from '../parts';
 
 /**

@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { pickable, type EmployeeRow } from './api';
 import { dayLong, ymd } from './dates';
-import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Seg, Sheet, SidePanel, StatusChip } from './parts';
+import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Seg, Sheet, SidePanel, StatusChip } from '../../components/PageKit';
 import { Checkbox } from '../../components/Checkbox';
 
 /**

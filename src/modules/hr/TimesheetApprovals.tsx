@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
 import type { LogsResponse, Sheet as TimeSheet } from './api';
 import { dayShort, minutesLabel, rangeLabel } from './dates';
-import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Sheet, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Sheet, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 import { StatGrid } from '../../components/StatCard';
 

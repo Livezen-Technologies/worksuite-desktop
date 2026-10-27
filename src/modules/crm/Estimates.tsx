@@ -8,7 +8,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../../components/PageKit';
 import { DecideSheet, type Decision } from './Approvals';
 import { DocStatus } from './Proposals';
 import { moneyFull, StatusBar } from './parts';

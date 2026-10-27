@@ -5,7 +5,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { refusal } from '../finance/api';
-import { humanise } from '../hr/parts';
+import { humanise } from '../../components/PageKit';
 import { fetchSettings, saveSettings, type SettingNode } from './api';
 import { Kbd, NotYet, useReadOnly } from './parts';
 import { SectionHeader, SettingRow, SettingsGroup, SettingsNavItem } from '../../components/SettingsKit';

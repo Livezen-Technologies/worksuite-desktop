@@ -9,7 +9,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Empty, input, PageHead, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Empty, input, PageHead, Sheet } from '../../components/PageKit';
 import { assignees, BULK_STATUSES, bulk, bulkAssign, deleteView, fetchOrders, fetchViews, K, KV, PRIORITIES, saveView, SOURCE, statusOf, type ListFilters, type Order, type SavedView } from './api';
 import { moveFocus, useSalesKeys } from './keys';
 import { OFFLINE_WRITE, offlineLine, useSalesOffline } from './offline';

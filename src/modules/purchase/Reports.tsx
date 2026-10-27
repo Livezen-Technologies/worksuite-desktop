@@ -6,7 +6,7 @@ import { todayInZone } from "../../core/time";
 import { toast } from "../../core/toasts";
 import { Select } from "../../components/Select";
 import { ErrorNote, Spinner, cx } from "../../components/ui";
-import { btnSmall, Empty, input } from "../hr/parts";
+import { btnSmall, Empty, input } from "../../components/PageKit";
 import { qty, whole } from "../inventory/api";
 import { pick } from "../inventory/pickers";
 import {

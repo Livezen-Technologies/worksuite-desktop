@@ -7,8 +7,8 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Field, input, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Field, input, PageHead, Seg, Sheet, SidePanel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import {
   advanceJournal,
   can,
@@ -30,7 +30,7 @@ import {
   type Company,
   type DraftLine,
 } from './api';
-import { ConfirmSheet, JournalPill, LoadFailed, Notice, ReasonSheet, Withheld } from './parts';
+import { ConfirmSheet, JournalPill, LoadFailed, Notice, ReasonSheet, Withheld } from '../../components/RecordKit';
 
 /**
  * The journals, newest first, and one journal's lines.

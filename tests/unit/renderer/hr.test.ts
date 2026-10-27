@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/core/app-state', () => ({ app: { get: () => ({}), subscribe: () => () => undefined }, organizationName: () => 'Livezen' }));
 import { addDays, hoursLabel, minutesLabel, monthGrid, rangeLabel, shiftMonth, weekDays, weekStart } from '../../../src/modules/hr/dates';
-import { humanise, toneOf } from '../../../src/modules/hr/parts';
+import { humanise, toneOf } from '../../../src/components/PageKit';
 import { hrSections, webPathFor } from '../../../src/modules/hr/Rail';
 
 describe('HR days', () => {

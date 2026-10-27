@@ -10,6 +10,18 @@
 | **pdf-worker** (`electron/workers`) | PDF Studio's engine: PDFium (WebAssembly) for one open document | utility process per document, no network; reads only the one file main names |
 | **local-ai-worker** (`electron/workers`) | Local AI: llama.cpp (node-llama-cpp) with the default model, GPU or CPU | one utility process, started on first request, ended after 10 idle minutes or at sign-out; no network; loads only the verified model file main names. Main (`services/local-ai/host.ts`) holds the catalog — the server registry (`/api/ai/local/catalog`, G-02), the signed CDN only for a server without that route — and downloads; 3 crashes in 10 minutes stop it until **Restart**. The windows use `src/core/local-ai.ts` (status, models, `askLocal` streaming by request id); Settings → Local AI and the Ask panel's **On this computer** are its screens; `scripts/local-ai-catalog.mjs` makes and signs the CDN catalog |
 
+**The composition root.** `electron/main/index.ts` creates the services and accounts and hands each area its wiring
+in `electron/main/wiring/` (audit D-G13): `navigation.ts` (deep links, notification and tray clicks, the desks that
+open windows), `status.ts` (the status snapshot and `emitStatus`), `presence.ts` (attendance and chat presence),
+`tray.ts`, `webchat.ts` (website chats ringing like calls), `live-desk.ts`, `quick-ask.ts`, `marketing.ts`,
+`access.ts` (what the person may open, the menu, what the caches keep), `session.ts` (signing in, out and back in, and
+the server being reachable again), `ipc.ts` (app://, the API proxy, the IPC router and its context), `accounts.ts`
+(accounts side by side, background accounts, WorkSuite OS sign-in) and `lifecycle.ts`. Each takes what it reads as a typed `…Deps` object: values that already exist are
+passed as they are; one that is set later or reassigned is a getter (and a setter when the wiring writes it), so it
+reads the current value as the inline code did. The IPC contract is split the same way: `shared/ipc/contract.ts`
+spreads `contract-*.ts` by area (transfers, documents, remote control, Meet, the desks, offline, ringing, mail) and
+its schemas and `ch` are in `contract-kit.ts`; `shared/types.ts` re-exports `shared/types-*.ts`.
+
 Utility processes are run by the `ServiceSupervisor`: pinged every 10 s,
 restarted with exponential backoff (1 s → 5 min), marked FAILED after 5
 restarts in 10 minutes, shown in Diagnostics and the tray. A helper failing
@@ -366,6 +378,15 @@ Vault-sealed, so the database file alone gives nothing to guess against.
 - `modules/` — one folder per desktop module with a validated manifest
   (`modules/registry.ts`, §15). Modules are lazy chunks; each renders inside
   its own error boundary.
+- **Module boundaries (audit D-G08).** A module does not import another module's files: the lint rule
+  `boundaries/no-module-imports` (`build-tools/eslint-boundaries.mjs`) refuses it. What modules share is in
+  `src/components` — the page kit (`PageKit.tsx`: page heads, panels, sheets, buttons, fields, tables; was `hr/parts`),
+  `ListKit.tsx` (was `inventory/parts`), `RecordKit.tsx` (was `finance/parts`), `FormKit.tsx` (Garage's form pieces,
+  used by the hotel desk), `CardKit.tsx` (was `account/parts`), `CallKit.tsx` (was `calls/parts`), `ConsoleKit.tsx`
+  (Assets' and Hosting's console look) and `ReportKit.tsx` (dashboard money and bars) — or in `src/core` and `shared/`.
+  The pairs that still import each other (an API client, a whole screen) are a reviewed allow-list in
+  `build-tools/module-boundaries.mjs`, each with why; `tests/unit/build/module-boundaries.test.ts` fails on an entry
+  nothing needs, so the list only shrinks.
 - A module's documents leave through the download manager by what they are,
   never by a path: `transfers:download` takes a typed variant (Garage's
   `garageDoc` — a check-in sheet, an estimate, a work order sheet, a delivery
@@ -376,7 +397,7 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   `pms:download` (`shared/pms-files.ts`), with the same shape and the
   `desktop.downloads` check repeated in its handler.
 - READ_CACHE is declared in a module's manifest and served by the main
-  process for the prefixes in `CACHE_PREFIXES` (`electron/main/index.ts`),
+  process for the prefixes in `CACHE_PREFIXES` (`electron/main/wiring/access.ts`),
   per module, so an app taken away takes its saved answers with it.
 - Read-only offline (D-G14): Finance, Expenses, Marketing, Cheque Manager and
   Recruitment keep their reads by the allow-lists in `shared/offline-reads.ts`
@@ -429,7 +450,7 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   (`routes.ts`), so a deep link, a notification's link and a window's route
   open the same screen. Offline it reads the rack and lists from READ_CACHE
   (per property: `shared/pms-cache.ts`, matched by pattern in
-  `electron/main/index.ts`) and refuses every write. The desk's hardware is
+  `electron/main/wiring/ipc.ts`) and refuses every write. The desk's hardware is
   reached through `devices.ts`, a seam of typed providers ("no device" and
   the OS print dialog ship); printed cards, receipts and reports are laid out
   in `print.ts` from the server's data and printed with no script and no
@@ -476,7 +497,7 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   registrations and attendees. It never sees the key: it asks the main
   process to scan (`eventdesk:scan`) and reads the desk's status, queue and
   offline search over IPC (`desk.ts`). READ_CACHE keeps its options, the
-  events and their gates (`eventsCached`, matched in `electron/main/index.ts`)
+  events and their gates (`eventsCached`, matched in `electron/main/wiring/ipc.ts`)
   so a desk opened offline still knows what the person may do; someone who
   loses the Events app loses their copies, and the desk does nothing for them.
 - POS (`modules/pos`, `electron/services/pos-*.ts`, `shared/pos.ts`): this computer as a paired till. The main

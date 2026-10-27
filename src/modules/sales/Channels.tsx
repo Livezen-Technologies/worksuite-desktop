@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Kpi, Panel, Seg, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Kpi, Panel, Seg, Sheet, SidePanel } from '../../components/PageKit';
 import {
   addChannel,
   cancelSync,

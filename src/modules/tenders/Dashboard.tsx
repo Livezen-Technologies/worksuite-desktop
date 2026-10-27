@@ -1,8 +1,8 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { dateLabel, relative, timeLabel } from '../../core/time';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { Kpi, PageHead, Panel } from '../hr/parts';
-import { Line, ListPanel, Pill } from '../inventory/parts';
+import { Kpi, PageHead, Panel } from '../../components/PageKit';
+import { Line, ListPanel, Pill } from '../../components/ListKit';
 import { fetchDetail, K, money, moneyList, type Dashboard as Data } from './api';
 import { Left, subline } from './parts';
 import { StatGrid } from '../../components/StatCard';

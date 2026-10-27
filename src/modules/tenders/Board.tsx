@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { boardColumns, fetchBoard, K, money, type Band, type Column } from './api';
 import { Left, PriorityPill, Score, subline } from './parts';
 

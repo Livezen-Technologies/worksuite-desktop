@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ApiError } from '../../core/api';
 import { cx } from '../../components/ui';
-import { Seg } from '../hr/parts';
+import { Seg } from '../../components/PageKit';
 import { fetchScorecard, KP, type Scorecard as Card } from './api';
 
 /**

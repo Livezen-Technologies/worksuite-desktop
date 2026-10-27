@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Button, ErrorNote, Spinner } from '../../components/ui';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { gGet, K, nice, type Overview as Data } from './api';
 import { JobCardView, Section, Tile, useGarage } from './parts';
 import { StatGrid, type StatTone } from '../../components/StatCard';

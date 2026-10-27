@@ -5,7 +5,7 @@ import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { btn, btnBad, btnGood, btnPrimary, Empty, Field, input, Sheet } from '../hr/parts';
+import { btn, btnBad, btnGood, btnPrimary, Empty, Field, input, Sheet } from '../../components/PageKit';
 import { qty, stampWords } from '../inventory/api';
 import { pick } from '../inventory/pickers';
 import { fetchQc, KP, OFFLINE_WRITE, refreshPurchase, rejectQc, releaseQc, usePurchaseCan, usePurchaseOffline, type QcItem } from './api';

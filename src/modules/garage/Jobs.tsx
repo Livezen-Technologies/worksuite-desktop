@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { gGet, K, lateBy, when, type JobList } from './api';
 import { input, PriorityPill, StatusPill, useGarage } from './parts';
 import { clickOnKey } from '../../components/press';

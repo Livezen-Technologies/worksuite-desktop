@@ -8,11 +8,11 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../../components/PageKit';
 import { can, num, qty, stampWords, type Warehouse } from './api';
 import { DocChip } from './Adjustments';
 import { createTransfer, deleteTransfer, fetchTransfer, fetchTransfers, KC, PER, transferActions, transferAct, transferBody, type Pickable } from './control';
-import { minWidth } from './parts';
+import { minWidth } from '../../components/ListKit';
 import { BatchPick, pick, ProductPick, WarehousePick } from './pickers';
 
 /**

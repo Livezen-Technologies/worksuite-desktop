@@ -7,7 +7,7 @@ import { navigate } from '../../core/tabs';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Spinner, cx } from '../../components/ui';
-import { Card, Head } from './parts';
+import { Card, Head } from '../../components/CardKit';
 
 /**
  * Account › Storage (Connection & Startup screen 12) and the storage pieces shown elsewhere for a Personal account:

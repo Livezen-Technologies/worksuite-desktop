@@ -7,7 +7,7 @@ import { plainText } from '../../core/rich';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { Icon } from '../../components/Icon';
-import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, row, Sheet, SidePanel, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, row, Sheet, SidePanel, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 import { OrgSwitcher } from '../../components/OrgSwitcher';

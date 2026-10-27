@@ -1,5 +1,5 @@
 import { useTab } from '../../../core/tab-context';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { EnrollmentTable } from './CourseEnrollments';
 
 /** Enrolments across courses, within the person's reach (§5.7): search, status, overdue. */

@@ -9,12 +9,12 @@ import { useStore } from '../../core/store';
 import { dateLabel, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Sheet } from '../../components/PageKit';
 import { num, qty, signed } from './api';
 import { countAct, countKind, KC, lookupProducts, saveCountLines, type CountDetail } from './control';
 import { countedNow, countReducer, newSession, queueLabel, savedWords, unsent, varianceOf, waiting, type CountEvent, type CountSession } from './countSync';
 import { countSheetHtml } from './labels';
-import { Signed } from './parts';
+import { Signed } from '../../components/ListKit';
 
 /**
  * A count sheet being counted, on the desktop (the "Desktop offline count" design): one box takes every scan — each

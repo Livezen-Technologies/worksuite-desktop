@@ -4,7 +4,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Avatar, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, input, PageHead } from '../hr/parts';
+import { btn, btnPrimary, input, PageHead } from '../../components/PageKit';
 import { EXIT_STATUSES, fetchJobs, fetchPipeline, isBackward, K, moveApplication, type Card, type Stage } from './api';
 
 /**

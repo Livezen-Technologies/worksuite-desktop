@@ -1,6 +1,6 @@
 import { call } from '../../core/bridge';
 import { cx } from '../../components/ui';
-import { Pill } from '../inventory/parts';
+import { Pill } from '../../components/ListKit';
 import { bandFor, type Band, type Outcome, type Priority, type Remaining } from './api';
 
 /** The screens that stay in the browser for now: the library, reports, settings, and a tender's working tabs. */

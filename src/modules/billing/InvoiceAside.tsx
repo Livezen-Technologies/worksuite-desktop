@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { errorMessage } from '../../core/bridge';
 import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { btn, btnPrimary, btnSmall, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Sheet } from '../../components/PageKit';
 import { createPayLink, fetchInvoiceReminders, fetchPayLink, offsetLabel, revokePayLink } from './actions';
 import { amount, type InvoiceDetail } from './api';
 

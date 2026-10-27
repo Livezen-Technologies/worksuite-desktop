@@ -5,7 +5,7 @@ import { useStore } from '../../core/store';
 import { todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
-import { Empty, PageHead, Panel, Seg, THead, Cell, row } from '../hr/parts';
+import { Empty, PageHead, Panel, Seg, THead, Cell, row } from '../../components/PageKit';
 import { can, money, shortDate } from './api';
 import { CurrencyPicker, FxNotice } from './Currency';
 import { CostDimensions } from './Dimensions';
@@ -30,7 +30,7 @@ import {
   type KpiCard,
   type PeriodKey,
 } from './insight';
-import { Notice } from './parts';
+import { Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { NotGranted, RangeFields, ReadFailed, ReportBar } from './ReportBar';
 import { ShareBar, TrendChart } from './Trend';

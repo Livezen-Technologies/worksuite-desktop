@@ -1,7 +1,7 @@
 import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
-import { Card } from '../account/parts';
+import { Card } from '../../components/CardKit';
 
 /** One kind of notification's own choices, as the server keeps them beside the categories (`event:<key>`). */
 export type EventChoices = Record<string, unknown>;

@@ -9,7 +9,7 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { attendanceTime } from './attendance';
 import { STATE_LABEL, type AttendanceReport, type RosterResponse } from './api';
 import { dayShort, minutesLabel, ymd } from './dates';
-import { btn, Cell, Empty, input, Kpi, PageHead, Panel, row, StatusChip, THead } from './parts';
+import { btn, Cell, Empty, input, Kpi, PageHead, Panel, row, StatusChip, THead } from '../../components/PageKit';
 import { can } from './Rail';
 import { Select } from '../../components/Select';
 import { StatGrid } from '../../components/StatCard';

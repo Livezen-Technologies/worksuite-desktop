@@ -7,10 +7,10 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Cell, Field, input, PageHead, row, Sheet, THead } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Cell, Field, input, PageHead, row, Sheet, THead } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, problemsOf, refusal, shortDate, type Company } from './api';
-import { ConfirmSheet, LoadFailed, Notice } from './parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { archiveTaxCode, createTaxCode, fetchTaxCodes, fetchTaxHistory, forbiddenWhy, isOpenRate, KS, RATELESS, rateChange, setTaxRate, taxRateProblem, trimDecimals, type TaxCode } from './setup';
 

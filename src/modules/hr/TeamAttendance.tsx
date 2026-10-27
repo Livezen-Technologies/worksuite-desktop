@@ -6,7 +6,7 @@ import { attendanceTime } from './attendance';
 import { dayStatus, type RosterDay, type RosterResponse } from './api';
 import { CorrectAttendance } from './Correct';
 import { minutesLabel, parseYmd } from './dates';
-import { Cell, Empty, input, PageHead, row, StatusChip, THead } from './parts';
+import { Cell, Empty, input, PageHead, row, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 
 /**

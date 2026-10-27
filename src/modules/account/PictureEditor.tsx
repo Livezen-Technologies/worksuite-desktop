@@ -6,11 +6,11 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { useMe } from '../../components/UserPicture';
-import { btn, btnPrimary } from '../hr/parts';
+import { btn, btnPrimary } from '../../components/PageKit';
 import { abilities, K, usePictures, useRefreshMe, type Pictures } from './api';
 import { avatarPng, avatarSvg, BACKGROUNDS, LOOKS, normalise, svgUrl, TONES, type AvatarBorder, type AvatarStyle } from './avatarArt';
 import { MAX_ZOOM, clamp, draw, exportType, initial, minScale, rotate, transform, type Crop } from './crop';
-import { Note } from './parts';
+import { Note } from '../../components/CardKit';
 import { VisibilitySelect } from './visibility';
 import { Checkbox } from '../../components/Checkbox';
 

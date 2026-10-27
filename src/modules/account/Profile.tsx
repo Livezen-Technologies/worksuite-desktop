@@ -10,10 +10,10 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { useMe, UserPicture } from '../../components/UserPicture';
 import { attendanceTime, useAttendance, useNow } from '../hr/attendance';
 import type { Profile as HrProfile } from '../hr/api';
-import { btnPrimary } from '../hr/parts';
+import { btnPrimary } from '../../components/PageKit';
 import type { OpenEditor } from './AccountPage';
 import { useHasApp, useMfa, usePasskeys, usePictures, useProfile, useSessions, useSignIns, type Section } from './api';
-import { Card, daysAgo, KeyValues, Pill, weekdays } from './parts';
+import { Card, daysAgo, KeyValues, Pill, weekdays } from '../../components/CardKit';
 
 /**
  * My profile (AcctProfile): who I am to everybody else — my picture and

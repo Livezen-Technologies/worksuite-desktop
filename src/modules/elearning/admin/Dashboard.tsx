@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ErrorNote, Spinner } from '../../../components/ui';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { eGet, K, nice, pct, when, type Overview } from '../api';
 import { Section, Tile, useEl } from '../parts';
 import { StatGrid, type StatTone } from '../../../components/StatCard';

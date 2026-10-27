@@ -7,7 +7,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { PROFILE_FIELDS, type CoverAsk, type Profile, type RequestsResponse } from './api';
 import { rangeLabel } from './dates';
-import { btn, btnPrimary, btnSmall, Cell, Empty, Field, input, PageHead, row, Seg, Sheet, StatusChip, THead } from './parts';
+import { btn, btnPrimary, btnSmall, Cell, Empty, Field, input, PageHead, row, Seg, Sheet, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 
 /**

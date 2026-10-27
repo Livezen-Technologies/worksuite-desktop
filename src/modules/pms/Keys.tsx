@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { Button, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { input } from '../garage/parts';
+import { input } from '../../components/FormKit';
 import { day, errorText, pGet, pPost, type Stay } from './api';
 import { device } from './devices';
 import { doorLocks, finishKey, type KeyAnswer, type KeyDone, type KeyLogRow } from './locks';

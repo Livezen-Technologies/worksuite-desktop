@@ -5,7 +5,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { dayLong } from './dates';
-import { btn, btnPrimary, Empty, Field, humanise, input, PageHead, Panel, Sheet, StatusChip } from './parts';
+import { btn, btnPrimary, Empty, Field, humanise, input, PageHead, Panel, Sheet, StatusChip } from '../../components/PageKit';
 import { Events, lastDay, Trail, type ResEvent, type ResignationShape, type Round } from './resignationParts';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';

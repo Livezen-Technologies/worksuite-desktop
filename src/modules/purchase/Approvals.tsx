@@ -4,7 +4,7 @@ import { ApiError } from '../../core/api';
 import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { btn, btnBad, btnGood, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
+import { btn, btnBad, btnGood, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../../components/PageKit';
 import { whole } from '../inventory/api';
 import type { ApprovalDoc } from '@shared/purchase';
 import { OFFLINE_WRITE, refreshPurchase, usePurchaseCan, usePurchaseOffline, type QueueItem } from './api';

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { humanise } from '../hr/parts';
+import { humanise } from '../../components/PageKit';
 import { fetchSettlement, fetchSettlements, refreshSettlement, settlementRun } from './api';
 import { Badge, Card, NotYet, Table, amt, td, tdr, useReadOnly } from './parts';
 

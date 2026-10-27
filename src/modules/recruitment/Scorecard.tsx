@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 import { Avatar, ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, input } from '../hr/parts';
+import { btn, btnPrimary, input } from '../../components/PageKit';
 import {
   fetchKit, fetchMyEvaluation, K, saveScorecard, scorecardOk, submitScorecard, validateScorecard,
   type Criterion, type Evaluation, type Interview, type Kit, type Recommendation, type ScorecardDraft,

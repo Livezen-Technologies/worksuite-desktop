@@ -10,7 +10,7 @@ import { toast } from '../../core/toasts';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
 import { app } from '../../core/app-state';
 import { meet } from './session';
-import { VideoView } from '../calls/parts';
+import { VideoView } from '../../components/CallKit';
 const field = 'w-full rounded border border-line bg-surface px-3 py-2 text-ink';
 const initial = { label: '', platform: 'youtube' as StreamPlatform, server_url: 'rtmps://a.rtmps.youtube.com/live2', stream_key: '', orientation: 'landscape' as StreamOrientation, layout: 'grid' as StreamLayout, title: 'WorkSuite meeting', description: '', visibility: 'private' as StreamDestination['visibility'] };
 /** Uses tracks only: the preview and broadcast never capture this app's windows, panels or controls. */

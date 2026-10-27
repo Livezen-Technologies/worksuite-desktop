@@ -6,7 +6,7 @@ import { Button, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { toast } from '../../../core/toasts';
 import { errorText, FUEL_LABEL, gGet, gPost, K, money, newKey, nice, qty, when, type DeliveryView, type QualityCheck } from '../api';
 import { Ask, DocActions, Field, input, Section, SignaturePad, ToneNote, useGarage } from '../parts';
-import { Pill } from '../../inventory/parts';
+import { Pill } from '../../../components/ListKit';
 import { Checkbox } from '../../../components/Checkbox';
 
 const RESULT_ON: Record<string, string> = { PASS: 'border-success bg-success text-white', FAIL: 'border-danger bg-danger text-white', NA: 'border-ink-3 bg-ink-3 text-white' };

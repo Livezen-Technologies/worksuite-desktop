@@ -7,7 +7,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../../components/PageKit';
 import {
   addCrm,
   addMember,

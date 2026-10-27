@@ -7,7 +7,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { btn, btnPrimary, Field, input, PageHead, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, PageHead, Sheet } from '../../components/PageKit';
 import { useOrgs } from './api';
 import { fetchRules, KM, removeRule, ruleLine, saveRule, type Rule } from './manage';
 import { Checkbox } from '../../components/Checkbox';

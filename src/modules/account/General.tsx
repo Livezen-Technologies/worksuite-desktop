@@ -6,10 +6,10 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { useMe, UserPicture } from '../../components/UserPicture';
-import { btn, btnPrimary, Field, input } from '../hr/parts';
+import { btn, btnPrimary, Field, input } from '../../components/PageKit';
 import type { OpenEditor } from './AccountPage';
 import { abilities, K, usePictures, useProfile, useRefreshMe, type MyProfile, type Section } from './api';
-import { Card, Head } from './parts';
+import { Card, Head } from '../../components/CardKit';
 import { useRegional, useSaveRegional, useZones } from './regional';
 import { VisibilitySelect } from './visibility';
 

@@ -2,9 +2,9 @@ import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { Empty, input, PageHead } from '../hr/parts';
+import { Empty, input, PageHead } from '../../components/PageKit';
 import { fetchStock, K, num, PER_PAGE, qty, stampWords, whole, type StockFilters, type StockRow, type Warehouse } from './api';
-import { minWidth } from './parts';
+import { minWidth } from '../../components/ListKit';
 import { Checkbox } from '../../components/Checkbox';
 
 /**

@@ -4,7 +4,7 @@ import { apiGet } from '../../core/api';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { K } from './api';
-import { Card, Head, Note, Pill } from './parts';
+import { Card, Head, Note, Pill } from '../../components/CardKit';
 import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**

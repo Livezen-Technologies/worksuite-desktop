@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Sheet } from '../../components/PageKit';
 import { sendInvoice, sendOutcome, sendPreview, sendProblem, splitAddresses, type SendBody } from './actions';
 import { fetchTemplates, KA } from './admin';
 import { amount, invoiceName, K, type InvoiceDetail } from './api';

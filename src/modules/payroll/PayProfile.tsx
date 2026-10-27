@@ -7,7 +7,7 @@ import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { Field, Sheet, btn, btnPrimary, humanise, input } from '../hr/parts';
+import { Field, Sheet, btn, btnPrimary, humanise, input } from '../../components/PageKit';
 import { approveSalary, fetchLoans, fetchSalary, proposeSalary } from './api';
 import { Badge, Card, Table, amt, td, tdr, useReadOnly } from './parts';
 import { StatutoryIdsCard } from './PayrollExtras';

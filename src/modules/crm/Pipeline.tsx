@@ -9,7 +9,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Caps, Field, input, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, Caps, Field, input, Sheet, SidePanel } from '../../components/PageKit';
 import type { Account, Board, BoardColumn, Deal, Pipeline as PipelineT, TimelineEntry } from './api';
 import { TimelineList, useOwners } from './Leads';
 import { crmCan, money, moneyFull, stageColour, StatusBar } from './parts';

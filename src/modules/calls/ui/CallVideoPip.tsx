@@ -1,7 +1,7 @@
 import { useRef, useState, useSyncExternalStore } from 'react';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
-import { CallAvatar, VideoView } from '../parts';
+import { CallAvatar, VideoView } from '../../../components/CallKit';
 import { nearestCorner, pipRect } from './layout';
 import type { CallPerson } from './people';
 import { callUi } from './state';

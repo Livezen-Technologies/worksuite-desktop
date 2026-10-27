@@ -11,7 +11,7 @@ import { BankCard } from './Bank';
 import { dayLong, ymd } from './dates';
 import MyDocuments from './MyDocuments';
 import { HAND_TICKED, ProgressBar, RequiredDocs, StepList, type ObRow, type ObState, type ObStep, type ReqDoc } from './onboardingParts';
-import { btn, btnPrimary, Field, humanise, Initials, input, PageHead, Panel, Seg, Sheet, SidePanel, StatusChip } from './parts';
+import { btn, btnPrimary, Field, humanise, Initials, input, PageHead, Panel, Seg, Sheet, SidePanel, StatusChip } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 
 /**

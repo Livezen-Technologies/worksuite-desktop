@@ -9,7 +9,7 @@ import { money } from '../finance/api';
 import { PAYMENT_LABEL, type Payslip, type Profile } from './api';
 import { dayLong } from './dates';
 import { ALL, companiesOf, fetchCertificates, groupLines, inCompany, lineLabel, QUERY_KIND, raiseQuery, unsigned, type PayslipDetail } from './pay';
-import { Empty, Field, PageHead, Panel, Sheet, StatusChip, btn, btnPrimary, btnSmall, row } from './parts';
+import { Empty, Field, PageHead, Panel, Sheet, StatusChip, btn, btnPrimary, btnSmall, row } from '../../components/PageKit';
 import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**

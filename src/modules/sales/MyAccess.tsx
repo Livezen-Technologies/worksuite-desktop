@@ -4,7 +4,7 @@ import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { PageHead, Panel, Seg } from '../hr/parts';
+import { PageHead, Panel, Seg } from '../../components/PageKit';
 import { fetchAccess, fetchModuleAccess, KM } from './manage';
 
 /**

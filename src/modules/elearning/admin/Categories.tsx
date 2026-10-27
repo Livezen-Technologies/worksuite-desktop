@@ -4,7 +4,7 @@ import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
 import { Button, ErrorNote, Modal, Spinner, Switch, cx } from '../../../components/ui';
 import { toast } from '../../../core/toasts';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { eGet, ePost, errorText, K, newKey, type Category } from '../api';
 import { area, Field, input, Pill, Refusal, useEl } from '../parts';
 

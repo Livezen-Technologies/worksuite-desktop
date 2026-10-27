@@ -11,7 +11,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Caps, Empty, Field, Grid, input, Seg, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Caps, Empty, Field, Grid, input, Seg, Sheet, SidePanel } from '../../components/PageKit';
 import { addComment, approve, assign, assignees, cancel, commentText, confirm, deleteComment, duplicateOrder, editComment, fetchComments, fetchOrder, fetchTimeline, K, KV, mayInvoice, mention, movesFor, paymentLink, raiseInvoice, reject, retryIntegration, submit, transition, type Comment, type Move, type OrderDetail } from './api';
 import { OFFLINE_WRITE, offlineLine, useSalesOffline } from './offline';
 import { printNote } from './print';

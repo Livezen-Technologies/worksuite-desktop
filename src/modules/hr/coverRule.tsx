@@ -7,7 +7,7 @@ import { createStore, useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { cx } from '../../components/ui';
 import type { LeaveDecided, LeaveReview } from './api';
-import { btn, btnPrimary, Sheet } from './parts';
+import { btn, btnPrimary, Sheet } from '../../components/PageKit';
 
 /**
  * Approving leave before the cover has said yes (worksuite-desktop#262, #263): one rule for every Approve — the

@@ -13,7 +13,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { pickable, type Balance, type LeaveDecided, type LeaveReq, type LeaveReview, type LeaveTypes, type Profile } from './api';
 import { coverOf, leaveReview, useApproveLeave, useCoverFirst, WaitingForCover } from './coverRule';
 import { addDays, dayShort, monthGrid, monthLabel, parseYmd, rangeLabel, shiftMonth, ymd } from './dates';
-import { btn, btnBad, btnGhost, btnGood, btnPrimary, btnSmall, Empty, Field, humanise, Initials, input, PageHead, Seg, Sheet, StatusChip } from './parts';
+import { btn, btnBad, btnGhost, btnGood, btnPrimary, btnSmall, Empty, Field, humanise, Initials, input, PageHead, Seg, Sheet, StatusChip } from '../../components/PageKit';
 import { can } from './Rail';
 import { Select } from '../../components/Select';
 import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';

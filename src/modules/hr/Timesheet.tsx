@@ -7,7 +7,7 @@ import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import type { LogsResponse, Sheet as TimesheetRow, TimeLog } from './api';
 import { addDays, dayShort, hoursLabel, monthLabel, parseYmd, rangeLabel, weekDays, weekStart, ymd } from './dates';
-import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Seg, Sheet, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Seg, Sheet, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 import { StatGrid } from '../../components/StatCard';

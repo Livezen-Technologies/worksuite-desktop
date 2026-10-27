@@ -7,7 +7,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Seg, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Seg, Sheet } from '../../components/PageKit';
 import { offsetLabel } from './actions';
 import { fetchReminderLog, fetchReminders, fetchTemplates, KA, PLACEHOLDERS, removeTemplate, saveReminders, saveTemplate, sortSteps, TEMPLATE_KINDS, type Channel, type MessageTemplate, type ReminderSettings, type TemplateKind } from './admin';
 import { SettingsGroup } from '../../components/SettingsKit';

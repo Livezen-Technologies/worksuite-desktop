@@ -12,7 +12,7 @@ import { saveExport } from './files';
  * act (offline every change is off, HDM-DSK-05), the days-left chips of D-01/D-02, the status pills and the "needs
  * a server update" state for routes an older server does not have.
  */
-export { Btn, Card, Field, Kbd, Kpi, Note, PageHead, Pills, Table, input, td, tdr, useOnline } from '../assets/parts';
+export { Btn, Card, Field, Kbd, Kpi, Note, PageHead, Pills, Table, input, td, tdr, useOnline } from '../../components/ConsoleKit';
 
 export const ReadOnly = createContext(false);
 export const useReadOnly = () => useContext(ReadOnly);

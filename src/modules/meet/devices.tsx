@@ -6,7 +6,7 @@ import { call } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Avatar, cx } from '../../components/ui';
-import { VideoView } from '../calls/parts';
+import { VideoView } from '../../components/CallKit';
 import { CLEAN_AUDIO } from '../calls/session';
 import { useMeetT, type MKey } from './i18n';
 

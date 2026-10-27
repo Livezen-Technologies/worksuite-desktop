@@ -6,8 +6,8 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { problemsOf, refusal } from '../finance/api';
-import { Notice } from '../finance/parts';
-import { btn, btnPrimary, btnSmall, Field, input, Seg, Sheet } from '../hr/parts';
+import { Notice } from '../../components/RecordKit';
+import { btn, btnPrimary, btnSmall, Field, input, Seg, Sheet } from '../../components/PageKit';
 import { money, type Org } from './api';
 import { ReadFields } from './ClaimPanel';
 import {

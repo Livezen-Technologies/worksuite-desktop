@@ -9,7 +9,7 @@ import { Icon } from '../../components/Icon';
 import { Menu, type MenuItem } from '../../components/Menu';
 import { DriveFilePicker } from '../../components/DriveFilePicker';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Empty, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Empty, Field, input, Sheet } from '../../components/PageKit';
 import { approveInvoice, attachFile, cancelRefusal, clearDispute, detachFile, fetchAttachments, flagDispute, rejectInvoice, REVERSAL_NOTE, submitForApproval, type CancelRefusal } from './actions';
 import { InvoiceAside } from './InvoiceAside';
 import { OFFLINE_WRITE, useBillingOffline } from './offline';

@@ -5,8 +5,8 @@ import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
-import { btn, btnPrimary } from '../hr/parts';
-import { Note } from './parts';
+import { btn, btnPrimary } from '../../components/PageKit';
+import { Note } from '../../components/CardKit';
 
 /**
  * Turn on two-factor authentication (AcctTwoFactor): scan the key into an

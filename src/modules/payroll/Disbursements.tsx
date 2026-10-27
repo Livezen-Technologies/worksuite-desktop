@@ -5,8 +5,8 @@ import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { ConfirmSheet, ReasonSheet } from '../finance/parts';
-import { humanise } from '../hr/parts';
+import { ConfirmSheet, ReasonSheet } from '../../components/RecordKit';
+import { humanise } from '../../components/PageKit';
 import { approveBatch, bankFile, createBatch, fetchBatch, fetchPayouts, fetchRuns, markPaid, markSent, runTitle } from './api';
 import { Badge, Card, Table, amt, td, tdr, useReadOnly } from './parts';
 

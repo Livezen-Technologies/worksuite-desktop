@@ -7,7 +7,7 @@ import { text } from '../../../core/i18n';
 import { toast } from '../../../core/toasts';
 import { cx } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { playOnce, playTone } from '../../calls/tones';
 import { FollowUpCard, JoinedCard, OutcomeCard, ParticipantCard, RingCard, RingStack, SilencedCard, WindowStrip, followUpStatus, useFit } from './RingCard';
 

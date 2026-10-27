@@ -4,7 +4,7 @@ import { apiGet, apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnBad, btnPrimary, btnSmall, Empty, Facts, Field, input, Kpi, PageHead, Panel, Seg, Sheet, StatusChip } from './parts';
+import { btn, btnBad, btnPrimary, btnSmall, Empty, Facts, Field, input, Kpi, PageHead, Panel, Seg, Sheet, StatusChip } from '../../components/PageKit';
 import { ago } from './Devices';
 import { StatGrid } from '../../components/StatCard';
 

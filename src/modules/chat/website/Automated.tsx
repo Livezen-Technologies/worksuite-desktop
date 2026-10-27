@@ -8,7 +8,7 @@ import { Checkbox } from '../../../components/Checkbox';
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
 import { Button, Empty, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../../components/ui';
-import { Note } from '../../account/parts';
+import { Note } from '../../../components/CardKit';
 import {
   EVENTS,
   FREQUENCIES,

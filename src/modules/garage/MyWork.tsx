@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Select } from '../../components/Select';
 import { Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { elapsed, errorText, gGet, gPost, K, newKey, PAUSE_LABEL, nice, span, timer, when, WORK_GROUPS, type MyWork as Data, type MyWorkItem, type PartHit } from './api';
 import { Field, input, PriorityPill, useGarage, useTick, WorkPill } from './parts';
 

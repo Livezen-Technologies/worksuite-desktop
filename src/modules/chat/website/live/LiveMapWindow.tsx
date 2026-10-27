@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { call, isMac, on } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
 import { cx, ErrorNote, Spinner } from '../../../../components/ui';
-import { useNow } from '../../../calls/parts';
+import { useNow } from '../../../../components/CallKit';
 import { useRingState } from '../Ringing';
 import { homeOf, MAP_KEYS, NO_LIVE_PARAMS, Zooms, type LiveParams } from './LiveDashboard';
 import { WebsiteLive } from '../WebsiteLive';

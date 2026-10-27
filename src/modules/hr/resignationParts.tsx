@@ -1,5 +1,5 @@
 import { cx } from '../../components/ui';
-import { StatusChip } from './parts';
+import { StatusChip } from '../../components/PageKit';
 
 /**
  * Resignations' shared shapes and the approval trail (HrResignations

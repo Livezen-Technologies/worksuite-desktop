@@ -4,7 +4,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { FileViewer } from '../../components/FileViewer';
 import { Avatar, ErrorNote, Kbd, Modal, Spinner, cx } from '../../components/ui';
-import { btn, btnBad, btnPrimary, input, PageHead } from '../hr/parts';
+import { btn, btnBad, btnPrimary, input, PageHead } from '../../components/PageKit';
 import {
   applicationOf, cvOf, fetchCandidate, fetchJobs, fetchPipeline, fetchQueue, filePath, K, moveApplication, optionLabel, queueKey,
   rejectApplication, stageOfCategory, undoReject, type Option, type QueueItem, type Stage,

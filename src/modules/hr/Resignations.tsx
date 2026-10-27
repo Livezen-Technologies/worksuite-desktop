@@ -5,7 +5,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { dayLong } from './dates';
-import { btn, btnBad, btnGood, Cell, Empty, Field, input, PageHead, Panel, row, Seg, StatusChip, THead } from './parts';
+import { btn, btnBad, btnGood, Cell, Empty, Field, input, PageHead, Panel, row, Seg, StatusChip, THead } from '../../components/PageKit';
 import { Events, lastDay, Trail, type OffboardingBrief, type ResEvent, type ResignationShape, type Round } from './resignationParts';
 import { ProgressBar } from './onboardingParts';
 

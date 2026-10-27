@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Spinner } from '../../components/ui';
 import type { Correction } from './api';
 import { dayLong } from './dates';
-import { btn, btnPrimary, Field, input, Sheet } from './parts';
+import { btn, btnPrimary, Field, input, Sheet } from '../../components/PageKit';
 
 /**
  * Correct attendance (HrTeamAttendance's dialog): set a day's check-in and

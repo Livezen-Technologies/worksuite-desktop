@@ -7,7 +7,7 @@ import { toast } from '../../../../core/toasts';
 import { Checkbox } from '../../../../components/Checkbox';
 import { Icon } from '../../../../components/Icon';
 import { Avatar, Button, ErrorNote, Modal, Spinner, Switch, cx, initials } from '../../../../components/ui';
-import { Note, Pill, SettingRow } from '../../../account/parts';
+import { Note, Pill, SettingRow } from '../../../../components/CardKit';
 import { assignStaff, nowOf, removeStaff, staffOf, type StaffMember } from './staff';
 
 /**

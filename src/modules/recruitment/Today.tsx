@@ -6,7 +6,7 @@ import { openRouteInWindow } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { Avatar, ErrorNote, Spinner } from '../../components/ui';
 import { openMeeting } from '../meet/api';
-import { btn, btnPrimary, PageHead } from '../hr/parts';
+import { btn, btnPrimary, PageHead } from '../../components/PageKit';
 import { stamp, type Interview } from './api';
 
 /**

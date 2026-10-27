@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { dateLabel, relative, timeLabel } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, Empty, PageHead, Panel } from '../hr/parts';
+import { btn, Empty, PageHead, Panel } from '../../components/PageKit';
 import { agingParts, amount, type Dashboard as Data } from './api';
 import { money } from './parts';
 import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';

@@ -7,9 +7,9 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { Caps, ConfirmSheet, LoadFailed, Notice } from '../finance/parts';
-import { btn, btnPrimary, btnSmall, Field, input, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { Caps, ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
+import { btn, btnPrimary, btnSmall, Field, input, PageHead, Seg, Sheet, SidePanel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, money } from './api';
 import {
   atLeast,

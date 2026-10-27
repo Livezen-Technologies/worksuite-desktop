@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { input, Section } from '../garage/parts';
-import { PageHead } from '../hr/parts';
+import { input, Section } from '../../components/FormKit';
+import { PageHead } from '../../components/PageKit';
 import { day, K, labelled, money, pGet, type Kpi, type ReportCatalogue } from './api';
 import { NoAccess, usePms } from './parts';
 import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';

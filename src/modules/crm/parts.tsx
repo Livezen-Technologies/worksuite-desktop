@@ -5,25 +5,12 @@ import { StatCard, type StatTone } from '../../components/StatCard';
 /**
  * CRM's small shared pieces: money as the designs write it ("LKR 12.4M",
  * "LKR 950k", "LKR 1,840,000"), the lead rating and status chips, and the
- * bar rows the dashboard is made of. Panels, buttons and sheets are People's
- * (hr/parts), so CRM and HR look alike.
+ * bar rows the dashboard is made of. Panels, buttons and sheets are the page
+ * kit's (src/components/PageKit), so CRM and HR look alike. Money and the bar
+ * rows live in src/components/ReportKit, shared with Sales and Billing.
  */
 
-/** "LKR 12.4M", "LKR 950k", "LKR 800" — for tiles and boards. */
-export function money(n: number | null | undefined, currency?: string | null): string {
-  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
-  const v = Number(n);
-  const a = Math.abs(v);
-  const s = a >= 1_000_000 ? `${(v / 1_000_000).toFixed(a >= 10_000_000 ? 0 : 1).replace(/\.0$/, '')}M` : a >= 1000 ? `${Math.round(v / 1000)}k` : String(Math.round(v));
-  return currency ? `${currency} ${s}` : s;
-}
-
-/** "LKR 1,840,000.00" — for a record, where the exact figure matters. */
-export function moneyFull(n: number | null | undefined, currency?: string | null): string {
-  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
-  const s = Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return currency ? `${currency} ${s}` : s;
-}
+export { money, moneyFull, BarRow } from '../../components/ReportKit';
 
 const RATING: Record<string, string> = {
   hot: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
@@ -46,21 +33,6 @@ const STATUS: Record<string, string> = {
 
 export function LeadStatus({ status }: { status: string }) {
   return <span className={cx('inline-flex rounded-full px-2 py-0.5 text-[11.5px] font-bold whitespace-nowrap', STATUS[status] ?? 'bg-subtle text-ink-2')}>{status}</span>;
-}
-
-/** A label, a value, and a bar under them as wide as `pct`. */
-export function BarRow({ label, value, pct, colour = 'var(--color-primary)' }: { label: ReactNode; value: ReactNode; pct: number; colour?: string }) {
-  return (
-    <div className="flex flex-col gap-[3px]">
-      <span className="flex text-[12.5px]">
-        <span className="min-w-0 flex-1 truncate text-ink-2">{label}</span>
-        <b className="text-ink tabular-nums">{value}</b>
-      </span>
-      <span className="h-2 overflow-hidden rounded-full bg-subtle">
-        <span className="block h-2 rounded-full" style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: colour }} />
-      </span>
-    </div>
-  );
 }
 
 /** A line in a dashboard list: a title, a line under it, and something on the right. */

@@ -7,7 +7,7 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { BankCard } from './Bank';
 import MyDocuments from './MyDocuments';
 import { ProgressBar, RequiredDocs, StepList, type ObState } from './onboardingParts';
-import { btn, btnPrimary, Field, input, PageHead, Panel, SidePanel } from './parts';
+import { btn, btnPrimary, Field, input, PageHead, Panel, SidePanel } from '../../components/PageKit';
 import { dayLong } from './dates';
 import { Icon } from '../../components/Icon';
 import { useTab } from '../../core/tab-context';

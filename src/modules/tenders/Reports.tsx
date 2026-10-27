@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { todayInZone } from '../../core/time';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { Empty, input, Kpi, PageHead, Panel } from '../hr/parts';
+import { Empty, input, Kpi, PageHead, Panel } from '../../components/PageKit';
 import { moneyList } from './api';
 import { bars, fetchReport, KA, PERIODS, periodOf, type PeriodPreset } from './admin';
 import { amount, fetchBidCostReport, KE } from './bidcost';

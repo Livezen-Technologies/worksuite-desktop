@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes } from 'react';
 import type { Track } from 'livekit-client';
-import { Icon } from '../../components/Icon';
-import { initials, cx } from '../../components/ui';
+import { Icon } from './Icon';
+import { initials, cx } from './ui';
+
+/** Call pieces — the video view, call pills, avatars, round buttons and the voice wave — first drawn for Calls (it was
+ * `calls/parts`), shared by Chat and Meet (audit D-G08). */
 
 /** Re-renders every second while mounted: call clocks. */
 export function useNow(every = 1_000): number {

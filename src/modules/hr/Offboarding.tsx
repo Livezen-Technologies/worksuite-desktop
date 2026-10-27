@@ -7,7 +7,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { dayLong, dayShort } from './dates';
 import { ProgressBar } from './onboardingParts';
 import { EVENT_WORDS, FOLLOWS, stamp, type ExitInterview, type HandoverItem, type OffCase, type OffDepartment, type OffItem, type OffListItem } from './offboardingParts';
-import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, Panel, row, Seg, Sheet, SidePanel, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, Panel, row, Seg, Sheet, SidePanel, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 

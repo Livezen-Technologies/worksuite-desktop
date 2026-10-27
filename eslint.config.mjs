@@ -3,6 +3,8 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import a11y from './build-tools/eslint-a11y.mjs';
 import colors from './build-tools/eslint-colors.mjs';
+import boundaries from './build-tools/eslint-boundaries.mjs';
+import { MODULE_IMPORTS } from './build-tools/module-boundaries.mjs';
 
 export default tseslint.config(
   { ignores: ['vendor/**', 'out/**', 'dist/**', 'release/**', 'node_modules/**', 'build/**', 'scripts/**'] },
@@ -10,12 +12,15 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['src/**/*.{ts,tsx}'],
-    plugins: { 'react-hooks': reactHooks, a11y, colors },
+    plugins: { 'react-hooks': reactHooks, a11y, colors, boundaries },
     rules: {
       ...reactHooks.configs.recommended.rules,
       // Clicks the keyboard can make too, and pictures that say what they show (audit D-G21; build-tools/eslint-a11y.mjs).
       'a11y/click-has-keys': 'error',
       'a11y/img-alt': 'error',
+      // A module never imports another module's files (audit D-G08; build-tools/eslint-boundaries.mjs). Shared UI is in
+      // src/components; the pairs that remain are the reviewed, shrinking allow-list in build-tools/module-boundaries.mjs.
+      'boundaries/no-module-imports': ['error', { allow: MODULE_IMPORTS }],
       // Colours from the design tokens, light and dark (audit D-G23; build-tools/eslint-colors.mjs). The allow-list is
       // reviewed: each entry is a colour that must not follow the app's theme, and says why.
       'colors/no-raw-hex': [

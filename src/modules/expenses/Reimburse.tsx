@@ -9,8 +9,8 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { ConfirmSheet, LoadFailed, Notice } from '../finance/parts';
-import { btn, btnGood, btnPrimary, btnSmall, Field, input, Kpi, PageHead, Panel, Sheet, SidePanel } from '../hr/parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
+import { btn, btnGood, btnPrimary, btnSmall, Field, input, Kpi, PageHead, Panel, Sheet, SidePanel } from '../../components/PageKit';
 import { can, K, money } from './api';
 import {
   atLeast,

@@ -8,7 +8,7 @@ import { relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
-import { btn, btnBad, btnGood, btnPrimary, Field, input, Panel, Sheet } from '../hr/parts';
+import { btn, btnBad, btnGood, btnPrimary, Field, input, Panel, Sheet } from '../../components/PageKit';
 import { crmCan, moneyFull, ListLine } from './parts';
 import { nameOf, OFFLINE_HINT, rowsOf, useOnline, type PendingApproval } from './proposalLogic';
 import { useCrmScope } from './scope';

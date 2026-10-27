@@ -3,10 +3,10 @@ import { useState, type ReactNode } from 'react';
 import { dateLabel } from '../../core/time';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { Empty, PageHead } from '../hr/parts';
+import { Empty, PageHead } from '../../components/PageKit';
 import { cost, MOVE_LABEL, num, qty, stampWords, type Warehouse } from './api';
 import { fetchReport, KI, reportQuery, reportsFor, reportView, SERIAL_STATE, type Col, type ReportData, type ReportDef } from './insight';
-import { minWidth, Pill } from './parts';
+import { minWidth, Pill } from '../../components/ListKit';
 import { pick } from './pickers';
 
 /**

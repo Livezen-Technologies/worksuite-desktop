@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { errorText, gGet, gPost, K, type SetupStatus } from './api';
 import { useGarage } from './parts';
 import Workshop, { type WorkshopTab } from './Workshop';

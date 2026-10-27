@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { cx } from '../../components/ui';
-import { btnSmall } from '../hr/parts';
+import { btnSmall } from '../../components/PageKit';
 import {
   fetchProductImages,
   K,

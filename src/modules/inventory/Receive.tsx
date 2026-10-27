@@ -5,7 +5,7 @@ import { useWedge } from '../../core/scanner';
 import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, input, PageHead } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, input, PageHead } from '../../components/PageKit';
 import { fetchOrderFull, OFFLINE_WRITE, refreshPurchase, usePurchaseCan, usePurchaseOffline } from '../purchase/api';
 import { fetchOrders, fetchReceipt, orderAct, postReceipt, type PurchaseOrder } from '../purchase/buying';
 import { approvalOf, refusalText } from '../purchase/chain';
@@ -13,7 +13,7 @@ import { EMPTY, isOrderCode, lineDone, postLines, rcvReducer, receiveBody, total
 import { num, qty } from './api';
 import { labelsToPrint, leftWords, knownSerialText, knownUnit, progress, serialLineFor } from './receiving';
 import { printLabels } from './labels';
-import { Pill } from './parts';
+import { Pill } from '../../components/ListKit';
 import { clickOnKey } from '../../components/press';
 
 /**
