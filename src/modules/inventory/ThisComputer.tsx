@@ -70,7 +70,7 @@ export function ComputerCard({ copy, onOpen }: { copy: { products: number; wareh
       {computerLines(c, copy).map((l) => (
         <div key={l.label} className="flex items-baseline justify-between gap-3">
           <span className="text-ink-2">{l.label}</span>
-          <span className={cx('truncate text-right', l.good ? 'font-semibold text-[#166534] dark:text-success' : 'text-ink')}>{l.value}</span>
+          <span className={cx('truncate text-right', l.good ? 'font-semibold text-success-ink dark:text-success' : 'text-ink')}>{l.value}</span>
         </div>
       ))}
     </Panel>

@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
-import { ErrorNote, Spinner, cx } from '../../components/ui';
+import { ErrorNote, Spinner } from '../../components/ui';
 import { refusal } from '../finance/api';
 import { humanise } from '../hr/parts';
 import { fetchSettings, saveSettings, type SettingNode } from './api';
-import { Card, Kbd, NotYet, useReadOnly } from './parts';
+import { Kbd, NotYet, useReadOnly } from './parts';
+import { SectionHeader, SettingRow, SettingsGroup, SettingsNavItem } from '../../components/SettingsKit';
 
 /**
  * Payroll settings (D22): the server's settings tree (SRS §C3), grouped as it sends them, each with its control; a
@@ -45,31 +46,29 @@ export default function Settings() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-end gap-2">
-        <h1 className="m-0 flex-1 text-[21px] font-extrabold text-ink">Payroll settings</h1>
-        <button type="button" disabled={!dirty || ro || save.isPending} onClick={() => save.mutate()} className="inline-flex h-8 items-center gap-1.5 rounded-[7px] bg-primary px-3 text-[12.5px] font-bold text-white disabled:opacity-50">Save <Kbd>⌘S</Kbd></button>
-      </div>
+      <SectionHeader
+        level={1}
+        title="Payroll settings"
+        actions={<button type="button" disabled={!dirty || ro || save.isPending} onClick={() => save.mutate()} className="inline-flex h-8 items-center gap-1.5 rounded-[7px] bg-primary px-3 text-[12.5px] font-bold text-white disabled:opacity-50">Save <Kbd>⌘S</Kbd></button>}
+      />
       <div className="flex gap-3">
-        <nav aria-label="Settings" className="flex w-[180px] shrink-0 flex-col gap-0.5 text-[12.5px]">
+        <nav aria-label="Settings" className="flex w-[180px] shrink-0 flex-col gap-0.5">
           {[...groups, 'computer'].map((x) => (
-            <button key={x} type="button" aria-current={x === g ? 'page' : undefined} onClick={() => setAt(x)} className={cx('h-[30px] rounded-[7px] px-2 text-left', x === g ? 'bg-[#EEF1FD] font-bold text-[#3B5BDB] dark:bg-selection dark:text-primary' : 'text-ink-2 hover:bg-subtle')}>
-              {x === 'computer' ? 'This computer' : humanise(x)}
-            </button>
+            <SettingsNavItem key={x} label={x === 'computer' ? 'This computer' : humanise(x)} current={x === g} onClick={() => setAt(x)} />
           ))}
         </nav>
-        <Card className="min-w-0 flex-1" title={g === 'computer' ? 'This computer' : humanise(g)}>
+        <SettingsGroup className="!mb-0 min-w-0 flex-1" title={g === 'computer' ? 'This computer' : humanise(g)}>
           {g === 'computer' ? (
-            <div className="flex flex-col gap-2.5 px-3.5 pb-3 text-[12.5px]">
+            <>
               <Line title="Runs available offline" sub="The runs and payslip figures you opened, read-only, encrypted on this computer. Cleared when you sign out." value="On" />
               <Line title="Touch ID to approve" sub="Where this computer has it, approving a run asks for it first." value="On" />
               <Line title="Bank and return files" sub="Saved where you choose; every file the server makes is logged." value="Ask each time" />
               <Line title="Tray reminders" sub="Cut-off, approvals waiting and pay dates — even when the Payroll tab is closed." value="On" />
-            </div>
+            </>
           ) : q.data === null ? <NotYet what="Payroll settings" /> : (
-            <div className="flex flex-col">
+            <>
               {tree.filter((n) => n.group === g).map((n) => (
-                <div key={n.key} className="flex items-center gap-3 border-t border-line px-3.5 py-2.5 text-[12.5px]">
-                  <span className="min-w-0 flex-1"><b className="block text-ink">{n.label}</b>{n.fixed ? <span className="text-[11.5px] text-ink-3">Set by your company</span> : null}</span>
+                <SettingRow key={n.key} label={n.label} hint={n.fixed ? 'Set by your company' : undefined}>
                   {n.type === 'bool' ? (
                     <Checkbox aria-label={n.label} disabled={ro || n.fixed} checked={!!value(n)} onChange={(e) => set(n.key, e.target.checked)} />
                   ) : n.type === 'enum' && n.options ? (
@@ -79,11 +78,11 @@ export default function Settings() {
                   ) : (
                     <input aria-label={n.label} disabled={ro || n.fixed} value={String(value(n) ?? '')} onChange={(e) => set(n.key, n.type === 'int' ? Number(e.target.value) : e.target.value)} className="h-8 w-[180px] rounded-[7px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
                   )}
-                </div>
+                </SettingRow>
               ))}
-            </div>
+            </>
           )}
-        </Card>
+        </SettingsGroup>
       </div>
     </div>
   );
@@ -91,9 +90,8 @@ export default function Settings() {
 
 function Line({ title, sub, value }: { title: string; sub: string; value: string }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="min-w-0 flex-1"><b className="block text-ink">{title}</b><span className="text-[11.5px] text-ink-2">{sub}</span></span>
-      <span className="font-semibold text-ink-2">{value}</span>
-    </div>
+    <SettingRow label={title} hint={sub}>
+      <span className="text-[12.5px] font-semibold text-ink-2">{value}</span>
+    </SettingRow>
   );
 }

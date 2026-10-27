@@ -32,7 +32,7 @@ import { PANEL_CARD, PANEL_HEADING, pathOf } from './rowParts';
 export function Stars({ n, className }: { n: number; className?: string }) {
   const r = Math.max(0, Math.min(5, Math.round(n)));
   return (
-    <span role="img" aria-label={text('Rated {n} out of 5', { n: r })} className={cx('text-[#B7791F] dark:text-warning', className)}>
+    <span role="img" aria-label={text('Rated {n} out of 5', { n: r })} className={cx('text-amber-strong dark:text-warning', className)}>
       {'★'.repeat(r)}
       {'☆'.repeat(5 - r)}
     </span>
@@ -186,7 +186,7 @@ export function ClosedDetail({ id, row, onReopened }: { id: string; row?: Websit
           <span className="truncate text-[12px] text-ink-3">{[closed ? closedHow(c) : text('Open again'), lasted !== null && closed ? dwell(lasted) : null, site].filter(Boolean).join(' · ')}</span>
         </span>
         {canReply ? (
-          <Button size="sm" aria-pressed={c.is_starred} disabled={busy} onClick={() => run(() => websiteAction(c.id, 'star', { on: !c.is_starred }), null)} className={c.is_starred ? '!border-warning !bg-warning-bg !text-[#9A4A06] dark:!text-warning' : ''}>
+          <Button size="sm" aria-pressed={c.is_starred} disabled={busy} onClick={() => run(() => websiteAction(c.id, 'star', { on: !c.is_starred }), null)} className={c.is_starred ? '!border-warning !bg-warning-bg !text-warning-ink dark:!text-warning' : ''}>
             {c.is_starred ? text('★ Starred') : text('Star')}
           </Button>
         ) : null}
@@ -220,7 +220,7 @@ const TILE = 'flex flex-col rounded-[8px] bg-subtle p-2';
 
 /** The priority tile's colour: red for Urgent and VIP, amber for High, plain otherwise. */
 function priorityTone(p: string): string {
-  return p === 'urgent' || p === 'vip' ? 'bg-danger-bg text-danger' : p === 'high' ? 'bg-warning-bg text-[#9A4A06] dark:text-warning' : 'bg-subtle text-ink';
+  return p === 'urgent' || p === 'vip' ? 'bg-danger-bg text-danger' : p === 'high' ? 'bg-warning-bg text-warning-ink dark:text-warning' : 'bg-subtle text-ink';
 }
 
 /**
@@ -258,8 +258,8 @@ function ClosedSummary({ data, row, files, canReply, onDone }: { data: WebsiteCo
               <b className="text-[14px]">{PRIORITIES.find((p) => p.id === priority)?.label ?? priority}</b>
             </div>
             <div className={cx(TILE, 'bg-warning-bg')}>
-              <span className="text-[10.5px] text-[#9A5B10] dark:text-warning">{text('Rating')}</span>
-              <b className="text-[14px] text-[#B7791F] dark:text-warning">{c.rating ? `★ ${c.rating.toFixed(1)}` : text('Not rated')}</b>
+              <span className="text-[10.5px] text-warning-ink dark:text-warning">{text('Rating')}</span>
+              <b className="text-[14px] text-amber-strong dark:text-warning">{c.rating ? `★ ${c.rating.toFixed(1)}` : text('Not rated')}</b>
             </div>
           </div>
           <div className="flex items-center gap-2 pt-0.5 text-ink-2">

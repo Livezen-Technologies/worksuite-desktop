@@ -145,10 +145,10 @@ export function UrgentRing({ ticketKey }: { ticketKey: string }) {
   const canAssign = show.can.assign === true;
 
   return (
-    <article aria-label={text('Urgent ticket {ref}', { ref: t.reference })} className="drag flex h-full flex-col gap-3 border-t-4 border-[#DC2626] bg-surface p-4">
+    <article aria-label={text('Urgent ticket {ref}', { ref: t.reference })} className="drag flex h-full flex-col gap-3 border-t-4 border-red bg-surface p-4">
       <header className="flex flex-col gap-1">
-        <p className="flex items-center gap-2 text-[12px] font-bold text-[#DC2626] uppercase">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-[#DC2626]" aria-hidden />
+        <p className="flex items-center gap-2 text-[12px] font-bold text-red uppercase">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-red" aria-hidden />
           {text('New urgent ticket in {queue} queue', { queue })}
         </p>
         <p className="text-[11.5px] text-ink-3">

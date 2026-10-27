@@ -66,7 +66,7 @@ export default function Commission() {
       </div>
       <div className="mb-4 grid grid-cols-4 gap-2">
         {(q.data?.providers ?? []).map((p) => (
-          <button key={`${p.provider_id}-${p.currency}`} type="button" aria-pressed={provider === p.provider_id} onClick={() => setProvider(provider === p.provider_id ? null : p.provider_id)} className={cx('rounded-[12px] border px-3 py-2.5 text-left', provider === p.provider_id ? 'border-primary bg-[#EEF1FD] dark:bg-selection' : 'border-line bg-surface hover:bg-subtle')}>
+          <button key={`${p.provider_id}-${p.currency}`} type="button" aria-pressed={provider === p.provider_id} onClick={() => setProvider(provider === p.provider_id ? null : p.provider_id)} className={cx('rounded-[12px] border px-3 py-2.5 text-left', provider === p.provider_id ? 'border-primary bg-selection dark:bg-selection' : 'border-line bg-surface hover:bg-subtle')}>
             <div className="text-[13px] font-bold text-ink">{p.provider}</div>
             <div className="text-[16px] font-extrabold text-ink tabular-nums">{money(p.accrued, p.currency)}</div>
             <div className="text-[11.5px] text-ink-3">{`${p.lines} lines · paid ${money(p.paid)}`}</div>
@@ -74,7 +74,7 @@ export default function Commission() {
         ))}
       </div>
       {picked.length ? (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[12px] border border-primary bg-[#EEF1FD] px-4 py-2 text-[13px] dark:bg-selection">
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[12px] border border-primary bg-selection px-4 py-2 text-[13px] dark:bg-selection">
           <b className="flex-1">{`${picked.length} line${picked.length === 1 ? '' : 's'} selected · ${money(sum, cur)}`}</b>
           <Button size="sm" variant="primary" disabled={!desk.online || picked.some((p) => !p.can_manage)} onClick={() => void mark('paid')}>Mark paid</Button>
           <Button size="sm" variant="secondary" disabled={!desk.online || picked.some((p) => !p.can_manage)} onClick={() => setVoiding(true)}>Void…</Button>

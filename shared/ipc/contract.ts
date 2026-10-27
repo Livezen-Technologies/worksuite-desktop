@@ -78,7 +78,7 @@ import { sinhalaContract, type SinhalaOutputs } from '../sinhala';
 import { SETTING_KEY_PATTERN, type DesktopSettingsView } from '../desktop-settings';
 import { phoneContract, type PhoneOutputs } from '../phone';
 import { accountsContract, type AccountsOutputs, type ServiceHealthState } from '../accounts';
-import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
+import { pdfComposeSchema, pdfDeriveSchema, pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView, type PdfToolResult } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
@@ -1199,6 +1199,10 @@ export const contract = {
   'pdf:resolve': ch(z.strictObject({ session: pdfSession, answer: z.enum(['keep_both', 'upload_as_new_version', 'use_cloud']) }), { session: true, rate: 3, sensitive: true }),
   'pdf:discard': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 3 }),
   'pdf:extract': ch(z.strictObject({ session: pdfSession, pages: z.array(pdfPage).min(1).max(10_000) }), { session: true, rate: 3 }),
+  // Tools on this computer (D-G12): a protected or unlocked copy, parts, page images or text from the open PDF; and a
+  // new PDF combined from PDFs, made from pictures or of blank pages. Passwords go to the engine and are never kept.
+  'pdf:derive': ch(z.strictObject({ session: pdfSession, req: pdfDeriveSchema }), { session: true, rate: 3, sensitive: true }),
+  'pdf:compose': ch(z.strictObject({ req: pdfComposeSchema }), { session: true, rate: 3 }),
   // PDF Studio Pro (PRO-SIG-002): the person's own token signs the server's signed attributes; the PIN goes to the
   // token library in the tool's environment, never on a command line, never kept.
   'pdf:tokens': ch(z.strictObject({ module: z.string().min(1).max(400).nullable().optional() }), { session: true, rate: 2 }),
@@ -1997,6 +2001,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'pdf:resolve': PdfSessionView;
   'pdf:discard': PdfSessionView;
   'pdf:extract': { saved: boolean; name: string | null };
+  'pdf:derive': PdfToolResult;
+  'pdf:compose': PdfToolResult;
   'pdf:tokens': { available: boolean; reason: string | null; tokens: Array<{ module: string; token: string; manufacturer: string; certs: Array<{ module: string; token: string; id: string; label: string; der: string }> }> };
   'pdf:tokenSign': Uint8Array;
   'salon:deskPairing': SalonDeskPairing | null;

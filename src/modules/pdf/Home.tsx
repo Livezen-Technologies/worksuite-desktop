@@ -75,7 +75,7 @@ export function PdfHome({ section, tool, missing, onOpenLocal, onPicked, diagnos
   };
   return (
     <div className="flex h-full min-h-0">
-      <nav aria-label="PDF Studio" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+      <nav aria-label="PDF Studio" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
         <div className="flex flex-col gap-1.5 p-3">
           <button type="button" onClick={() => onOpenLocal()} className="flex h-10 items-center justify-center gap-2 rounded-[10px] bg-primary text-[13px] font-bold text-white hover:bg-primary-hover">
             <Icon name="folder-open" size={16} /> Open or create PDF
@@ -160,7 +160,7 @@ function H1({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
 }
 
 /** The 18 tools of the home grid (DK01), in its order. */
-const GRID: ToolId[] = ['create', 'edit', 'export', 'combine', 'organize', 'comment', 'ocr', 'fill-sign', 'esign', 'prepare-form', 'protect', 'redact', 'compare', 'compress', 'accessibility', 'standards', 'print-production', 'ai'];
+const GRID: ToolId[] = ['create', 'edit', 'export', 'combine', 'organize', 'comment', 'ocr', 'fill-sign', 'esign', 'prepare-form', 'protect', 'redact', 'compare', 'compress', 'accessibility', 'bates', 'ai'];
 
 function ToolCard({ tool, onTool }: { tool: PdfTool; onTool: (id: ToolId) => void }) {
   return (
@@ -372,7 +372,7 @@ function ToolsPage({ onTool }: { onTool: (id: ToolId) => void }) {
     <>
       <H1>All tools</H1>
       <p className="text-[12.5px] text-ink-2">
-        {TOOLS.length} tools, grouped as in Acrobat Pro. {ready} work in this version (fully or in part); the others open their panel with what they will do and what is still to build.
+        {TOOLS.length} tools, grouped as in Acrobat Pro. {ready} work on this computer or for Drive PDFs on the WorkSuite server (fully or in part); each says what runs where and what is still to build.
       </p>
       {GROUPS.map((g) => (
         <section key={g}>
@@ -514,7 +514,7 @@ function SettingsPage() {
       <p className="text-[12px] text-ink-3">Kept on this computer. Preferences that follow you to Web and Mobile arrive with the server’s api/files/pdf/preferences. Values your organization sets are shown with a lock.</p>
       <Section title="Opening" className="rounded-[12px] border border-line bg-surface">
         <Row label="Default PDF app" hint="Double-clicked PDFs open in WorkSuite. Offered, never changed silently.">
-          <Button size="sm" disabled title="OS file association is not built yet">Make default</Button>
+          <span className="text-[12px] text-ink-3">In your system’s settings: Default apps</span>
         </Row>
         <Row label="Open PDFs from Mail, Chat and records in">
           <Pick label="Open in" value={p.openIn} onChange={(openIn) => set({ ...p, openIn })} options={[{ id: 'tab', label: 'A new tab' }, { id: 'window', label: 'A new window' }]} />
@@ -531,10 +531,10 @@ function SettingsPage() {
           <Input value={p.author} maxLength={80} onChange={(e) => set({ ...p, author: e.target.value })} />
         </Row>
         <Row label="Saved signatures and initials" hint="Encrypted to your account (api/files/pdf/signatures).">
-          <Button size="sm" disabled>Manage</Button>
+          <span className="text-[12px] text-ink-3">Needs the WorkSuite server</span>
         </Row>
-        <Row label="Digital IDs" hint="From the OS keychain, PKCS#12 or a smart card.">
-          <Button size="sm" disabled>Manage</Button>
+        <Row label="Digital IDs" hint="A PKCS#12 file or a smart card, chosen when you sign in the Pro panel.">
+          <span className="text-[12px] text-ink-3">Chosen when you sign</span>
         </Row>
         <Row label="Autosave draft every" locked="Your organization’s interval">
           {null}
@@ -542,7 +542,7 @@ function SettingsPage() {
       </Section>
       <Section title="Offline & recovery" className="rounded-[12px] border border-line bg-surface">
         <Row label="Offline copies" hint="Encrypted on this computer.">
-          <Button size="sm" disabled>Manage</Button>
+          <span className="text-[12px] text-ink-3">Not in this version</span>
         </Row>
         <Row label="Recovery drafts kept" locked="Your organization’s retention">
           {null}
@@ -607,7 +607,7 @@ function AdminPage() {
         aside={
           <>
             <Button onClick={() => setP(POLICY_DEFAULTS)}>Reset to defaults</Button>
-            <Button variant="primary" disabled title="Needs files.pdf.admin; the desktop does not call api/admin/files/pdf/policy yet">Save policy</Button>
+            <span data-needs="server" className="text-[12px] font-semibold text-ink-3">Saving needs the WorkSuite server (Admin Center › Files › PDF Studio)</span>
           </>
         }
       >

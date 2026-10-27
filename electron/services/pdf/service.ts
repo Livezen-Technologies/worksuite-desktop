@@ -27,6 +27,11 @@ import {
   type PdfSecurityReport,
   type PdfSessionView,
   type PdfSource,
+  PAPER,
+  permissionBits,
+  type PdfComposeRequest,
+  type PdfDeriveRequest,
+  type PdfToolResult,
 } from '@shared/pdf';
 import { DesktopError, isDesktopError } from '../../main/errors';
 import { SealWriter } from '../elearning-offline';
@@ -119,8 +124,12 @@ export interface PdfServiceDeps {
   userName?: () => string;
   /** Writes a PDF to a place on this computer (in place, atomically; or where the person chose). */
   writeLocal?: (path: string, bytes: Uint8Array) => Promise<void>;
-  /** Asks where to save a PDF on this computer; null when cancelled. */
-  chooseSavePath?: (sender: number, suggested: string) => Promise<string | null>;
+  /** Asks where to save a PDF (or, with `ext`, another kind of file) on this computer; null when cancelled. */
+  chooseSavePath?: (sender: number, suggested: string, ext?: 'pdf' | 'txt') => Promise<string | null>;
+  /** Asks for a folder on this computer (split, page images); null when cancelled. */
+  chooseFolder?: (sender: number, title: string) => Promise<string | null>;
+  /** Pictures chosen in the system dialog, decoded to BGRA pixels; empty when cancelled. */
+  pickImages?: (sender: number) => Promise<Array<{ name: string; width: number; height: number; bgra: Uint8Array }>>;
 }
 
 interface RenderJob {
@@ -1530,6 +1539,101 @@ export class DesktopPdfService {
     await this.deps.writeLocal!(path, bytes);
     this.deps.audit('pdf.exported', { source: s.source.kind, file_id: s.view.source.fileId, pages: unique.length, kind: 'extract' });
     return { saved: true, name: path.split(/[\\/]/).pop() ?? null };
+  }
+
+  // ── tools on this computer (D-G12) ─────────────────────────────────────
+
+  /** A new file made from the open document with the engine on this computer; the document is unchanged. */
+  async derive(sender: number, id: string, req: PdfDeriveRequest): Promise<PdfToolResult> {
+    const s = this.ready(sender, id);
+    if (s.view.gates.download && s.source.kind !== 'local') throw new DesktopError('POLICY_DENIED', s.view.gates.download);
+    if (!this.deps.policy().allowExport) throw new DesktopError('POLICY_DENIED', 'Your organization does not allow saving copies of PDFs to this computer.');
+    if (req.kind === 'text' && s.view.gates.copy) throw new DesktopError('POLICY_DENIED', s.view.gates.copy);
+    const base = s.view.name.replace(/\.pdf$/i, '');
+    const none: PdfToolResult = { saved: false, files: 0, name: null, open: null };
+    const leaf = (p: string) => p.split(/[\\/]/).pop() ?? null;
+    const run = <T>(fn: () => Promise<T>) => this.serialized(s, fn).catch((e) => { throw this.asDesktop(e); });
+    const audit = (kind: string, pages: number) => this.deps.audit('pdf.exported', { source: s.source.kind, file_id: s.view.source.fileId, pages, kind });
+    const one = async (path: string, bytes: Uint8Array, kind: string, pages: number): Promise<PdfToolResult> => {
+      await this.deps.writeLocal!(path, bytes);
+      audit(kind, pages);
+      const open = path.toLowerCase().endsWith('.pdf') ? ((await this.deps.local.register([path]).catch(() => null))?.files[0] ?? null) : null;
+      return { saved: true, files: 1, name: leaf(path), open };
+    };
+    if (req.kind === 'protect' || req.kind === 'unprotect') {
+      if (req.kind === 'unprotect' && !s.view.security.encrypted) throw new DesktopError('IPC_VALIDATION_FAILED', 'This PDF has no security to remove.');
+      const path = await this.deps.chooseSavePath?.(sender, `${base} (${req.kind === 'protect' ? 'protected' : 'unlocked'}).pdf`);
+      if (!path) return none;
+      const bytes = await run(() => (req.kind === 'protect' ? s.engine!.protect(req.userPassword, req.ownerPassword, permissionBits(req.allow)) : s.engine!.unprotect()));
+      return one(path, bytes, req.kind, s.view.pageCount);
+    }
+    if (req.kind === 'text') {
+      const pages = (req.pages ?? Array.from({ length: s.view.pageCount }, (_, i) => i)).filter((p) => p >= 0 && p < s.view.pageCount);
+      const path = await this.deps.chooseSavePath?.(sender, `${base}.txt`, 'txt');
+      if (!path) return none;
+      const text = await run(() => s.engine!.pageText(pages));
+      const body = text.map((t, k) => `--- Page ${pages[k]! + 1} ---\n${t.trim()}\n`).join('\n');
+      return one(path, new TextEncoder().encode(body), 'text', pages.length);
+    }
+    const folder = await this.deps.chooseFolder?.(sender, req.kind === 'split' ? 'Choose where to save the parts' : 'Choose where to save the page images');
+    if (!folder) return none;
+    const { join } = await import('node:path');
+    if (req.kind === 'split') {
+      const groups = req.groups.map((g) => [...new Set(g)].filter((p) => p >= 0 && p < s.view.pageCount)).filter((g) => g.length);
+      if (!groups.length) throw new DesktopError('IPC_VALIDATION_FAILED', 'Choose the pages for each part.');
+      for (let k = 0; k < groups.length; k++) {
+        const bytes = await run(() => s.engine!.extract(groups[k]!));
+        await this.deps.writeLocal!(join(folder, `${base} (part ${k + 1}).pdf`), bytes);
+      }
+      audit('split', s.view.pageCount);
+      return { saved: true, files: groups.length, name: leaf(folder), open: null };
+    }
+    const pages = [...new Set(req.pages)].filter((p) => p >= 0 && p < s.view.pageCount);
+    const scale = req.dpi / 72;
+    for (const p of pages) {
+      const px = await run(() => s.engine!.render({ page: p, scale, annotations: true, printing: true, order: 'bgra' }));
+      await this.deps.writeLocal!(join(folder, `${base} - page ${p + 1}.png`), this.deps.encode(px.data, px.width, px.height, 'png'));
+    }
+    audit('images', pages.length);
+    return { saved: true, files: pages.length, name: leaf(folder), open: null };
+  }
+
+  /** A new PDF made on this computer, in an engine of its own: combined PDFs, pictures or blank pages. */
+  async compose(sender: number, req: PdfComposeRequest): Promise<PdfToolResult> {
+    const none: PdfToolResult = { saved: false, files: 0, name: null, open: null };
+    const pol = this.deps.policy();
+    if (!pol.allowLocalFiles) throw new DesktopError('POLICY_DENIED', 'Your organization does not allow PDFs from this computer in WorkSuite.');
+    let job: Parameters<EngineHandle['compose']>[0];
+    if (req.kind === 'combine') {
+      const parts = [];
+      for (const part of req.parts) {
+        const f = await this.deps.local.resolve(part.file);
+        parts.push({ source: { kind: 'plain' as const, path: f.path, size: f.size }, ...(part.pages?.length ? { pages: part.pages } : {}), title: part.title ?? f.name.replace(/\.pdf$/i, '') });
+      }
+      job = { parts, bookmarks: req.bookmarks };
+    } else if (req.kind === 'images') {
+      const imgs = (await this.deps.pickImages?.(sender)) ?? [];
+      if (!imgs.length) return none;
+      job = { images: imgs.map((i) => ({ width: i.width, height: i.height, bgra: i.bgra, page: req.fit === 'image' ? null : PAPER[req.fit] })) };
+    } else {
+      const [w, h] = PAPER[req.size];
+      job = { blank: { count: req.pages, size: req.landscape ? [h, w] : [w, h] } };
+    }
+    const path = await this.deps.chooseSavePath?.(sender, req.name.toLowerCase().endsWith('.pdf') ? req.name : `${req.name}.pdf`);
+    if (!path) return none;
+    const engine = this.deps.engine(pol.memoryMb);
+    let bytes: Uint8Array;
+    try {
+      bytes = await engine.compose(job);
+    } catch (e) {
+      throw this.asDesktop(e);
+    } finally {
+      await engine.close().catch(() => undefined);
+    }
+    await this.deps.writeLocal!(path, bytes);
+    this.deps.audit('pdf.created', { kind: req.kind, parts: req.kind === 'combine' ? req.parts.length : 0 });
+    const open = (await this.deps.local.register([path]).catch(() => null))?.files[0] ?? null;
+    return { saved: true, files: 1, name: path.split(/[\\/]/).pop() ?? null, open };
   }
 
   // ── local files ────────────────────────────────────────────────────────

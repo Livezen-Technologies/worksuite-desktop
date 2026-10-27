@@ -116,7 +116,7 @@ export function Lists() {
           <Button type="submit" variant="primary" loading={busy} disabled={!perms.manage || !type} title={noManage}>{text('Add')}</Button>
         </form>
         {refusal ? (
-          <div role="alert" data-list-refusal className="flex gap-2.5 rounded-[10px] bg-[#FCE9E4] px-3 py-2.5 text-[12.5px] leading-[1.45] text-[#8A1C12] dark:bg-[#3D1A16] dark:text-[#FFB4A8]">
+          <div role="alert" data-list-refusal className="flex gap-2.5 rounded-[10px] bg-danger-bg px-3 py-2.5 text-[12.5px] leading-[1.45] text-danger-ink">
             <Icon name="shield-alert" size={16} className="mt-px shrink-0" />
             <span>
               <b>{text('Can’t {kind} {value}.', { kind: kind === 'allow' ? text('allow') : text('block'), value: value.trim() })}</b> {refusal}
@@ -165,7 +165,7 @@ export function Lists() {
         </div>
       )}
       {migrated ? (
-        <p className="flex gap-2 rounded-[10px] bg-[#E6F0FF] px-3 py-2.5 text-[12px] text-[#0A4AB0] dark:bg-[#0F2A52] dark:text-[#7DB4FF]">
+        <p className="flex gap-2 rounded-[10px] bg-info-bg px-3 py-2.5 text-[12px] text-blue-ink dark:bg-blue-bg dark:text-indigo-bright">
           <Icon name="info" size={14} className="mt-px shrink-0" />
           {text('{n} safe and blocked senders from the old mail rules were moved here. WorkSuite mail server rules still apply them.', { n: migrated })}
         </p>

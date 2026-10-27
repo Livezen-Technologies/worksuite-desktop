@@ -170,13 +170,13 @@ export default function AppointmentsShell({ active }: ModuleProps) {
         <Rail view={view} online={online} location={locName} me={me ? `${me.split(' ')[0]} · desk` : 'desk'} counts={{ outbox: pending || undefined }} onPick={(v, nt) => to(v, '', nt)} />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-ground" aria-label={`Appointments · ${TITLES[view]}`}>
           {!online ? (
-            <div role="status" className="flex shrink-0 items-center gap-2 border-b border-[#F5D48A] bg-[#FFF8E6] px-5 py-1.5 text-[12px] font-semibold text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+            <div role="status" className="flex shrink-0 items-center gap-2 border-b border-warning-line bg-warning-bg px-5 py-1.5 text-[12px] font-semibold text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
               <Icon name="cloud-off" size={14} />
               <span className="min-w-0 flex-1">No connection to WorkSuite. You can check clients in and write notes; booking, moving, checkout and deposits wait for the connection.</span>
               <button type="button" className="font-bold underline" onClick={() => to('outbox')}>{pending ? `Outbox · ${pending}` : 'Outbox'}</button>
             </div>
           ) : refused ? (
-            <div role="status" className="flex shrink-0 items-center gap-2 border-b border-line bg-[#FDECEA] px-5 py-1.5 text-[12px] font-semibold text-[#B42318] dark:bg-danger/15 dark:text-danger">
+            <div role="status" className="flex shrink-0 items-center gap-2 border-b border-line bg-danger-bg px-5 py-1.5 text-[12px] font-semibold text-danger dark:bg-danger/15 dark:text-danger">
               <span className="min-w-0 flex-1">{`${refused} queued change${refused === 1 ? ' was' : 's were'} refused by WorkSuite.`}</span>
               <button type="button" className="font-bold underline" onClick={() => to('outbox')}>Review</button>
             </div>

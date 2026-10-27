@@ -83,14 +83,14 @@ export default function Dashboard({ data, org, onOpen, onGo }: { data: UseQueryR
           </div>
           <div className="flex flex-col">
             <span className="text-[11.5px] text-ink-3">Awarded to us</span>
-            <b className="text-[15px] text-[#145C39] tabular-nums dark:text-success">{moneyList(d.value.awarded_by_currency)}</b>
+            <b className="text-[15px] text-success-ink tabular-nums dark:text-success">{moneyList(d.value.awarded_by_currency)}</b>
           </div>
           <div className="flex flex-col">
             <span className="text-[11.5px] text-ink-3">Company documents</span>
             <span className="text-[12.5px] text-ink">
               {d.documents.total} in the library
               {d.documents.expired ? <b className="text-danger"> · {d.documents.expired} expired</b> : null}
-              {d.documents.expiring ? <b className="text-[#9A4A06] dark:text-warning"> · {d.documents.expiring} expiring soon</b> : null}
+              {d.documents.expiring ? <b className="text-warning-ink dark:text-warning"> · {d.documents.expiring} expiring soon</b> : null}
             </span>
           </div>
         </Panel>
@@ -126,7 +126,7 @@ export default function Dashboard({ data, org, onOpen, onGo }: { data: UseQueryR
                 title={x.title}
                 sub={[x.tender_ref, x.kind.replace(/_/g, ' '), x.instrument, money(x.amount, x.currency)].filter(Boolean).join(' · ')}
                 right={x.days !== null ? `${x.days} ${x.days === 1 ? 'day' : 'days'} left` : dateLabel(x.valid_until)}
-                rightClass={(x.days ?? 99) <= 7 ? 'text-danger' : 'text-[#9A4A06] dark:text-warning'}
+                rightClass={(x.days ?? 99) <= 7 ? 'text-danger' : 'text-warning-ink dark:text-warning'}
                 onClick={() => onOpen(Number(x.tender_id))}
               />
             ))}
@@ -162,7 +162,7 @@ export default function Dashboard({ data, org, onOpen, onGo }: { data: UseQueryR
                 title={s.name}
                 sub={s.enabled ? (s.imported_30 || s.seen_30 ? `${s.imported_30} kept of ${s.seen_30} seen in 30 days` : 'Nothing at all in 30 days.') : 'Switched off'}
                 right={s.last_run_at ? relative(s.last_run_at) : 'Never run'}
-                rightClass={s.enabled && !s.seen_30 ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-3'}
+                rightClass={s.enabled && !s.seen_30 ? 'text-warning-ink dark:text-warning' : 'text-ink-3'}
               />
             ))}
           </ListPanel>

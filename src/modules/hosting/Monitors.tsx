@@ -103,9 +103,9 @@ function MonitorRow({ m, open, onToggle }: { m: Monitor; open: boolean; onToggle
     }
   };
   return (
-    <div className={cx('flex flex-col rounded-[10px] border bg-surface', down ? 'border-[#F5C2BD]' : 'border-line')}>
+    <div className={cx('flex flex-col rounded-[10px] border bg-surface', down ? 'border-danger-line' : 'border-line')}>
       <button type="button" aria-expanded={open} onClick={onToggle} className="flex items-center gap-3 px-3.5 py-2.5 text-left">
-        <span className={cx('size-[9px] shrink-0 rounded-full', down ? 'bg-[#B42318]' : m.state === 'up' ? 'bg-[#1F7A4D]' : 'bg-[#8A90A2]')} />
+        <span className={cx('size-[9px] shrink-0 rounded-full', down ? 'bg-danger' : m.state === 'up' ? 'bg-success' : 'bg-muted')} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] font-semibold text-ink">{m.name || m.target}</div>
           <div className="truncate text-[11.5px] text-ink-3">{[text('{kind} · every {every}', { kind: m.kind.toUpperCase(), every: every(m.interval_s) }), m.name ? m.target : null, m.enabled === false ? text('paused') : null].filter(Boolean).join(' · ')}</div>
@@ -122,7 +122,7 @@ function MonitorRow({ m, open, onToggle }: { m: Monitor; open: boolean; onToggle
             <>
               <div aria-label={text('Last checks')} role="img" className="flex gap-[2px]">
                 {checks.map((c, i) => (
-                  <span key={i} title={`${when(c.at)} · ${c.ok ? (c.ms !== null ? `${c.ms} ms` : 'OK') : (c.error ?? text('failed'))}`} className={cx('h-[22px] flex-1 rounded-[2px]', c.ok ? 'bg-[#34A36B]' : 'bg-[#B42318]')} />
+                  <span key={i} title={`${when(c.at)} · ${c.ok ? (c.ms !== null ? `${c.ms} ms` : 'OK') : (c.error ?? text('failed'))}`} className={cx('h-[22px] flex-1 rounded-[2px]', c.ok ? 'bg-green' : 'bg-danger')} />
                 ))}
                 {!checks.length ? <span className="text-[12px] text-ink-3">{text('Not checked yet.')}</span> : null}
               </div>

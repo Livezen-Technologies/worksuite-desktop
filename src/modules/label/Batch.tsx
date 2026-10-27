@@ -86,7 +86,7 @@ function JobCard({ j, onResolve }: { j: HostJob; onResolve: () => void }) {
     >
       <div className="flex flex-col gap-2 p-3.5 text-[12.5px]">
         <Progress done={j.confirmed} total={j.total} />
-        {j.error ? <p className="m-0 font-semibold text-[#B42318] dark:text-danger">{j.error}</p> : null}
+        {j.error ? <p className="m-0 font-semibold text-danger dark:text-danger">{j.error}</p> : null}
         {j.uncertain ? <p className="m-0 text-ink-2">{`Labels ${j.uncertain.from + 1}–${j.uncertain.to} may or may not have printed. Look at the roll before deciding.`}</p> : null}
         {j.state === 'waiting_printer' ? <p className="m-0 text-ink-2">{`Kept at ${j.confirmed} of ${j.total}. It goes on from label ${j.confirmed + 1} by itself when the printer is ready.`}</p> : null}
         {j.state === 'paused' ? <p className="m-0 text-ink-2">{`Paused at ${j.confirmed} of ${j.total} with nothing uncertain. It is resumed here when the printer is ready, or now with Resume.`}</p> : null}

@@ -21,7 +21,7 @@ export default function DnsView({ org, nav, active, picked, onPick }: { org: num
           <div role="listbox" aria-label="Domains" className="min-h-0 flex-1 overflow-y-auto rounded-[10px] border border-line bg-surface scroll-thin">
             {list.isPending ? <Spinner /> : null}
             {(list.data?.items ?? []).map((d) => (
-              <button key={d.id} type="button" role="option" aria-selected={d.id === id} onClick={() => onPick(d.id)} onDoubleClick={() => nav.openDomain(d.id, 'tab', d.name, 'dns')} className={cx('block w-full truncate border-b border-line/60 px-3 py-2 text-left text-[12.5px]', d.id === id ? 'bg-[#EEF1FD] font-semibold shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : 'hover:bg-subtle')}>
+              <button key={d.id} type="button" role="option" aria-selected={d.id === id} onClick={() => onPick(d.id)} onDoubleClick={() => nav.openDomain(d.id, 'tab', d.name, 'dns')} className={cx('block w-full truncate border-b border-line/60 px-3 py-2 text-left text-[12.5px]', d.id === id ? 'bg-selection font-semibold shadow-[inset_3px_0_0_var(--color-primary)] dark:bg-selection' : 'hover:bg-subtle')}>
                 {d.name}
               </button>
             ))}

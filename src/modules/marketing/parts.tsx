@@ -46,7 +46,7 @@ export function Card({ title, action, children, className, tone, padded = true }
     <section
       className={cx(
         'min-w-0 rounded-[12px] border bg-surface',
-        tone === 'danger' ? 'border-[#F1B8A8] dark:border-danger/40' : tone === 'warning' ? 'border-[#F5D9A8] bg-[#FFF9EE] dark:border-warning/40 dark:bg-warning-bg' : tone === 'info' ? 'border-primary/30 bg-selection' : 'border-line',
+        tone === 'danger' ? 'border-danger-line dark:border-danger/40' : tone === 'warning' ? 'border-warning-line bg-rail dark:border-warning/40 dark:bg-warning-bg' : tone === 'info' ? 'border-primary/30 bg-selection' : 'border-line',
         padded && 'p-4',
         className,
       )}
@@ -65,10 +65,10 @@ export function Card({ title, action, children, className, tone, padded = true }
 export type PillTone = 'green' | 'amber' | 'red' | 'violet' | 'blue' | 'slate';
 
 const PILL: Record<PillTone, string> = {
-  green: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
-  amber: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  red: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  violet: 'bg-[#F1EAFB] text-[#5B2FA0] dark:bg-[#2A1F45] dark:text-[#C4A8F0]',
+  green: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
+  amber: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  red: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  violet: 'bg-violet-bg text-violet-ink',
   blue: 'bg-selection text-primary',
   slate: 'bg-subtle text-ink-2',
 };
@@ -93,7 +93,7 @@ export const CAMPAIGN_PILL: Record<CampaignStatus, PillTone> = { draft: 'slate',
 /** A share as a bar: delivered of sent, consent recorded of contacts. */
 export function Meter({ value, max, tone = 'blue', label }: { value: number; max: number; tone?: 'blue' | 'violet' | 'amber' | 'red' | 'green'; label?: string }) {
   const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
-  const fill = { blue: 'bg-primary', violet: 'bg-[#6d28d9] dark:bg-[#A78BFA]', amber: 'bg-[#D97706]', red: 'bg-danger', green: 'bg-success' }[tone];
+  const fill = { blue: 'bg-primary', violet: 'bg-violet dark:bg-violet', amber: 'bg-amber-strong', red: 'bg-danger', green: 'bg-success' }[tone];
   return (
     <span role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={value} className="block h-1.5 w-full overflow-hidden rounded-full bg-subtle">
       <span className={cx('block h-full rounded-full', fill)} style={{ width: `${pct}%` }} />

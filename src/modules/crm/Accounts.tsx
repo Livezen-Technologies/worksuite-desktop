@@ -41,9 +41,9 @@ const TYPES: Array<[string, string]> = [
   ['other', 'Other'],
 ];
 const HEALTH: Record<string, [string, string]> = {
-  good: ['Good', 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success'],
-  watch: ['Watch', 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning'],
-  at_risk: ['At risk', 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger'],
+  good: ['Good', 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success'],
+  watch: ['Watch', 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning'],
+  at_risk: ['At risk', 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger'],
 };
 
 interface AccountList {
@@ -131,7 +131,7 @@ export default function Accounts({ openId, creating, initialQuery = '', onOpen, 
       </div>
 
       <div className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
-        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-[#F7F8FB] px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-info-soft px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
           <span className="w-[240px] shrink-0">Account</span>
           <span className="w-[100px] shrink-0">Type</span>
           <span className="w-[90px] shrink-0">Health</span>
@@ -229,7 +229,7 @@ function Account360({ id, onBack, onChanged, onOpenDeal, onOpenQuote, onNewQuote
       {d && a ? (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <span aria-hidden className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[10px] bg-[#0F172A] text-[15px] font-bold text-white dark:bg-well">{initialsOf(a.name)}</span>
+            <span aria-hidden className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[10px] bg-stage text-[15px] font-bold text-white dark:bg-well">{initialsOf(a.name)}</span>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <h1 className="m-0 truncate text-[20px] font-bold text-ink">{a.name}</h1>
               <span className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-3">
@@ -298,7 +298,7 @@ function Account360({ id, onBack, onChanged, onOpenDeal, onOpenQuote, onNewQuote
                           {x.owner ? ` · ${x.owner}` : ''}
                         </span>
                       }
-                      right={<b className={cx('tabular-nums', x.stage_kind === 'won' ? 'text-[#145C39] dark:text-success' : 'text-ink')}>{moneyFull(x.amount, x.currency)}</b>}
+                      right={<b className={cx('tabular-nums', x.stage_kind === 'won' ? 'text-success-ink dark:text-success' : 'text-ink')}>{moneyFull(x.amount, x.currency)}</b>}
                     />
                   ))
                 ) : (

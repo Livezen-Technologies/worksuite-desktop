@@ -144,8 +144,8 @@ describe('On the site now', () => {
     expect(needs[0]!.textContent).toMatch(/Anne · Kandy/);
     expect(needs[0]!.textContent).toMatch(/Waiting · \/support\/activation/);
     expect(within(needs[0]!).getByLabelText(/^Waiting 3:1\d$/)).toBeTruthy();
-    expect(needs[0]!.className).toContain('bg-[#fdecea]');
-    expect(needs[1]!.className).toContain('bg-[#fdf6e7]');
+    expect(needs[0]!.className).toContain('bg-danger-bg');
+    expect(needs[1]!.className).toContain('bg-warning-bg');
 
     expect(row('Visitor 9C1E').textContent).toMatch(/On a call 02:1\d · You/);
     expect(row('Kasun P.').textContent).toContain('Nuwan · “Do you offer a trial?”');

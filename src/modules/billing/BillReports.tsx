@@ -286,7 +286,7 @@ function PaymentsReport({ d, onOpen }: { d: ReportAnswer; onOpen: (id: number) =
             { key: 'client', label: 'Customer' },
             { key: 'paid_on', label: 'Received', w: 100, render: (r) => dateLabel(String(r.paid_on)) },
             { key: 'amount', label: 'Amount', w: 130, num: true, render: (r) => amount(Number(r.amount), r.currency as string) },
-            { key: 'unallocated', label: 'Unallocated', w: 130, num: true, render: (r) => <b className="text-[#9A4A06] dark:text-warning">{amount(Number(r.unallocated), r.currency as string)}</b> },
+            { key: 'unallocated', label: 'Unallocated', w: 130, num: true, render: (r) => <b className="text-warning-ink dark:text-warning">{amount(Number(r.unallocated), r.currency as string)}</b> },
           ]}
         />
       </Panel>

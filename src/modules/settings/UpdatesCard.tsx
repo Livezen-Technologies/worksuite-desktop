@@ -9,7 +9,7 @@ import { Select } from '../../components/Select';
 import { Button, Chip, Modal, Switch } from '../../components/ui';
 import { UpdateActions, updateHint } from '../../app/screens/UpdateScreens';
 import { useTab } from '../../core/tab-context';
-import { SettingRow } from './kit';
+import { SettingRow } from '../../components/SettingsKit';
 
 /**
  * The one updates card, shown in Settings › About and Settings › Desktop (worksuite-desktop#204, #205): the update

@@ -285,7 +285,7 @@ export function ShareDialog({ item, onClose, onSecureLink, onPublicLink, onSendT
   const levelItems = (current: Level, pick: (l: Level) => void, only = levels): MenuItem[] => only.map((l) => ({ label: l.label, hint: l.help, checked: l.id === current, run: () => pick(l.id) }));
 
   return (
-    <div className="no-drag fixed inset-0 z-50 flex items-center justify-center bg-[#0B1020]/50 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="no-drag fixed inset-0 z-50 flex items-center justify-center bg-stage/50 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="shTitle" className="animate-in flex max-h-full w-[720px] max-w-full flex-col rounded-[16px] border border-line bg-surface text-[13px] text-ink shadow-2xl outline-none">
         <div className="flex items-center gap-3.5 px-6 pt-5 pb-4">
           <span className={cx('flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px]', item.type === 'folder' ? 'bg-warning-bg text-warning' : 'bg-selection text-primary')}>

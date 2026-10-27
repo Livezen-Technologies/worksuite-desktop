@@ -229,7 +229,7 @@ export function QuarantineDetail({ item, offline }: { item: QuarantineItem; offl
             {item.account ? ` · ${item.account.email}` : ''} · {when(item.received_at)}
           </p>
         </div>
-        <div role="note" className={cx('flex gap-3 rounded-[10px] px-3.5 py-3 leading-[1.45]', item.verdict === 'MALWARE' || item.verdict === 'PHISH' || item.verdict === 'SPOOF' ? 'bg-[#FCE9E4] text-[#8A1C12] dark:bg-[#3D1A16] dark:text-[#FFB4A8]' : 'bg-[#FDF0E1] text-[#7A3B05] dark:bg-[#3A2610] dark:text-[#F5C08A]')}>
+        <div role="note" className={cx('flex gap-3 rounded-[10px] px-3.5 py-3 leading-[1.45]', item.verdict === 'MALWARE' || item.verdict === 'PHISH' || item.verdict === 'SPOOF' ? 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger-ink' : 'bg-warning-bg text-warning-strong')}>
           <Icon name="shield-alert" size={20} className="shrink-0" />
           <span>
             <b>{held}</b> {item.score !== null ? text('Score {score}.', { score: item.score.toFixed(1) }) : ''} {text('It was never delivered to your Inbox.')}
@@ -241,7 +241,7 @@ export function QuarantineDetail({ item, offline }: { item: QuarantineItem; offl
             <h3 id={`why-${item.id}`} className="font-bold text-ink">{text('Why it was held')}</h3>
             {why.length ? why.map((r) => (
               <p key={r.code} className="flex gap-2 text-[12.5px] leading-[1.4] text-ink">
-                <span aria-hidden className="mt-[6px] h-[7px] w-[7px] shrink-0 rounded-full bg-[#D25B4B]" />
+                <span aria-hidden className="mt-[6px] h-[7px] w-[7px] shrink-0 rounded-full bg-red" />
                 {r.text}
               </p>
             )) : <p className="text-[12.5px] text-ink-3">{text('No details were recorded.')}</p>}

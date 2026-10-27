@@ -8,6 +8,7 @@ import { confirmPrint, fetchBatch, has, interruptBatch, K, pauseBatch, printQueu
 import { BATCH_STATUS } from './Batches';
 import { Badge, Check, Note, PageHead, Panel, Tile, amt, btn, btnDanger, btnPrimary, num, td, th } from './parts';
 import { StatGrid } from '../../components/StatCard';
+import { useOfflineReadOnly } from '../../core/offline-read';
 
 /**
  * D05 — Batch print run and D06 — Batch interrupted: reconcile leaves (CHQ-BAT-02..05, BR-19, WF-14; the server's
@@ -45,7 +46,9 @@ export default function BatchRun({ id, access, onBack }: { id: number; access: A
   const pauseAsked = useRef(false);
   const stopAsked = useRef(false);
   const answer = useRef<((a: Answer) => void) | null>(null);
-  const canPrint = has(access, 'cheque.print');
+  // Printing needs WorkSuite: offline the lists read from this computer's copy and nothing prints (D-G14).
+  const offline = useOfflineReadOnly('cheque').readOnly;
+  const canPrint = has(access, 'cheque.print') && !offline;
 
   if (q.isLoading) return <Spinner />;
   if (q.error || !q.data) return <ErrorNote error={q.error} onRetry={() => void q.refetch()} />;
@@ -171,7 +174,7 @@ export default function BatchRun({ id, access, onBack }: { id: number; access: A
                 {sending ? <span className={num}>{`${sending.cheque_number} · ${sending.payee_name} · ${amt(sending.amount, sending.currency)}`}</span> : null}
               </div>
               <div className="h-3 overflow-hidden rounded-full bg-subtle" role="progressbar" aria-label="Leaves printed" aria-valuemin={0} aria-valuemax={b.items.length} aria-valuenow={printed.length}>
-                <i className="block h-full bg-[#23349E]" style={{ width: `${(printed.length / Math.max(1, b.items.length)) * 100}%` }} />
+                <i className="block h-full bg-stage-primary" style={{ width: `${(printed.length / Math.max(1, b.items.length)) * 100}%` }} />
               </div>
               <StatGrid min={160}>
                 <Tile icon="check-circle" tone="green" label="Printed" value={printed.length} sub={range(printed)} />
@@ -179,7 +182,7 @@ export default function BatchRun({ id, access, onBack }: { id: number; access: A
                 <Tile icon="hourglass" tone="slate" label="Waiting" value={waiting.length} sub={range(waiting)} />
               </StatGrid>
               {check ? (
-                <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-primary bg-[#EEF1FD] p-3 dark:bg-selection" role="group" aria-label={`How did ${check.cheque_number} print?`}>
+                <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-primary bg-selection p-3 dark:bg-selection" role="group" aria-label={`How did ${check.cheque_number} print?`}>
                   <span className="min-w-0 flex-1 text-[13px]">
                     <b>{`Check leaf ${check.cheque_number}`}</b>
                     <span className="block text-[12px] text-ink-2">Date, payee, words, figures and crossing inside their boxes, nothing on the MICR line.</span>
@@ -262,7 +265,7 @@ function Reconcile({ batch, canPrint, onSaved }: { batch: Batch; canPrint: boole
             {rows.map((r) => {
               const s = says(r.job_status);
               return (
-                <tr key={r.leaf_id} className={s === SAYS.unknown ? 'bg-[#FEF2F2] dark:bg-danger/10' : ''}>
+                <tr key={r.leaf_id} className={s === SAYS.unknown ? 'bg-ground dark:bg-danger/10' : ''}>
                   <td className={`${td} ${num}`}>{r.cheque_number}</td>
                   <td className={td}>{r.item?.payee_name ?? ''}</td>
                   <td className={`${td} ${num} text-right`}>{r.item ? amt(r.item.amount, r.item.currency) : ''}</td>

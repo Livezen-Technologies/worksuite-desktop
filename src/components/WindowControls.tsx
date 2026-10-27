@@ -62,7 +62,7 @@ function ControlButton({ button, maximized, size }: { button: WindowButton; maxi
       // A double-click on a button is two clicks, not the bar's maximise.
       onDoubleClick={(e) => e.stopPropagation()}
       style={{ width: size, height: size }}
-      className={cx('no-drag flex shrink-0 items-center justify-center rounded-full text-navy-ink hover:bg-white/12 hover:text-white focus-visible:outline-2 focus-visible:outline-white/60', button === 'close' && 'hover:bg-[#E5484D] hover:text-white')}
+      className={cx('no-drag flex shrink-0 items-center justify-center rounded-full text-navy-ink hover:bg-white/12 hover:text-white focus-visible:outline-2 focus-visible:outline-white/60', button === 'close' && 'hover:bg-red hover:text-white')}
     >
       <Glyph button={button} maximized={maximized} />
     </button>

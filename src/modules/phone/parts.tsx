@@ -139,7 +139,7 @@ export function DirectionGlyph({ direction, disposition, size = 16 }: { directio
 /** The caller's initials on the stage's deep blue (W02, W03, D01). */
 export function CallerBadge({ name, size = 56, className }: { name: string | null | undefined; size?: number; className?: string }) {
   return (
-    <span className={cx('inline-flex shrink-0 items-center justify-center rounded-full bg-[#1E3A8A] font-bold text-white', className)} style={{ width: size, height: size, fontSize: Math.max(11, size * 0.34) }} aria-hidden>
+    <span className={cx('inline-flex shrink-0 items-center justify-center rounded-full bg-stage-primary font-bold text-white', className)} style={{ width: size, height: size, fontSize: Math.max(11, size * 0.34) }} aria-hidden>
       {callerInitials(name)}
     </span>
   );

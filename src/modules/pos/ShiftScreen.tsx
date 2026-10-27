@@ -145,7 +145,7 @@ function Tabs({ notes, onNotes, notesOk, figureOk }: { notes: boolean; onNotes: 
   );
 }
 
-const field = 'h-touch-md rounded-pos bg-pos-panel px-3.5 text-[14px] text-ink shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]';
+const field = 'h-touch-md rounded-pos bg-pos-panel px-3.5 text-[14px] text-ink shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]';
 
 function OpenShift() {
   const t = useT();

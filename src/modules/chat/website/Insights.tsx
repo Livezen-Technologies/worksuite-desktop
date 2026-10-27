@@ -301,10 +301,10 @@ function PerDay({ days }: { days: Insights['days'] }) {
         <h2 className="flex-1 text-[14px] font-bold">{text('Conversations per day')}</h2>
         <span className="flex gap-3 text-[11.5px] text-ink-2" role="list" aria-label={text('Legend')}>
           <span role="listitem">
-            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#273498] align-[-1px] dark:bg-[#7c8fe8]" aria-hidden /> {text('Answered')}
+            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-primary align-[-1px] dark:bg-brand-soft" aria-hidden /> {text('Answered')}
           </span>
           <span role="listitem">
-            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#e8a33d] align-[-1px]" aria-hidden /> {text('Missed')}
+            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-amber align-[-1px]" aria-hidden /> {text('Missed')}
           </span>
         </span>
       </div>
@@ -313,8 +313,8 @@ function PerDay({ days }: { days: Insights['days'] }) {
           const said = text('{day}: {answered} answered, {missed} missed', { day: dayLabel(x.date), answered: x.answered, missed: x.missed });
           return (
             <li key={x.date} title={said} aria-label={said} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-[2px] hover:opacity-80">
-              {x.missed ? <span className="block rounded-t-[2px] bg-[#e8a33d]" style={{ height: `${(x.missed / top) * 100}%` }} /> : null}
-              {x.answered ? <span className={cx('block bg-[#273498] dark:bg-[#7c8fe8]', !x.missed && 'rounded-t-[2px]')} style={{ height: `${(x.answered / top) * 100}%` }} /> : null}
+              {x.missed ? <span className="block rounded-t-[2px] bg-amber" style={{ height: `${(x.missed / top) * 100}%` }} /> : null}
+              {x.answered ? <span className={cx('block bg-primary dark:bg-brand-soft', !x.missed && 'rounded-t-[2px]')} style={{ height: `${(x.answered / top) * 100}%` }} /> : null}
             </li>
           );
         })}
@@ -338,7 +338,7 @@ function Sources({ sources }: { sources: Insights['sources'] }) {
         <li key={s.name} className="flex items-center gap-2">
           <span className="w-[92px] truncate">{s.name}</span>
           <span className="h-1.5 flex-1 rounded-[3px] bg-subtle" aria-hidden>
-            <span className="block h-1.5 rounded-[3px] bg-[#4a63e8]" style={{ width: `${(s.share / top) * 100}%` }} />
+            <span className="block h-1.5 rounded-[3px] bg-blue" style={{ width: `${(s.share / top) * 100}%` }} />
           </span>
           <b className="w-[34px] text-right tabular-nums">{s.share}%</b>
         </li>
@@ -512,7 +512,7 @@ function Hours({ hours, zone }: { hours: number[][]; zone: string | null }) {
                   role="cell"
                   aria-label={said}
                   title={said}
-                  className={cx('block h-3.5 rounded-[2px]', n ? 'bg-[#273498] dark:bg-[#7c8fe8]' : 'bg-subtle')}
+                  className={cx('block h-3.5 rounded-[2px]', n ? 'bg-primary dark:bg-brand-soft' : 'bg-subtle')}
                   style={n ? { opacity: 0.2 + (0.8 * n) / top } : undefined}
                 />
               );
@@ -543,7 +543,7 @@ function StartPages({ pages }: { pages: NonNullable<Insights['start_pages']> }) 
             <li key={p.page} className="flex items-center gap-2" title={p.page}>
               <span className="min-w-0 flex-1 truncate">{p.page}</span>
               <span className="h-1.5 w-[64px] shrink-0 rounded-[3px] bg-subtle" aria-hidden>
-                <span className="block h-1.5 rounded-[3px] bg-[#4a63e8]" style={{ width: `${(p.share / top) * 100}%` }} />
+                <span className="block h-1.5 rounded-[3px] bg-blue" style={{ width: `${(p.share / top) * 100}%` }} />
               </span>
               <b className="w-[34px] text-right tabular-nums">{p.share}%</b>
             </li>

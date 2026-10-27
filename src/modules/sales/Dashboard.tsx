@@ -72,7 +72,7 @@ export default function Dashboard({ overview, onOpen, onList, onPick }: {
               .filter(([n]) => n > 0)
               .map(([n, label, go, tone]) => (
                 <button key={label} type="button" onClick={go} className="flex items-center gap-3 border-b border-line/70 px-3.5 py-2.5 text-left last:border-b-0 hover:bg-subtle">
-                  <b className={cx('text-[18px] tabular-nums', tone === 'red' ? 'text-danger' : 'text-[#9A4A06] dark:text-warning')}>{n}</b>
+                  <b className={cx('text-[18px] tabular-nums', tone === 'red' ? 'text-danger' : 'text-warning-ink dark:text-warning')}>{n}</b>
                   <span className="text-[12.5px] text-ink">{label}</span>
                 </button>
               ))
@@ -107,7 +107,7 @@ export default function Dashboard({ overview, onOpen, onList, onPick }: {
                   <b className="tabular-nums">{s.count}</b>
                 </span>
                 <span className="h-2 overflow-hidden rounded-[4px] bg-subtle">
-                  <span className="block h-2 rounded-[4px] bg-[#0E7C86]" style={{ width: `${(s.count / topSource) * 100}%` }} />
+                  <span className="block h-2 rounded-[4px] bg-teal" style={{ width: `${(s.count / topSource) * 100}%` }} />
                 </span>
               </div>
             ))

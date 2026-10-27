@@ -320,7 +320,7 @@ function TakePayment({ visitId }: { visitId: number }) {
           </ul>
 
           {!invoiced ? (
-            <button type="button" onClick={() => setRetailOpen(true)} className="mt-1 mb-2 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-[#C9CEDD] bg-surface text-[13px] font-bold text-primary hover:bg-subtle dark:border-line">
+            <button type="button" onClick={() => setRetailOpen(true)} className="mt-1 mb-2 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-slate-line bg-surface text-[13px] font-bold text-primary hover:bg-subtle dark:border-line">
               <Icon name="plus" size={15} /> Add retail from POS catalogue
             </button>
           ) : null}
@@ -337,7 +337,7 @@ function TakePayment({ visitId }: { visitId: number }) {
             {invoiced && visit?.invoice ? <MoneyLine label={`Paid on ${visit.invoice.number ?? 'the invoice'}`} value={-visit.invoice.paid} /> : null}
           </dl>
           <div className="mt-2 flex items-center justify-between rounded-[14px] bg-navy px-4 py-3.5 text-white">
-            <span className="text-[14px] text-[#C7D2FE]">To pay</span>
+            <span className="text-[14px] text-navy-ink">To pay</span>
             <span className="text-[28px] font-extrabold tabular-nums">{due === null ? '…' : amount(due)}</span>
           </div>
 
@@ -562,7 +562,7 @@ function Quick({ children, onClick }: { children: ReactNode; onClick: () => void
 /** Over what is due, with cash in it: give change, or keep the rest as store credit. */
 function OverChoice({ over, currency, keep, onKeep }: { over: number; currency: string; keep: boolean; onKeep: (keep: boolean) => void }) {
   return (
-    <div className="rounded-[14px] border border-[#DDD6FE] bg-[#F5F3FF] px-3.5 py-3 text-[#4C1D95] dark:border-[#4C1D95] dark:bg-[#2E1D4A] dark:text-[#DDD6FE]">
+    <div className="rounded-[14px] border border-violet-line bg-info-soft px-3.5 py-3 text-violet-ink dark:bg-violet-bg dark:text-slate-ink">
       <div className="flex items-baseline justify-between text-[17px] font-extrabold">
         <span>Over by</span>
         <span className="tabular-nums">{amount(over / 100, currency)}</span>
@@ -580,7 +580,7 @@ function OverChoice({ over, currency, keep, onKeep }: { over: number; currency: 
             onClick={() => onKeep(o.v)}
             className={cx(
               'min-h-[46px] rounded-[12px] px-2 text-[13px]',
-              keep === o.v ? 'border-2 border-[#6D28D9] bg-surface font-extrabold text-[#6D28D9] dark:border-[#C4B5FD] dark:text-[#DDD6FE]' : 'border border-[#DDD6FE] bg-transparent font-bold dark:border-[#4C1D95]',
+              keep === o.v ? 'border-2 border-violet bg-surface font-extrabold text-violet dark:border-indigo-bright dark:text-slate-ink' : 'border border-violet-line bg-transparent font-bold',
             )}
           >
             {o.label}
@@ -616,7 +616,7 @@ function RegisterBanner({ state, loading, failed }: { state?: RegisterState; loa
   }
   const s = state.session;
   return (
-    <div className="flex items-center gap-3 rounded-[14px] border border-teal-light bg-[#E6F7F8] px-3.5 py-2.5 text-[#134E4A] dark:bg-teal/15 dark:text-teal-light">
+    <div className="flex items-center gap-3 rounded-[14px] border border-teal-light bg-teal-bg px-3.5 py-2.5 text-slate-ink dark:bg-teal/15 dark:text-teal-light">
       <Icon name="store" size={20} className="shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="text-[14px] font-extrabold">
@@ -627,7 +627,7 @@ function RegisterBanner({ state, loading, failed }: { state?: RegisterState; loa
           {s.mine && desk.me ? ` by ${shortName(desk.me)}` : ''} · float {amount(s.opening_float).replace(/\.00$/, '')} · {s.sales.count} sale{s.sales.count === 1 ? '' : 's'} today
         </div>
       </div>
-      <button type="button" onClick={() => desk.go('register')} className="shrink-0 text-[12px] font-bold text-[#0F766E] underline dark:text-teal-light">
+      <button type="button" onClick={() => desk.go('register')} className="shrink-0 text-[12px] font-bold text-teal underline dark:text-teal-light">
         Open register
       </button>
     </div>
@@ -662,7 +662,7 @@ function RetailSheet({ lines, sellers, clientName, onClose, onAdd }: { lines: Re
   const less = (id: number) => setChosen((c) => c.flatMap((l) => (l.product_id !== id ? [l] : l.quantity > 1 ? [{ ...l, quantity: l.quantity - 1 }] : [])));
 
   return (
-    <div className="no-drag fixed inset-0 z-50 flex flex-col justify-end bg-[#0F1B3D]/45" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="no-drag fixed inset-0 z-50 flex flex-col justify-end bg-navy/45" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-labelledby="salon-retail" className="animate-in flex h-[min(640px,80vh)] flex-col gap-3 rounded-t-[24px] bg-surface px-[22px] pt-[18px] pb-4 shadow-[0_-20px_60px_rgba(0,0,0,.3)]">
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-0 flex-1">
@@ -671,7 +671,7 @@ function RetailSheet({ lines, sellers, clientName, onClose, onAdd }: { lines: Re
             </h2>
             <p className="text-[12px] text-ink-2">Products, prices, promotions and stock from Point of Sale / Inventory · {desk.location.name} store</p>
           </div>
-          <label className="flex min-h-[46px] w-full items-center gap-2 rounded-[12px] border border-[#C9CEDD] bg-surface px-3 focus-within:border-primary sm:w-[300px] dark:border-line">
+          <label className="flex min-h-[46px] w-full items-center gap-2 rounded-[12px] border border-slate-line bg-surface px-3 focus-within:border-primary sm:w-[300px] dark:border-line">
             <Icon name="scan" size={17} className="text-ink-3" />
             <input
               aria-label="Search or scan a barcode"
@@ -852,7 +852,7 @@ export function Paid() {
     <div className="flex flex-col gap-5 px-6 py-5 xl:flex-row xl:items-start">
       <Panel className="flex min-w-0 flex-1 flex-col gap-4">
         <div className="flex items-center gap-4">
-          <span className={cx('grid h-[60px] w-[60px] shrink-0 place-items-center rounded-[20px]', paid?.ok ? 'bg-[#DCFCE7] text-[#15803D] dark:bg-success-bg dark:text-success' : 'bg-warning-bg text-warning')}>
+          <span className={cx('grid h-[60px] w-[60px] shrink-0 place-items-center rounded-[20px]', paid?.ok ? 'bg-success-bg text-success dark:bg-success-bg dark:text-success' : 'bg-warning-bg text-warning')}>
             <Icon name={paid?.ok ? 'check' : 'warning'} size={30} strokeWidth={2.4} />
           </span>
           <div className="min-w-0">
@@ -965,7 +965,7 @@ function ReceiptRow({ l, v, b = false }: { l: string; v: string; b?: boolean }) 
 }
 
 function ReceiptRule() {
-  return <div className="my-2 border-t border-dashed border-[#151A2D]" />;
+  return <div className="my-2 border-t border-dashed border-primary" />;
 }
 
 /** The receipt as WorkSuite printed it (D12): its figures, in the receipt's own monospace. */
@@ -975,7 +975,7 @@ export function ReceiptPreview({ r }: { r: ReceiptData }) {
   const Rule = ReceiptRule;
   const short = r.template === 'salon_short';
   return (
-    <aside aria-label="Receipt" className="w-full shrink-0 bg-white px-[18px] py-5 font-mono text-[11.5px] leading-[1.55] text-[#151A2D] shadow-[0_10px_30px_rgba(15,27,61,.18)] xl:w-[320px]">
+    <aside aria-label="Receipt" className="w-full shrink-0 bg-white px-[18px] py-5 font-mono text-[11.5px] leading-[1.55] text-ink shadow-[0_10px_30px_rgba(15,27,61,.18)] xl:w-[320px]">
       <div className="text-center text-[14px] font-bold tracking-[.04em] uppercase">{r.company.name}</div>
       {r.company.address ? <div className="text-center">{r.company.address}</div> : null}
       {r.company.phone || r.company.registration ? <div className="text-center">{[r.company.phone ? `Tel ${r.company.phone}` : null, r.company.registration].filter(Boolean).join(' · ')}</div> : null}

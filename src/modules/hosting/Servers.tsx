@@ -116,7 +116,7 @@ function ServerCard({ s, nav, onPower, onMenu }: { s: Server; nav: Nav; onPower:
       className="flex flex-col gap-1.5 rounded-[10px] border border-line bg-surface px-3.5 py-3"
     >
       <div className="flex items-center gap-2">
-        <span className={cx('size-2 shrink-0 rounded-full', tone === 'green' ? 'bg-[#1F7A4D]' : tone === 'red' ? 'bg-[#B42318]' : 'bg-[#8A90A2]')} title={s.status_label ?? s.status ?? undefined} />
+        <span className={cx('size-2 shrink-0 rounded-full', tone === 'green' ? 'bg-success' : tone === 'red' ? 'bg-danger' : 'bg-muted')} title={s.status_label ?? s.status ?? undefined} />
         <button type="button" className="min-w-0 flex-1 truncate text-left text-[13.5px] font-bold text-ink hover:underline" onClick={(e) => nav.openServer(s.id, e.metaKey || e.ctrlKey ? 'tab' : 'here', s.name)}>
           {s.name}
         </button>

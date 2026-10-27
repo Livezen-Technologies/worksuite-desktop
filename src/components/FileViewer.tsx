@@ -148,7 +148,7 @@ function ImageView({ url, name }: { url: string; name: string }) {
           {actual ? 'Fit' : '100%'}
         </button>
       </Toolbar>
-      <div className={cx('min-h-0 flex-1 overflow-auto bg-[#E9ECF2] p-4 scroll-thin dark:bg-black/30', !actual && 'flex items-center justify-center')}>
+      <div className={cx('min-h-0 flex-1 overflow-auto bg-info-bg p-4 scroll-thin dark:bg-black/30', !actual && 'flex items-center justify-center')}>
         <img src={url} alt={name} className={cx('shadow-md', actual ? 'max-w-none' : 'max-h-full max-w-full object-contain')} />
       </div>
     </div>
@@ -258,7 +258,7 @@ function PdfView({ blob, name, onPage }: { blob: Blob; name: string; onPage?: (p
       </Toolbar>
       <div
         ref={scroller}
-        className="min-h-0 flex-1 overflow-auto bg-[#E9ECF2] py-4 scroll-thin dark:bg-black/30"
+        className="min-h-0 flex-1 overflow-auto bg-info-bg py-4 scroll-thin dark:bg-black/30"
         onScroll={(e) => {
           // The page whose top is nearest the top of the view is the one being read.
           const top = e.currentTarget.getBoundingClientRect().top;

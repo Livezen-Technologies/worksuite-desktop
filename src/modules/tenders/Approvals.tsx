@@ -59,7 +59,7 @@ export default function Approvals({ id, org, rows, canManage, canApprove }: { id
                 <span className="flex shrink-0 gap-1.5">
                   <button
                     type="button"
-                    className={btnSmall + ' !h-7 !border-[#9BD3B3] !text-[#145C39] dark:!text-success'}
+                    className={btnSmall + ' !h-7 !border-success-line !text-success-ink dark:!text-success'}
                     disabled={busy !== null}
                     onClick={() => void run(`a${a.id}`, () => decideApproval(a.id, 'approved'), `${a.role_label ?? 'The step'} approved.`)}
                   >

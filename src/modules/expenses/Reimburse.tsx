@@ -182,7 +182,7 @@ function Runs({ orgId, orgs, onGo }: ScreenProps & { orgId: number }) {
                   <b className="text-[13px] text-ink tabular-nums">{money(p.total, cur)}</b>
                   {p.advance_outstanding ? (
                     // Not a refusal, a fact finance should see before transferring: they already hold company money.
-                    <span className="rounded-[6px] bg-[#FFF4E0] px-2 py-0.5 text-[11.5px] font-semibold text-[#9A4A06] dark:bg-warning-bg dark:text-warning">also holds {money(p.advance_outstanding, cur)} in unsettled advances</span>
+                    <span className="rounded-[6px] bg-warning-bg px-2 py-0.5 text-[11.5px] font-semibold text-warning-ink dark:bg-warning-bg dark:text-warning">also holds {money(p.advance_outstanding, cur)} in unsettled advances</span>
                   ) : null}
                 </div>
                 <div className="mt-1 flex flex-col">
@@ -626,7 +626,7 @@ function Postings({ orgId, orgs }: ScreenProps & { orgId: number }) {
               A batch takes every approved claim in a period that is not already in one.
             </div>
           ) : null}
-          {items.length >= LIST_CAP ? <div className="border-t border-line bg-ground px-3.5 py-2 text-[12px] font-semibold text-[#9A4A06] dark:text-warning">The newest {LIST_CAP} only — older batches are not listed.</div> : null}
+          {items.length >= LIST_CAP ? <div className="border-t border-line bg-ground px-3.5 py-2 text-[12px] font-semibold text-warning-ink dark:text-warning">The newest {LIST_CAP} only — older batches are not listed.</div> : null}
         </div>
       </div>
 

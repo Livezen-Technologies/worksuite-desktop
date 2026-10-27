@@ -24,7 +24,7 @@ export default function Settlements({ open, onOpen, onRun }: { open: number | nu
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start gap-2.5">
           <Card>
             {list.map((s) => (
-              <button key={s.id} type="button" onClick={() => onOpen(s.id)} aria-current={s.id === id ? 'true' : undefined} className={cx('flex w-full items-center gap-2 border-b border-line/70 px-3.5 py-2.5 text-left text-[12.5px]', s.id === id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+              <button key={s.id} type="button" onClick={() => onOpen(s.id)} aria-current={s.id === id ? 'true' : undefined} className={cx('flex w-full items-center gap-2 border-b border-line/70 px-3.5 py-2.5 text-left text-[12.5px]', s.id === id ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
                 <span className="min-w-0 flex-1">
                   <b className="block truncate">{s.employee_name}</b>
                   <span className="text-[11.5px] text-ink-2">{s.last_working_date ? `Last day ${shortDate(s.last_working_date)}` : ''}{s.open_items ? ` · ${s.open_items} open` : ''}</span>

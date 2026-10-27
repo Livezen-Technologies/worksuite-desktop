@@ -45,7 +45,7 @@ export function MailImageViewer({ pictures, start, onClose }: { pictures: Framed
   const tool = 'inline-flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-[8px] px-2 text-[13px] font-semibold text-white/90 hover:bg-white/10 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-white/80';
   const name = pic.alt || text('Picture {n} of {m}', { n: i + 1, m: pictures.length });
   return (
-    <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label={name} data-mail-image-viewer className="no-drag fixed inset-0 z-[60] flex flex-col bg-[#080c18]/95 outline-none">
+    <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label={name} data-mail-image-viewer className="no-drag fixed inset-0 z-[60] flex flex-col bg-stage/95 outline-none">
       <div className="flex h-[52px] shrink-0 items-center gap-1 border-b border-white/10 pl-3" style={{ paddingRight: topBarPaddingRight(12) }}>
         <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-white" title={name}>
           {name}

@@ -47,14 +47,14 @@ import { clickOnKey } from '../../components/press';
 
 const TONE: Record<string, string> = {
   draft: 'bg-subtle text-ink-2',
-  pending_approval: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  approved: 'bg-[#E3F4F5] text-[#0B6770] dark:bg-teal/15 dark:text-teal',
+  pending_approval: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  approved: 'bg-teal-bg text-teal-ink dark:bg-teal/15 dark:text-teal',
   sent: 'bg-selection text-primary',
-  viewed: 'bg-[#EEEAFB] text-[#3730A3] dark:bg-[#2A1F45] dark:text-[#C4A8F0]',
-  accepted: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
-  converted: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
-  declined: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  expired: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
+  viewed: 'bg-violet-bg text-primary dark:text-violet-ink',
+  accepted: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
+  converted: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
+  declined: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  expired: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
   withdrawn: 'bg-subtle text-ink-3',
 };
 
@@ -65,8 +65,8 @@ export function DocStatus({ status }: { status: string }) {
 /** The green "reading now" mark. */
 function LiveDot({ label = 'Reading now' }: { label?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-[#145C39] dark:text-success" title={label}>
-      <span className="h-2 w-2 animate-pulse rounded-full bg-[#1F7A4D] dark:bg-success" aria-hidden /> now
+    <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-success-ink dark:text-success" title={label}>
+      <span className="h-2 w-2 animate-pulse rounded-full bg-success dark:bg-success" aria-hidden /> now
     </span>
   );
 }
@@ -125,7 +125,7 @@ export default function Proposals({ openId, onOpen, onOpenDeal, onOpenEstimate }
               options={[{ id: '', label: 'All', count: meta?.total ?? null }, ...PROPOSAL_STATUSES.filter(([s]) => s === status || count(s) > 0 || !meta?.counts).map(([s, l]) => ({ id: s as Filter, label: l, count: count(s) || null }))]}
             />
           </div>
-          <div role="row" className="flex shrink-0 items-center gap-2 border-b border-line bg-[#F7F8FB] px-3 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+          <div role="row" className="flex shrink-0 items-center gap-2 border-b border-line bg-info-soft px-3 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
             <span role="columnheader" className="min-w-0 flex-1">Proposal</span>
             <span role="columnheader" className="w-[118px] shrink-0">Status</span>
             <span role="columnheader" className="w-[84px] shrink-0 text-right">Value</span>
@@ -312,7 +312,7 @@ export function ProposalPreview({ id, onClose, onOpen, onOpenDeal, onOpenEstimat
       </div>
 
       {p.approval && p.approval.status !== 'none' && (p.status === 'pending_approval' || p.approval.status === 'sent_back') ? (
-        <div role="note" className={cx('rounded-[8px] border px-3 py-2 text-[12.5px]', p.approval.status === 'sent_back' ? 'border-danger/30 bg-danger-bg text-ink' : 'border-[#F5C77E] bg-[#FFF8EB] text-ink dark:border-warning/40 dark:bg-warning-bg')}>
+        <div role="note" className={cx('rounded-[8px] border px-3 py-2 text-[12.5px]', p.approval.status === 'sent_back' ? 'border-danger/30 bg-danger-bg text-ink' : 'border-warning-line bg-warning-bg text-ink dark:border-warning/40 dark:bg-warning-bg')}>
           <b>{p.approval.status === 'sent_back' ? 'Sent back' : 'Needs approval'}</b>
           {p.approval.rules.length ? ` — ${p.approval.rules.map((r) => r.label).join('; ')}` : ''}
           {p.approval.note ? <span className="block text-ink-2">“{p.approval.note}”{nameOf(p.approval.decided_by) ? ` — ${nameOf(p.approval.decided_by)}` : ''}</span> : null}

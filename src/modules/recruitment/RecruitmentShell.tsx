@@ -7,6 +7,8 @@ import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { allowed, dayBounds, fetchApprovals, fetchMyInterviews, K, useMeta } from './api';
 import { NATIVE, RecruitmentRail, type RecView } from './Rail';
+import { OfflineReadOnlyBanner } from '../../components/OfflineReadOnly';
+import { useOfflineReadOnly } from '../../core/offline-read';
 
 /**
  * Recruitment on the desktop (gap doc §9.3, D01–D05), addressed as
@@ -41,13 +43,15 @@ export default function RecruitmentShell(_props: ModuleProps) {
   const approvals = useQuery({ queryKey: K.approvals, queryFn: ({ signal }) => fetchApprovals(signal), enabled: !!m, refetchInterval: 120_000 });
   const openCards = (today.data ?? []).filter((i) => i.my_role !== 'OBSERVER' && i.my_evaluation?.status !== 'SUBMITTED').length;
 
+  // Offline (D-G14): read from this computer's copy; moving, scoring and deciding wait for the connection.
+  const { readOnly } = useOfflineReadOnly('recruitment');
   const can = {
     view: allowed(m, 'candidate.view'),
-    move: allowed(m, 'candidate.move_stage'),
-    evaluate: allowed(m, 'interview.evaluate'),
-    createJob: allowed(m, 'job.create'),
-    approveReq: allowed(m, 'requisition.approve'),
-    approveOffer: allowed(m, 'offer.approve'),
+    move: allowed(m, 'candidate.move_stage') && !readOnly,
+    evaluate: allowed(m, 'interview.evaluate') && !readOnly,
+    createJob: allowed(m, 'job.create') && !readOnly,
+    approveReq: allowed(m, 'requisition.approve') && !readOnly,
+    approveOffer: allowed(m, 'offer.approve') && !readOnly,
   };
   const web = (path: string) => void call('app:openInBrowser', { path });
   const to = (v: RecView, extra = '') => go(`/recruitment?tab=${v}${job ? `&job=${job}` : ''}${extra}`);
@@ -75,7 +79,9 @@ export default function RecruitmentShell(_props: ModuleProps) {
           can={{ review: can.view, evaluate: can.evaluate, createJob: can.createJob }}
         />
       </SidePanel>
-      <main className="min-w-0 flex-1 overflow-hidden bg-ground" aria-label={`Recruitment · ${TITLES[view]}`}>
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-ground" aria-label={`Recruitment · ${TITLES[view]}`}>
+        <OfflineReadOnlyBanner module="recruitment" />
+        <div className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={<Spinner />}>
           {view === 'pipe' ? (
             can.view ? <Pipeline job={job} canMove={can.move} onJob={(id) => go(`/recruitment?tab=pipe&job=${id}`)} onWeb={web} /> : <Denied />
@@ -89,6 +95,7 @@ export default function RecruitmentShell(_props: ModuleProps) {
             <Approvals data={approvals} can={{ requisition: can.approveReq, offer: can.approveOffer, selection: can.approveOffer || can.approveReq }} onWeb={web} />
           )}
         </Suspense>
+        </div>
       </main>
     </div>
   );

@@ -25,7 +25,7 @@ export default function Home({ data, onMeeting, onGo }: { data: Dashboard; onMee
 
   const counter = (n: number | undefined, label: string, go: BoardView) => (
     <button type="button" onClick={() => onGo(go)} className="flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left text-[13px] hover:bg-subtle">
-      <span className="flex h-[24px] min-w-[24px] items-center justify-center rounded-full bg-[#EEF1FD] px-1.5 text-[12px] font-bold text-primary dark:bg-selection">{n ?? 0}</span>
+      <span className="flex h-[24px] min-w-[24px] items-center justify-center rounded-full bg-selection px-1.5 text-[12px] font-bold text-primary dark:bg-selection">{n ?? 0}</span>
       <span className="flex-1">{label}</span>
       <Icon name="chevron-right" size={14} className="text-ink-3" />
     </button>

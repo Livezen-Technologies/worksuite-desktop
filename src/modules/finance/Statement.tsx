@@ -317,7 +317,7 @@ export default function Statement({ company, accountId, onBack, onGo }: { compan
                   {t.reference || t.counterparty ? <span className="truncate text-[11.5px] text-ink-3">{[t.counterparty, t.reference ? `Ref ${t.reference}` : ''].filter(Boolean).join(' · ')}</span> : null}
                   {t.note ? <span className="truncate text-[11.5px] text-ink-3" title={t.note}>{t.status === 'ignored' ? `Parked: ${t.note}` : t.note}</span> : null}
                 </span>
-                <span className={cx('w-[130px] shrink-0 text-right font-semibold whitespace-nowrap tabular-nums', isNegative(t.amount) ? 'text-danger' : 'text-[#166534] dark:text-success')}>{money(t.amount)}</span>
+                <span className={cx('w-[130px] shrink-0 text-right font-semibold whitespace-nowrap tabular-nums', isNegative(t.amount) ? 'text-danger' : 'text-success-ink dark:text-success')}>{money(t.amount)}</span>
                 <span className="w-[130px] shrink-0 text-right whitespace-nowrap text-ink-3 tabular-nums">{t.running_balance === null ? '—' : money(t.running_balance)}</span>
                 <span className="w-[100px] shrink-0">
                   <Pill tone={TXN_TONE[t.status] ?? 'grey'}>{TXN_LABEL[t.status] ?? t.status}</Pill>

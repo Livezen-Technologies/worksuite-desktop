@@ -65,7 +65,7 @@ export default function WalkIn({ onDone, onWaitlist }: { onDone: (id: number) =>
         <Section title="Service">
           <div className="flex flex-col gap-1 px-3 pb-3">
             {services.map((s) => (
-              <button key={s.id} type="button" aria-pressed={service === s.id} onClick={() => (setService(s.id), setPick(null))} className={cx('flex items-center rounded-[8px] border px-2.5 py-2 text-left text-[13px]', service === s.id ? 'border-primary bg-[#EEF1FD] font-bold dark:bg-selection' : 'border-line hover:bg-subtle')}>
+              <button key={s.id} type="button" aria-pressed={service === s.id} onClick={() => (setService(s.id), setPick(null))} className={cx('flex items-center rounded-[8px] border px-2.5 py-2 text-left text-[13px]', service === s.id ? 'border-primary bg-selection font-bold dark:bg-selection' : 'border-line hover:bg-subtle')}>
                 <span className="flex-1">{s.name}</span>
                 <span className="text-[11.5px] text-ink-3">{`${s.duration_min} min`}</span>
               </button>
@@ -78,7 +78,7 @@ export default function WalkIn({ onDone, onWaitlist }: { onDone: (id: number) =>
             {who.map((p) => {
               const on = pick?.provider === p.id;
               return (
-                <div key={p.id} className={cx('flex items-center gap-2 rounded-[8px] border px-2.5 py-2', on ? 'border-primary bg-[#EEF1FD] dark:bg-selection' : 'border-line')}>
+                <div key={p.id} className={cx('flex items-center gap-2 rounded-[8px] border px-2.5 py-2', on ? 'border-primary bg-selection dark:bg-selection' : 'border-line')}>
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-bold text-ink">{p.name}</div>
                     <div className="text-[12px] text-ink-3">{p.first ? (p.wait! <= 5 ? `Free now · ${p.first.label}` : `Free at ${p.first.label} · ${p.wait} min wait`) : 'Not free again today'}</div>

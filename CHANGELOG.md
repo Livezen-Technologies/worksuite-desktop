@@ -14,7 +14,37 @@ person who has to live with the change — what it does, and where it bites.
 ## Unreleased
 
 The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G19, D-G21, D-G22, D-G24, D-G25), and
-its release and CI round (D-G01, D-G02, D-G06, D-G20).
+its release and CI round (D-G01, D-G02, D-G06, D-G20), and its UX round (D-G09, D-G12, D-G14, D-G23).
+
+### Added (UX round)
+
+- **PDF Studio tools on this computer.** With the PDF engine the app already ships: a PDF from pictures or blank
+  pages; PDFs combined with page ranges and a bookmark per file; pages duplicated and split into files; every page as a
+  PNG and the text as a .txt; a protected copy (AES-256, passwords and permissions) and an unlocked copy; true
+  redaction of what the search found (the text taken out of the page, not covered); Bates numbers, headers, footers and
+  watermarks stamped on the pages. What needs the server or WorkSuite Office now says so ("Needs the WorkSuite server",
+  with the Pro panel for Drive PDFs; "Needs WorkSuite Office") instead of showing a button that never works; Standards,
+  Print production and Measure, with nothing working yet, are not listed. (D-G12)
+- **Finance, Expenses, Marketing, Cheque Manager and Recruitment read offline.** What was last read opens from this
+  computer's encrypted copy under an "Offline · read-only" banner with its "as of" time; every change waits for the
+  connection and is refused before it is sent. Share links, exports, files, receipts, cards, webhooks, credentials and
+  one-time print checks are never kept. Cheque Manager opens offline to read; nothing prints. Board's manifest now
+  declares its offline vault. (D-G14)
+
+### Changed (UX round)
+
+- **One Settings kit everywhere.** The Settings kit moved to `src/components/SettingsKit.tsx`, so modules can use it:
+  the eleven Settings screens that drew their own (accounts, Admin Center, ringing, connection health, the custom
+  timeout, the launcher, license, links, the ring check, the sidebar, updates) and the module settings screens — Mail's
+  eight, Chat's Messenger, Instagram and WhatsApp settings and returning visitors, CRM, Finance, Payroll, Phone admin,
+  Projects, Social Media admin, Notifications, Contacts accounts, Drive, Assets, Billing's reminders, templates and
+  payments, Appointments' desk, Meet recording, the guest profile's backup and My account › Preferences — now draw
+  the same headers, cards and rows. POS's till settings keep the till's touch design. (D-G09)
+- **Colours from the design tokens, light and dark.** About 3,100 hard-coded hex colours in classes became tokens:
+  colour families with a dark value each (so the ~900 that had none now follow the dark theme), and stage tokens for
+  surfaces dark in both themes (calls, meetings, ring cards, media viewers, editors, the lock screen). A lint rule
+  refuses a raw hex in a class or a style, outside a reviewed allow-list (other companies' marks, the website widget
+  preview, email content, a QR code). (D-G23)
 
 ### Security
 

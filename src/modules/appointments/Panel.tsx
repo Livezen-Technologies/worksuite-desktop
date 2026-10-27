@@ -83,7 +83,7 @@ export default function Panel({ id, settings, onClose }: { id: number; settings:
               {a.status === 'no_show' && can('confirmed') ? <Button size="sm" variant="secondary" onClick={() => void move(a, 'confirmed')}>Undo no-show</Button> : null}
             </div>
 
-            {pinned.map((n) => <p key={n.id} className="mt-3 mb-0 rounded-[8px] bg-[#EEF1FD] px-3 py-2 text-[12.5px] text-[#23349E] dark:bg-selection dark:text-primary">{`Pinned · ${n.body}`}</p>)}
+            {pinned.map((n) => <p key={n.id} className="mt-3 mb-0 rounded-[8px] bg-selection px-3 py-2 text-[12.5px] text-primary dark:bg-selection dark:text-primary">{`Pinned · ${n.body}`}</p>)}
             {a.notes ? <p className="mt-2 mb-0 text-[12.5px] text-ink-2">{`Client note: ${a.notes}`}</p> : null}
             {a.internal_notes ? <p className="mt-1 mb-0 text-[12.5px] text-ink-2">{`Internal: ${a.internal_notes}`}</p> : null}
             {a.cancel_reason ? <p className="mt-1 mb-0 text-[12.5px] text-ink-2">{`Reason: ${a.cancel_reason}`}</p> : null}

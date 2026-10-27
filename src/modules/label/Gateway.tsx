@@ -44,7 +44,7 @@ export default function Gateway(_: ViewProps) {
     return (
       <div className="flex max-w-[640px] flex-col gap-3 p-4">
         <h1 className="m-0 text-[18px] font-extrabold text-ink">Print Gateway</h1>
-        {g.connection === 'revoked' ? <p className="m-0 rounded-[8px] bg-[#FDECEA] px-3 py-2 text-[12.5px] text-[#B42318]">This gateway was revoked on the server; its key was deleted. Pair it again with a new code.</p> : null}
+        {g.connection === 'revoked' ? <p className="m-0 rounded-[8px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger">This gateway was revoked on the server; its key was deleted. Pair it again with a new code.</p> : null}
         <p className="m-0 text-[12.5px] text-ink-2">Make this computer the gateway for the label printers next to it, so WorkSuite in the cloud can print to them. It connects out to WorkSuite only, accepts only signed jobs, and prints only to printers an administrator approved.</p>
         <Section title="Pair with WorkSuite">
           <form className="flex flex-col gap-3 p-3.5" onSubmit={(e) => (e.preventDefault(), pair.mutate())}>
@@ -78,7 +78,7 @@ export default function Gateway(_: ViewProps) {
             <dt className="text-ink-3">Device key</dt><dd className="m-0">{g.keyStore ? KEYSTORE[g.keyStore] : '—'}</dd>
             <dt className="text-ink-3">Version</dt><dd className="m-0">{`${g.version}${g.updateChannel ? ` · ${g.updateChannel} channel` : ''}`}</dd>
           </dl>
-          {g.problem ? <p className="m-0 border-t border-line px-3.5 py-2 text-[12px] text-[#B42318] dark:text-danger">{g.problem}</p> : null}
+          {g.problem ? <p className="m-0 border-t border-line px-3.5 py-2 text-[12px] text-danger dark:text-danger">{g.problem}</p> : null}
           <div className="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2 text-[12px]">
             {g.update ? (
               <>

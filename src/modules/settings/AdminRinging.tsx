@@ -9,6 +9,7 @@ import { Icon } from '../../components/Icon';
 import type { ModuleSettings } from '../../components/ModuleSettingsForm';
 import { Select } from '../../components/Select';
 import { ErrorNote, NumberField, Spinner, cx } from '../../components/ui';
+import { SectionHeader, SettingRow, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Admin Center › Chat › Ringing (WS-WCHAT design P-03, RING-UI-09; RING-01…08, RING-60, ESC-07): the organisation's
@@ -99,70 +100,58 @@ export function AdminRinging() {
     }
   };
 
-  const row = 'flex items-center gap-3 px-[18px] py-3';
-
   return (
     <div className="flex h-full min-h-0">
       <AdminNav here="ringing" />
       <main className="min-w-0 flex-1 overflow-y-auto px-10 py-6 scroll-thin">
-        <div className="flex max-w-[840px] flex-col gap-3.5">
-          <div>
-            <h2 className="text-[20px] leading-tight font-bold text-ink">Website chat ringing</h2>
-            <p className="mt-1.5 text-[14px] text-ink-2">Who is rung, and when. Each person picks their own tone and device.</p>
-          </div>
+        <div className="flex max-w-[840px] flex-col">
+          <SectionHeader title="Website chat ringing" hint="Who is rung, and when. Each person picks their own tone and device." />
           {/* The fixed rule (RING-01, RING-02): no ring time to set any more. */}
-          <div className="flex items-center gap-3 rounded-[12px] border border-[#D5DBF7] bg-selection px-4 py-3 dark:border-primary/30">
+          <div className="mb-5 flex items-center gap-3 rounded-[12px] border border-primary/20 bg-selection px-4 py-3 dark:border-primary/30">
             <Icon name="bell" size={22} className="shrink-0 text-primary" />
             <div>
-              <div className="text-[14px] font-bold text-[#1B2570] dark:text-primary">Rings until someone joins</div>
+              <div className="text-[14px] font-bold text-primary">Rings until someone joins</div>
               <div className="text-[12px] text-ink-2">Joining is accepting the chat, opening it, or replying. The ring then stops for everyone.</div>
             </div>
           </div>
           {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : (
             <>
-              <section aria-labelledby="ring-who" className="rounded-[12px] border border-line bg-surface">
-                <h3 id="ring-who" className="border-b border-line px-[18px] py-[11px] text-[11px] font-bold tracking-[1px] text-ink-3">WHO IS RUNG, AND WHEN</h3>
-                {LADDER.map((l, i) => (
-                  <div key={l.key} className={cx('flex flex-col', i < LADDER.length - 1 && 'border-b border-line')}>
-                    <div className={row}>
-                      <label htmlFor={l.key} className="flex-1 text-[14px] text-ink">{l.label}</label>
-                      <NumberField
-                        id={l.key}
-                        size="sm"
-                        width={70}
-                        min={0}
-                        max={3600}
-                        value={value(l.key)}
-                        disabled={!editable}
-                        invalid={!!problems[l.key]}
-                        aria-describedby={problems[l.key] || notes[l.key] ? `${l.key}-why` : undefined}
-                        onValueChange={(v) => set(l.key, v)}
-                      />
-                      <span className="w-14 text-[13px] text-ink-3">seconds</span>
-                    </div>
-                    {problems[l.key] || notes[l.key] ? (
-                      <p id={`${l.key}-why`} className={cx('-mt-1.5 px-[18px] pb-2.5 text-right text-[12px]', problems[l.key] ? 'text-danger' : 'text-[#9A4A06] dark:text-warning')}>{problems[l.key] ?? notes[l.key]}</p>
-                    ) : null}
-                  </div>
+              <SettingsGroup title="WHO IS RUNG, AND WHEN">
+                {LADDER.map((l) => (
+                  <SettingRow
+                    key={l.key}
+                    label={<label htmlFor={l.key}>{l.label}</label>}
+                    keywords={l.label}
+                    hint={
+                      problems[l.key] || notes[l.key] ? (
+                        <span id={`${l.key}-why`} className={cx('text-[12px]', problems[l.key] ? 'text-danger' : 'text-warning-ink')}>{problems[l.key] ?? notes[l.key]}</span>
+                      ) : undefined
+                    }
+                  >
+                    <NumberField
+                      id={l.key}
+                      size="sm"
+                      width={70}
+                      min={0}
+                      max={3600}
+                      value={value(l.key)}
+                      disabled={!editable}
+                      invalid={!!problems[l.key]}
+                      aria-describedby={problems[l.key] || notes[l.key] ? `${l.key}-why` : undefined}
+                      onValueChange={(v) => set(l.key, v)}
+                    />
+                    <span className="w-14 text-[13px] text-ink-3">seconds</span>
+                  </SettingRow>
                 ))}
-              </section>
-              <section aria-labelledby="ring-stop" className="rounded-[12px] border border-line bg-surface">
-                <h3 id="ring-stop" className="border-b border-line px-[18px] py-[11px] text-[11px] font-bold tracking-[1px] text-ink-3">WHEN IT STOPS WITHOUT A JOIN</h3>
-                <div className={cx(row, 'border-b border-line')}>
-                  <div className="flex-1">
-                    <div className="text-[14px] text-ink">Stop when the visitor has left the site for</div>
-                    <div className="text-[12px] text-ink-3">The chat moves to Missed chats.</div>
-                  </div>
+              </SettingsGroup>
+              <SettingsGroup title="WHEN IT STOPS WITHOUT A JOIN">
+                <SettingRow label="Stop when the visitor has left the site for" hint="The chat moves to Missed chats.">
                   <Select aria-label="Stop when the visitor has left the site for" value={value(GONE)} options={GONE_OPTIONS} disabled={!editable} onValueChange={(v) => set(GONE, v)} className="w-[140px]" />
-                </div>
-                <div className={row}>
-                  <div className="flex-1">
-                    <div className="text-[14px] text-ink">Offline enquiries</div>
-                    <div className="text-[12px] text-ink-3">A visitor still on the site always rings until joined.</div>
-                  </div>
+                </SettingRow>
+                <SettingRow label="Offline enquiries" hint="A visitor still on the site always rings until joined.">
                   <Select aria-label="Offline enquiries" value={value(OFFLINE)} options={OFFLINE_OPTIONS} disabled={!editable} onValueChange={(v) => set(OFFLINE, v)} className="w-[280px]" />
-                </div>
-              </section>
+                </SettingRow>
+              </SettingsGroup>
               {editable ? (
                 <div className="flex justify-end gap-2.5">
                   <button type="button" disabled={busy} onClick={() => setDraft({})} className="h-9 rounded-[8px] border border-line bg-surface px-[18px] text-[13px] font-semibold text-ink hover:bg-subtle disabled:opacity-60">Cancel</button>

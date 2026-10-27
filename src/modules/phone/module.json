@@ -1,6 +1,6 @@
 {
     "module": "phone",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "paths": [
         "electron/services/phone.ts",
         "shared/phone.ts",

@@ -168,7 +168,7 @@ export function AdminQuarantineSide({ item }: { item: AdminQuarantineItem }) {
         </span>
       </div>
       {item.request ? (
-        <div className="flex flex-col gap-1 rounded-[10px] bg-[#FDF0E1] px-3 py-2.5 text-[#7A3B05] dark:bg-[#3A2610] dark:text-[#F5C08A]">
+        <div className="flex flex-col gap-1 rounded-[10px] bg-warning-bg px-3 py-2.5 text-warning-strong">
           <b>{text('Release request')}</b>
           {item.request.note ? <span>“{item.request.note}”</span> : <span>{text('No note.')}</span>}
           {item.request.decided_at ? <span>{text('Decided {date}: {note}', { date: dateLabel(item.request.decided_at), note: item.request.decision_note ?? item.request.state })}</span> : null}
@@ -178,7 +178,7 @@ export function AdminQuarantineSide({ item }: { item: AdminQuarantineItem }) {
         <b className="text-ink">{text('Why it was held')}</b>
         {why.length ? why.map((r) => (
           <p key={r.code} className="flex gap-2 leading-[1.4] text-ink">
-            <span aria-hidden className="mt-[6px] h-[7px] w-[7px] shrink-0 rounded-full bg-[#D25B4B]" />
+            <span aria-hidden className="mt-[6px] h-[7px] w-[7px] shrink-0 rounded-full bg-red" />
             {r.text}
           </p>
         )) : <p className="text-ink-3">{text('No details were recorded.')}</p>}

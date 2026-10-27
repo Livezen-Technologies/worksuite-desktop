@@ -287,7 +287,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
             {/* Merge with another visitor (#222): the same person under two names, after a preview, undoable. */}
             {!mini && canReply && data.profile ? (
               <button type="button" onClick={() => setMerging(true)} title={data.profile.suggestions ? 'Possibly the same person as another visitor' : 'Merge with another visitor'} className="flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
-                <Icon name="users" size={13} /> Merge{data.profile.suggestions ? <span className="ml-0.5 rounded-full bg-warning-bg px-1.5 text-[10.5px] text-[#9A4A06] dark:text-warning">{data.profile.suggestions}</span> : null}
+                <Icon name="users" size={13} /> Merge{data.profile.suggestions ? <span className="ml-0.5 rounded-full bg-warning-bg px-1.5 text-[10.5px] text-warning-ink dark:text-warning">{data.profile.suggestions}</span> : null}
               </button>
             ) : null}
             {merging && data.profile ? <MergeDialog keepId={data.profile.visitor_id} keepName={name} onClose={() => setMerging(false)} /> : null}
@@ -530,7 +530,7 @@ function Controls({ data, row, me, canReply, onDone, compact = false }: { data: 
       <Select aria-label="Priority" disabled={busy || closed} value={priority} onChange={(e) => void run(() => websiteAction(c.id, 'priority', { priority: e.target.value }))} className={control}>
         {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
       </Select>
-      <button type="button" aria-pressed={c.is_starred} disabled={busy} onClick={() => void run(() => websiteAction(c.id, 'star', { on: !c.is_starred }))} className={cx('h-[30px] rounded-[7px] border px-2 text-[12px]', c.is_starred ? 'border-warning bg-warning-bg font-semibold text-[#9A4A06] dark:text-warning' : 'border-line bg-surface text-ink hover:bg-subtle')}>
+      <button type="button" aria-pressed={c.is_starred} disabled={busy} onClick={() => void run(() => websiteAction(c.id, 'star', { on: !c.is_starred }))} className={cx('h-[30px] rounded-[7px] border px-2 text-[12px]', c.is_starred ? 'border-warning bg-warning-bg font-semibold text-warning-ink dark:text-warning' : 'border-line bg-surface text-ink hover:bg-subtle')}>
         {c.is_starred ? '★ Starred' : 'Star'}
       </button>
       {close}
@@ -670,7 +670,7 @@ function VisitorPanel({ drawer, v, data, online, canReply, files, onDone, top, p
                     {p.url ? pathOf(p.url) : (p.title ?? 'page')}
                   </div>
                   <div className="text-[11px] text-ink-3">{notes}</div>
-                  <span aria-hidden="true" className={cx('absolute top-[4px] -left-[17px] rounded-full', current ? 'h-2 w-2 bg-primary shadow-[0_0_0_3px_var(--color-selection)]' : 'h-1.5 w-1.5 -translate-x-px bg-[#C3CCF6] dark:bg-primary/50')} />
+                  <span aria-hidden="true" className={cx('absolute top-[4px] -left-[17px] rounded-full', current ? 'h-2 w-2 bg-primary shadow-[0_0_0_3px_var(--color-selection)]' : 'h-1.5 w-1.5 -translate-x-px bg-primary-soft dark:bg-primary/50')} />
                 </li>
               );
             })}

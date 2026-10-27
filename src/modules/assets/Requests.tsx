@@ -118,7 +118,7 @@ export default function Requests({ can, active, open }: { org: number; can: Can;
         <Card>
           {q.isLoading ? <Spinner /> : q.error ? <div className="p-3"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div> : null}
           {rows.map((r) => (
-            <button key={r.id} type="button" onClick={() => setSel(r.id)} aria-selected={r.id === cur?.id} className={cx('flex w-full items-start gap-2 border-t border-line/70 px-3.5 py-2.5 text-left text-[12.5px]', r.id === cur?.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+            <button key={r.id} type="button" onClick={() => setSel(r.id)} aria-selected={r.id === cur?.id} className={cx('flex w-full items-start gap-2 border-t border-line/70 px-3.5 py-2.5 text-left text-[12.5px]', r.id === cur?.id ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
               {stage === 'waiting' ? <Checkbox aria-label={`Select ${r.request_no ?? r.id}`} checked={picked.has(r.id)} onChange={() => undefined} onClick={(e) => (e.stopPropagation(), setPicked((p) => { const x = new Set(p); if (x.has(r.id)) x.delete(r.id); else x.add(r.id); return x; }))} /> : null}
               <span className="min-w-0 flex-1">
                 <b className="block truncate">{r.title}</b>
@@ -199,7 +199,7 @@ function Fulfil({ r, onClose, onDone }: { r: AssetRequest; onClose: () => void; 
       {stock.isPending ? <Spinner /> : null}
       <div role="radiogroup" aria-label="Asset" className="flex flex-col gap-1.5">
         {list.map((x) => (
-          <label key={x.id} className={cx('flex cursor-pointer items-center gap-2 rounded-[8px] border px-3 py-2 text-[12.5px]', x.id === choice ? 'border-primary bg-[#EEF1FD] dark:bg-selection' : 'border-line')}>
+          <label key={x.id} className={cx('flex cursor-pointer items-center gap-2 rounded-[8px] border px-3 py-2 text-[12.5px]', x.id === choice ? 'border-primary bg-selection dark:bg-selection' : 'border-line')}>
             <input type="radio" name="asset" checked={x.id === choice} onChange={() => setPick(x.id)} />
             <span className="font-mono text-[11px]">{x.asset_code}</span>
             <span className="min-w-0 flex-1 truncate">{x.name}</span>

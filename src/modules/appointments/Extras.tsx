@@ -115,7 +115,7 @@ export function IntakeBlock({ a }: { a: Appointment }) {
           </div>
         ) : (
           <div className="flex items-center gap-2 py-0.5 text-[12.5px]">
-            <span className="min-w-0 flex-1 text-[#9A4A06] dark:text-warning">Consent not agreed yet.</span>
+            <span className="min-w-0 flex-1 text-warning-ink dark:text-warning">Consent not agreed yet.</span>
             <Button size="sm" variant="secondary" disabled={!desk.online} onClick={() => setSigning(true)}>Record at the desk…</Button>
           </div>
         )
@@ -187,7 +187,7 @@ export function CancelFeeNote({ a }: { a: Appointment }) {
   if (!f) return null;
   if (!f.late || !Number(f.fee)) return f.free_until ? <p className="mt-2 mb-0 text-[12px] text-ink-3">{`Free to cancel until ${new Date(f.free_until).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.`}</p> : null;
   return (
-    <p className="mt-3 mb-0 rounded-[8px] bg-[#FDF1E3] px-3 py-2 text-[12.5px] text-[#9A4A06] dark:bg-warning/15 dark:text-warning">
+    <p className="mt-3 mb-0 rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-ink dark:bg-warning/15 dark:text-warning">
       {`Inside the ${f.window_hours ?? ''}-hour window: a late-cancel fee of ${money(Number(f.fee), f.currency)} applies${f.from === 'deducted' ? ', taken from the deposit held' : f.from === 'invoiced' ? ', raised as an invoice' : ''}. It can be waived afterwards, with a reason.`}
     </p>
   );

@@ -1,6 +1,6 @@
 {
     "module": "board",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "paths": [
         "electron/services/board-vault.ts",
         "shared/board.ts",

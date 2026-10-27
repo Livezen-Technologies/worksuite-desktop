@@ -59,9 +59,9 @@ export default function Requests() {
         ) : null}
       </PageHead>
       {asks.length ? (
-        <section className="flex flex-col gap-2 rounded-[12px] border border-[#F6D9A8] bg-[#FFF7E6] px-3.5 py-3 dark:border-warning/30 dark:bg-warning-bg">
+        <section className="flex flex-col gap-2 rounded-[12px] border border-warning-line bg-warning-bg px-3.5 py-3 dark:border-warning/30 dark:bg-warning-bg">
           <b className="text-ink">Waiting on you</b>
-          <span className="text-[12.5px] text-[#6B3A06] dark:text-warning">Colleagues who named you as their cover. They cannot be approved until you answer.</span>
+          <span className="text-[12.5px] text-warning-strong dark:text-warning">Colleagues who named you as their cover. They cannot be approved until you answer.</span>
           {asks.map((c) => (
             <div key={c.id} className="flex items-center gap-2.5 rounded-[9px] bg-surface px-2.5 py-2">
               <b className="min-w-0 flex-1 truncate text-ink">
@@ -152,7 +152,7 @@ export function CoverDialog({ ask, onClose, onDone }: { ask: CoverAsk; onClose: 
           <button type="button" disabled={busy} className={btn + ' !text-danger'} onClick={() => void answer('declined')}>
             No, I cannot
           </button>
-          <button type="button" disabled={busy} className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} onClick={() => void answer('accepted')}>
+          <button type="button" disabled={busy} className={btnPrimary + ' !bg-success hover:!bg-success'} onClick={() => void answer('accepted')}>
             Yes, I will cover
           </button>
         </>

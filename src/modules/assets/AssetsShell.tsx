@@ -108,7 +108,7 @@ export default function AssetsShell({ active }: ModuleProps) {
         </SidePanel>
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-ground" aria-label={`Assets · ${TITLES[view]}`}>
           {!online ? (
-            <div role="status" className="shrink-0 border-b border-[#F5D48A] bg-[#FFF8E6] px-5 py-1.5 text-[12px] font-semibold text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+            <div role="status" className="shrink-0 border-b border-warning-line bg-warning-bg px-5 py-1.5 text-[12px] font-semibold text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
               {`Offline · showing the copy kept on this computer · ${OFFLINE}`}
             </div>
           ) : null}

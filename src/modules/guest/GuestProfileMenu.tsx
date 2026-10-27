@@ -41,7 +41,7 @@ export function GuestProfileMenu() {
   const name = profile?.name ?? '';
   return (
     <Popover label={text('Local profile')} width={320} className="rounded-[18px] border border-line shadow-[0_24px_60px_rgb(var(--ws-shadow-rgb)/.22)]">
-      <div className="flex items-center gap-3 bg-[linear-gradient(180deg,#F3F5FE,var(--color-surface))] p-4 dark:bg-[linear-gradient(180deg,var(--color-selection),var(--color-surface))]">
+      <div className="flex items-center gap-3 bg-[linear-gradient(180deg,var(--ws-info-soft),var(--color-surface))] p-4 dark:bg-[linear-gradient(180deg,var(--color-selection),var(--color-surface))]">
         <span className="relative">
           <UserPicture name={name} src={profile?.picture} size={52} className="!bg-primary text-[17px] !text-white" />
           <span className={cx('absolute right-0 bottom-0 h-3.5 w-3.5 rounded-full border-[2.5px] border-surface', online ? 'bg-success' : 'bg-ink-3')} />

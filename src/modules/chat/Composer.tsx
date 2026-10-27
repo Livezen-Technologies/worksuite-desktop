@@ -769,7 +769,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     { sep: true as const },
     ...WRITING_TASKS.map((w) => ({ label: w.label, disabled: !text.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
   ];
-  const aiBtn = caps.assistant && !editing ? <AiMenuButton compact items={aiItems} ariaLabel={channel ? undefined : caps.assistantLabel} className={cx(tool, '!font-normal')} iconClassName={site ? 'text-[#0E7C86] dark:text-[#5CC6CF]' : undefined} /> : null;
+  const aiBtn = caps.assistant && !editing ? <AiMenuButton compact items={aiItems} ariaLabel={channel ? undefined : caps.assistantLabel} className={cx(tool, '!font-normal')} iconClassName={site ? 'text-teal dark:text-teal-ink' : undefined} /> : null;
   const aiEl = ai ? (
         <AiTextDialog
           title={ai.title}
@@ -852,7 +852,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 className={cx(
                   'flex shrink-0 items-center justify-center rounded-[9px] text-white disabled:bg-subtle disabled:text-ink-3',
                   size,
-                  editing ? 'bg-[#D97706] hover:bg-[#B45309]' : urgent ? 'bg-danger hover:opacity-90' : 'bg-primary hover:bg-primary-hover',
+                  editing ? 'bg-amber-strong hover:bg-warning' : urgent ? 'bg-danger hover:opacity-90' : 'bg-primary hover:bg-primary-hover',
                 )}
               >
                 <Icon name={editing ? 'check' : 'send'} size={compact ? 14 : 16} />
@@ -868,13 +868,13 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         </div>
       ) : null;
   const barEl = editing ? (
-        <div className="flex items-center gap-2 rounded-[8px] border-l-[3px] border-[#D97706] bg-[#FFF6E5] px-2.5 py-1.5 text-[12px] dark:bg-warning-bg">
-          <Icon name="compose" size={13} className="shrink-0 text-[#9A4A06] dark:text-warning" />
+        <div className="flex items-center gap-2 rounded-[8px] border-l-[3px] border-amber-strong bg-warning-bg px-2.5 py-1.5 text-[12px] dark:bg-warning-bg">
+          <Icon name="compose" size={13} className="shrink-0 text-warning-ink dark:text-warning" />
           <span className="flex min-w-0 flex-1 flex-col">
-            <b className="text-[#7A3B05] dark:text-warning">Editing message</b>
+            <b className="text-warning-strong dark:text-warning">Editing message</b>
             <span className="truncate text-ink-2">{editing.original}</span>
           </span>
-          <button type="button" onClick={cancelEdit} className="shrink-0 rounded-[6px] px-2 py-0.5 font-semibold text-[#7A3B05] hover:bg-[#FDEBC8] dark:text-warning dark:hover:bg-transparent">Cancel</button>
+          <button type="button" onClick={cancelEdit} className="shrink-0 rounded-[6px] px-2 py-0.5 font-semibold text-warning-strong hover:bg-orange-bg dark:text-warning dark:hover:bg-transparent">Cancel</button>
         </div>
       ) : reply && caps.replyQuote ? (
         // ReplyBar (P-04): "Replying to Visitor 4F2A · Can you send a quote…", on one line.
@@ -1004,7 +1004,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           <div
             className={cx(
               'relative flex min-w-0 flex-1 flex-col rounded-[22px] bg-surface px-1.5 py-[5px] shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.12)] ring-1 transition-shadow',
-              urgent && !editing ? 'ring-danger' : editing ? 'ring-[#D97706]' : 'ring-line focus-within:ring-primary/50',
+              urgent && !editing ? 'ring-danger' : editing ? 'ring-amber-strong' : 'ring-line focus-within:ring-primary/50',
             )}
           >
             {inside}
@@ -1035,7 +1035,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               title={editing ? 'Save the change' : 'Send (Enter)'}
               disabled={!canSend || sending}
               onClick={() => void send()}
-              className={cx('flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white shadow-[0_4px_10px_rgba(35,52,158,.3)] disabled:opacity-60', editing ? 'bg-[#D97706] hover:bg-[#B45309]' : urgent ? 'bg-danger hover:opacity-90' : 'bg-primary hover:bg-primary-hover')}
+              className={cx('flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white shadow-[0_4px_10px_rgba(35,52,158,.3)] disabled:opacity-60', editing ? 'bg-amber-strong hover:bg-warning' : urgent ? 'bg-danger hover:opacity-90' : 'bg-primary hover:bg-primary-hover')}
             >
               <Icon name={editing ? 'check' : 'send'} size={18} />
             </button>
@@ -1060,7 +1060,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       {repliesEl}
       {chipsEl}
       {note ? (
-        <span className="flex items-center gap-1.5 px-1 text-[11px] font-bold text-[#7A4308] dark:text-warning">
+        <span className="flex items-center gap-1.5 px-1 text-[11px] font-bold text-warning-strong dark:text-warning">
           <Icon name="lock" size={12} /> Only staff see this · the visitor never does
         </span>
       ) : null}
@@ -1071,11 +1071,11 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           compact ? 'px-1.5 py-1' : 'px-2 py-1.5',
           // The note's own look (C-08): the amber, dashed edge its bubble will have in the thread.
           note
-            ? cx(NOTE_TONE, 'focus-within:ring-2 focus-within:ring-[#D9A441]/25')
+            ? cx(NOTE_TONE, 'focus-within:ring-2 focus-within:ring-amber/25')
             : urgent && !editing
             ? 'border-danger bg-danger-bg/40 focus-within:ring-2 focus-within:ring-danger/20'
             : editing
-              ? 'border-[#D97706] focus-within:ring-2 focus-within:ring-[#D97706]/20'
+              ? 'border-amber-strong focus-within:ring-2 focus-within:ring-amber-strong/20'
               : 'border-line focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15',
         )}
       >

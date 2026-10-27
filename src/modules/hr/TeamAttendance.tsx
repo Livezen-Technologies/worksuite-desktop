@@ -34,15 +34,15 @@ export const ROSTER_FILTERS: Array<[string, string]> = [
 ];
 
 const TILES: Array<{ key: string; label: string; filter: string; tone?: string; always?: boolean }> = [
-  { key: 'present', label: 'Present', filter: 'present', tone: 'text-[#145C39] dark:text-success', always: true },
-  { key: 'late', label: 'Late', filter: 'late', tone: 'text-[#9A4A06] dark:text-warning', always: true },
+  { key: 'present', label: 'Present', filter: 'present', tone: 'text-success-ink dark:text-success', always: true },
+  { key: 'late', label: 'Late', filter: 'late', tone: 'text-warning-ink dark:text-warning', always: true },
   { key: 'absent', label: 'Absent', filter: 'absent', tone: 'text-danger', always: true },
   { key: 'holiday', label: 'Public holiday', filter: 'holiday', always: true },
-  { key: 'leave', label: 'On leave', filter: 'leave', tone: 'text-[#5B2FA0] dark:text-[#C4A8F0]', always: true },
+  { key: 'leave', label: 'On leave', filter: 'leave', tone: 'text-violet-ink', always: true },
   { key: 'remote', label: 'Remote', filter: '', always: true },
   { key: 'missing_check_out', label: 'No check-out', filter: 'missing_check_out', tone: 'text-danger', always: true },
-  { key: 'location_skipped', label: 'No location', filter: 'location_skipped', tone: 'text-[#9A4A06] dark:text-warning' },
-  { key: 'pending', label: 'Pending review', filter: 'pending', tone: 'text-[#9A4A06] dark:text-warning' },
+  { key: 'location_skipped', label: 'No location', filter: 'location_skipped', tone: 'text-warning-ink dark:text-warning' },
+  { key: 'pending', label: 'Pending review', filter: 'pending', tone: 'text-warning-ink dark:text-warning' },
 ];
 
 /** Where the day was worked: the named place, the coordinates, or why there are none. */
@@ -139,7 +139,7 @@ export default function TeamAttendance() {
                 <Cell w={55}>{d.check_out ? attendanceTime(d.check_out) : '—'}</Cell>
                 <Cell w={55}>{d.break_seconds > 0 ? minutesLabel(d.break_seconds / 60) : '—'}</Cell>
                 <Cell w={70}>{d.check_out && d.net_seconds != null ? minutesLabel(d.net_seconds / 60) : '—'}</Cell>
-                <Cell w={null} className={cx('text-[12px]', where.warn ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
+                <Cell w={null} className={cx('text-[12px]', where.warn ? 'text-warning-ink dark:text-warning' : 'text-ink-2')}>
                   <span title={where.text}>{where.text}</span>
                 </Cell>
                 <Cell w={170} className="!overflow-visible">

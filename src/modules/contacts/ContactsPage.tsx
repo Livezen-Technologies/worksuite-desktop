@@ -332,7 +332,7 @@ function Avatar({ c, size }: { c: Contact; size: 46 | 36 }) {
 
 function Star({ c, onStar }: { c: Contact; onStar: () => void }) {
   return (
-    <button type="button" aria-label={c.is_favorite ? `Remove ${c.display_name} from favorites` : `Add ${c.display_name} to favorites`} aria-pressed={c.is_favorite} onClick={onStar} className={cx('relative z-[1] flex h-[30px] w-[30px] shrink-0 items-center justify-center self-start rounded-[8px] hover:bg-subtle', c.is_favorite ? 'text-[#D97706]' : 'text-[#C3C8D4] dark:text-ink-3')}>
+    <button type="button" aria-label={c.is_favorite ? `Remove ${c.display_name} from favorites` : `Add ${c.display_name} to favorites`} aria-pressed={c.is_favorite} onClick={onStar} className={cx('relative z-[1] flex h-[30px] w-[30px] shrink-0 items-center justify-center self-start rounded-[8px] hover:bg-subtle', c.is_favorite ? 'text-badge' : 'text-stage-ink-2 dark:text-ink-3')}>
       <Icon name="star" size={16} className={c.is_favorite ? 'fill-current' : ''} />
     </button>
   );
@@ -344,7 +344,7 @@ function Pill({ type }: { type: string }) {
 
 function Card({ c, selected, onOpen, onStar }: { c: Contact; selected: boolean; onOpen: () => void; onStar: () => void }) {
   return (
-    <div role="listitem" className={cx('relative flex h-[92px] items-center gap-3 rounded-[14px] border bg-surface py-3.5 pr-2.5 pl-3.5', selected ? 'border-primary shadow-[0_0_0_3px_rgba(35,52,158,.12)]' : 'border-line shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.04)] hover:border-[#C9D2F2] dark:hover:border-ink-3')}>
+    <div role="listitem" className={cx('relative flex h-[92px] items-center gap-3 rounded-[14px] border bg-surface py-3.5 pr-2.5 pl-3.5', selected ? 'border-primary shadow-[0_0_0_3px_rgba(35,52,158,.12)]' : 'border-line shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.04)] hover:border-info-line dark:hover:border-ink-3')}>
       <button type="button" aria-label={c.display_name} onClick={onOpen} className="absolute inset-0 rounded-[14px]" />
       <Avatar c={c} size={46} />
       <span className="pointer-events-none flex min-w-0 flex-1 flex-col gap-0.5">

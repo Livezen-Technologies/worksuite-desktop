@@ -138,7 +138,7 @@ export default function Certificates({ org, nav, active, selected, watch, compan
                 setAt(i);
                 setMenu({ x: e.clientX, y: e.clientY, c: x });
               }}
-              className={cx('grid h-9 grid-cols-[22px_minmax(0,2fr)_110px_70px_minmax(0,1fr)] items-center gap-2 border-b border-line/60 px-3 text-[12.5px]', i === at ? 'bg-[#EEF1FD] shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : ticked.has(x.id) ? 'bg-[#F5F7FF] dark:bg-primary/10' : 'hover:bg-subtle')}
+              className={cx('grid h-9 grid-cols-[22px_minmax(0,2fr)_110px_70px_minmax(0,1fr)] items-center gap-2 border-b border-line/60 px-3 text-[12.5px]', i === at ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)] dark:bg-selection' : ticked.has(x.id) ? 'bg-info-soft dark:bg-primary/10' : 'hover:bg-subtle')}
             >
               <Checkbox tabIndex={-1} aria-label={text('Select {name}', { name: hostLabel(x) })} checked={ticked.has(x.id)} onClick={(e) => e.stopPropagation()} onChange={() => setTicked(toggle(ticked, x.id))} />
               <span className="truncate font-semibold text-ink">{hostLabel(x)}</span>
@@ -161,7 +161,7 @@ export default function Certificates({ org, nav, active, selected, watch, compan
             </div>
             {certProblem(c) ? <p className="m-0 text-[12.5px] text-ink-2">{certProblem(c)}</p> : null}
             {c.warnings?.length ? (
-              <ul className="m-0 flex list-disc flex-col gap-0.5 pl-4 text-[12px] text-[#9A4A06] dark:text-warning">
+              <ul className="m-0 flex list-disc flex-col gap-0.5 pl-4 text-[12px] text-warning-ink dark:text-warning">
                 {c.warnings.map((w) => (
                   <li key={w}>{w}</li>
                 ))}

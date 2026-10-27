@@ -136,7 +136,7 @@ export default function Dispatch({ options, offline, give, onRequest }: { option
                     const from = minutesOf(s.from) ?? START_HOUR * 60;
                     const to = Math.max(minutesOf(s.to) ?? from + 60, from + 15);
                     return (
-                      <div key={s.visit_id} title={`${label(s.label)} · ${label(s.client)}`} className="absolute top-1 bottom-1 overflow-hidden rounded-[6px] bg-[#FEF3C7] px-1.5 text-[11px] text-[#92400E] dark:bg-selection dark:text-ink"
+                      <div key={s.visit_id} title={`${label(s.label)} · ${label(s.client)}`} className="absolute top-1 bottom-1 overflow-hidden rounded-[6px] bg-yellow-bg px-1.5 text-[11px] text-orange-ink dark:bg-selection dark:text-ink"
                         style={{ left: ((from - START_HOUR * 60) / 60) * HOUR_PX, width: ((to - from) / 60) * HOUR_PX }}>
                         <span className="font-semibold">{label(s.client)}</span> {s.label ?? ''}
                       </div>
@@ -180,7 +180,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 function Item({ title, sub, draggable, highlight, onDragStart, onClick }: { title: string; sub: string; draggable: boolean; highlight: boolean; onDragStart: () => void; onClick: () => void }) {
   return (
     <button type="button" draggable={draggable} onDragStart={onDragStart} onClick={onClick}
-      className={cx('flex w-full flex-col px-2.5 py-1 text-left hover:bg-subtle', highlight ? 'bg-[#FEF3C7] dark:bg-selection' : '', draggable ? 'cursor-grab' : '')}>
+      className={cx('flex w-full flex-col px-2.5 py-1 text-left hover:bg-subtle', highlight ? 'bg-yellow-bg dark:bg-selection' : '', draggable ? 'cursor-grab' : '')}>
       <span className="truncate text-[12.5px] font-semibold">{title}</span>
       <span className="truncate text-[11.5px] text-ink-3">{sub}</span>
     </button>

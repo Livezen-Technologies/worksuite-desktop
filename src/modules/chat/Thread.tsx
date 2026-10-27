@@ -306,8 +306,8 @@ export function Thread({
         </div>
       ) : null}
       {pinned.length ? (
-        <div className="relative flex shrink-0 items-center gap-2 border-b border-[#F1D9B5] bg-[#FFF9EC] px-4 py-[7px] text-[12px] dark:border-warning/30 dark:bg-warning-bg">
-          <b className="text-[#7A3B05] dark:text-warning">Pinned</b>
+        <div className="relative flex shrink-0 items-center gap-2 border-b border-warning-line bg-warning-bg px-4 py-[7px] text-[12px] dark:border-warning/30 dark:bg-warning-bg">
+          <b className="text-warning-strong dark:text-warning">Pinned</b>
           <span className="min-w-0 flex-1 truncate text-ink-2">{pinned[0]!.message ?? pinned[0]!.file?.filename}</span>
           <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setPinsOpen(!pinsOpen)}>{pinned.length > 1 ? `See all ${pinned.length}` : 'Show'}</button>
           {pinsOpen ? (
@@ -380,7 +380,7 @@ export function Thread({
                 ) : null}
                 {notesAllowed ? (
                   <button type="button" disabled={saving} onClick={() => void saveAsNote()} className={chip}>
-                    <Icon name="notebook" size={14} className="text-[#CA8A04]" />
+                    <Icon name="notebook" size={14} className="text-amber-strong" />
                     {saving ? 'Saving…' : 'Save as note'}
                   </button>
                 ) : null}

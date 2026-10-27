@@ -44,18 +44,18 @@ export function Rail({ view, counts, online, location, me, onPick }: {
   const at = UNDER[view] ?? view;
   return (
     <nav aria-label="Appointments" className="flex w-[88px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-surface px-[7px] py-2.5 scroll-thin">
-      <div className="pt-1 pb-2 text-center text-[9.5px] font-extrabold tracking-[.08em] text-[#DB2777]">APPOINTMENTS</div>
+      <div className="pt-1 pb-2 text-center text-[9.5px] font-extrabold tracking-[.08em] text-rose">APPOINTMENTS</div>
       {ITEMS.map(([id, text, icon]) => {
         const on = at === id;
         const n = counts[id];
-        const tone = id === 'waitlist' ? 'bg-[#B45309]' : id === 'outbox' ? 'bg-[#F59E0B]' : 'bg-[#23349E] dark:bg-primary';
+        const tone = id === 'waitlist' ? 'bg-badge' : id === 'outbox' ? 'bg-stage-amber' : 'bg-stage-primary dark:bg-primary';
         return (
           <button
             key={id}
             type="button"
             aria-current={on ? 'page' : undefined}
             onClick={(e: MouseEvent) => onPick(id, e.metaKey || e.ctrlKey)}
-            className={cx('flex flex-col items-center gap-1 rounded-[12px] px-0.5 py-2 text-[11.5px]', on ? 'bg-[#EEF1FD] font-bold text-[#23349E] dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
+            className={cx('flex flex-col items-center gap-1 rounded-[12px] px-0.5 py-2 text-[11.5px]', on ? 'bg-selection font-bold text-primary dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
           >
             <span className="relative flex">
               <Icon name={icon} size={22} />
@@ -66,8 +66,8 @@ export function Rail({ view, counts, online, location, me, onPick }: {
         );
       })}
       <div className="mt-auto flex flex-col items-center gap-1 pt-3 text-center text-[10px] leading-tight text-ink-2">
-        <span role="status" className={cx('flex items-center gap-1 font-bold', online ? 'text-[#1F7A4D] dark:text-success' : 'text-[#B45309] dark:text-warning')}>
-          <span className={cx('h-[7px] w-[7px] rounded-full', online ? 'bg-[#1F7A4D] dark:bg-success' : 'bg-[#B45309] dark:bg-warning')} />
+        <span role="status" className={cx('flex items-center gap-1 font-bold', online ? 'text-success dark:text-success' : 'text-warning dark:text-warning')}>
+          <span className={cx('h-[7px] w-[7px] rounded-full', online ? 'bg-success dark:bg-success' : 'bg-warning dark:bg-warning')} />
           {online ? 'Online' : 'Offline'}
         </span>
         {location ? <span>{location}</span> : null}

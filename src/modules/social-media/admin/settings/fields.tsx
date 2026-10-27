@@ -2,6 +2,7 @@ import { Switch } from '../../../../components/ui';
 import type { Brand, SettingValue } from '../../api';
 import { INPUT, NativeSelect } from '../../parts';
 import { zonesWith } from './zones';
+import { SettingRowFrame } from '../../../../components/SettingsKit';
 
 /**
  * A02 · the settings the desktop knows by name (SMM-ADM-001…005), in plain words, and a control for each. A key the
@@ -161,9 +162,9 @@ export function FieldControl({ def, value, onChange, brands, disabled }: { def: 
 export function FieldRows({ defs, values, onChange, brands, disabled }: { defs: FieldDef[]; values: Record<string, SettingValue>; onChange: (key: string, v: SettingValue) => void; brands: Brand[]; disabled?: boolean }) {
   if (!defs.length) return <p className="py-3 text-[13px] text-ink-3">This server sends no settings for this section.</p>;
   return (
-    <div className="flex flex-col divide-y divide-line">
+    <div className="-mx-[18px] flex flex-col divide-y divide-line">
       {defs.map((d) => (
-        <div key={d.key} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)] sm:items-center">
+        <SettingRowFrame key={d.key} className="grid gap-2 !py-3 sm:grid-cols-[minmax(0,240px)_minmax(0,1fr)] sm:items-center">
           <div className="min-w-0">
             <div className="text-[13px] font-semibold text-ink">{d.label}</div>
             {d.hint ? <div className="text-[11.5px] text-ink-3">{d.hint}</div> : null}
@@ -171,7 +172,7 @@ export function FieldRows({ defs, values, onChange, brands, disabled }: { defs: 
           <div className="min-w-0">
             <FieldControl def={d} value={values[d.key] ?? null} onChange={(v) => onChange(d.key, v)} brands={brands} disabled={disabled} />
           </div>
-        </div>
+        </SettingRowFrame>
       ))}
     </div>
   );

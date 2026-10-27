@@ -88,21 +88,21 @@ function Stage({ line }: { line: Line }) {
   ];
 
   return (
-    <section aria-label="Call in progress" className="flex flex-col gap-4 rounded-[16px] bg-[#0b1220] p-5 text-white shadow-lg">
+    <section aria-label="Call in progress" className="flex flex-col gap-4 rounded-[16px] bg-stage p-5 text-white shadow-lg">
       <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
-        <span className="rounded-full bg-[#10343A] px-2.5 py-1 font-semibold text-[#7FD8DF]">
+        <span className="rounded-full bg-stage-gray-2 px-2.5 py-1 font-semibold text-stage-teal">
           {line.direction === 'inbound' ? 'Inbound' : 'Outbound'}
           {line.via ? ` · ${line.via}` : ''}
           {line.consultFor ? ' · speaking first' : ''}
           {line.conference ? ' · conference' : ''}
         </span>
         {connected && (line.recording === 'on' || line.recording === 'policy') ? (
-          <span className="flex items-center gap-1.5 rounded-full bg-[#3A1614] px-2.5 py-1 font-semibold text-[#F7A39B]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#F04438]" />
+          <span className="flex items-center gap-1.5 rounded-full bg-stage-gray px-2.5 py-1 font-semibold text-stage-danger">
+            <span className="h-1.5 w-1.5 rounded-full bg-stage-red" />
             {line.recording === 'on' ? 'Recording' : 'Recording follows your extension’s policy'}
           </span>
         ) : null}
-        {line.recording === 'paused' ? <span className="rounded-full bg-[#3A2810] px-2.5 py-1 font-semibold text-[#F5C27A]">Recording paused</span> : null}
+        {line.recording === 'paused' ? <span className="rounded-full bg-stage-gray-2 px-2.5 py-1 font-semibold text-stage-danger">Recording paused</span> : null}
         {line.direct ? <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/80" title="Placed directly: not in the history until the phone system reports it.">Direct</span> : null}
         <span className="ml-auto text-white/60">
           {connected ? [line.codec ? `HD · ${line.codec}` : null, line.mos !== null ? `MOS ${line.mos.toFixed(1)}` : 'MOS not measured yet'].filter(Boolean).join(' · ') : ''}
@@ -119,7 +119,7 @@ function Stage({ line }: { line: Line }) {
         </div>
         <div className="text-right">
           <Mono className="block text-[34px] leading-none font-medium">{connected ? clock(elapsed) : ringing ? 'Ringing' : line.state === 'early' ? 'Ringing…' : 'Calling…'}</Mono>
-          {line.held ? <span className="text-[12px] text-[#F5C27A]">On hold</span> : null}
+          {line.held ? <span className="text-[12px] text-stage-danger">On hold</span> : null}
         </div>
       </div>
       {ringing ? (
@@ -143,7 +143,7 @@ function Stage({ line }: { line: Line }) {
               aria-pressed={c.on}
               disabled={c.disabled}
               onClick={c.onClick}
-              className={cx('flex h-[64px] flex-col items-center justify-center gap-1 rounded-[12px] border text-[11.5px] font-semibold transition-colors disabled:opacity-35', c.on ? 'border-[#2563eb] bg-[#1d3a8a] text-white' : 'border-white/10 bg-white/5 text-white/85 hover:bg-white/10')}
+              className={cx('flex h-[64px] flex-col items-center justify-center gap-1 rounded-[12px] border text-[11.5px] font-semibold transition-colors disabled:opacity-35', c.on ? 'border-brand bg-stage-primary text-white' : 'border-white/10 bg-white/5 text-white/85 hover:bg-white/10')}
             >
               <Icon name={c.icon} size={18} />
               {c.label}
@@ -243,12 +243,12 @@ function TransferPanel({ line, onDone, callerName }: { line: Line; onDone: () =>
         placeholder="Colleague, extension or number"
         aria-label="Transfer to"
         autoFocus
-        className="h-9 rounded-[8px] border border-white/15 bg-white/5 px-3 text-[13px] text-white outline-none placeholder:text-white/40 focus:border-[#2563eb]"
+        className="h-9 rounded-[8px] border border-white/15 bg-white/5 px-3 text-[13px] text-white outline-none placeholder:text-white/40 focus:border-brand"
       />
       <ul className="flex flex-col">
         {people.map((p) => (
           <li key={p.id} className="flex items-center gap-2 border-b border-white/5 py-1.5 last:border-b-0">
-            <span className={cx('h-2 w-2 shrink-0 rounded-full', p.presence === 'online' ? 'bg-[#22A861]' : p.presence === 'busy' || p.presence === 'dnd' ? 'bg-[#F04438]' : p.presence === 'away' || p.presence === 'in_meeting' ? 'bg-[#F79009]' : 'bg-white/30')} />
+            <span className={cx('h-2 w-2 shrink-0 rounded-full', p.presence === 'online' ? 'bg-stage-green' : p.presence === 'busy' || p.presence === 'dnd' ? 'bg-stage-red' : p.presence === 'away' || p.presence === 'in_meeting' ? 'bg-stage-amber' : 'bg-white/30')} />
             <span className="min-w-0 flex-1 truncate text-[12.5px]">
               <b>{p.user_name ?? p.name}</b> · {p.extension}
               <span className="block text-[11px] text-white/50">{p.presence === 'offline' ? 'Not registered' : p.presence.replace('_', ' ')}</span>
@@ -517,7 +517,7 @@ function AfterCall({ line }: { line: Line }) {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-ground p-5 scroll-thin">
       <div className="mx-auto flex w-full max-w-[640px] flex-col gap-3">
-        <section className="flex items-center gap-4 rounded-[16px] bg-[#0b1220] p-5 text-white">
+        <section className="flex items-center gap-4 rounded-[16px] bg-stage p-5 text-white">
           <CallerBadge name={line.remoteName ?? line.remote} size={52} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[18px] font-bold">{line.remoteName ?? prettyNumber(line.remote)}</div>

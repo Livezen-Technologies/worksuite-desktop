@@ -79,7 +79,7 @@ export default function MeetingsPage(_props: ModuleProps) {
           {TABS.map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => go(id === 'dashboard' ? '/meetings' : `/meetings?tab=${id}`)} className={cx('h-10 px-3', tab === id ? 'font-bold text-primary shadow-[inset_0_-2px_0_var(--color-primary)]' : 'font-medium text-ink-2')}>
               {label}
-              {id === 'invitations' && k?.pending_invitations ? <span className="ml-1.5 rounded-full bg-warning-bg px-1.5 text-[11px] font-bold text-[#9A4A06] dark:text-warning">{k.pending_invitations}</span> : null}
+              {id === 'invitations' && k?.pending_invitations ? <span className="ml-1.5 rounded-full bg-warning-bg px-1.5 text-[11px] font-bold text-warning-ink dark:text-warning">{k.pending_invitations}</span> : null}
             </button>
           ))}
           <span className="flex-1" />
@@ -319,7 +319,7 @@ function CompactInvitation({ m, busy, onOpen, send }: { m: Meeting; busy: boolea
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <button type="button" onClick={() => onOpen(m.id)} className="truncate text-left font-bold text-ink hover:underline">{m.title}</button>
         {clash ? (
-          <span className="truncate text-[12px] text-[#9A4A06] dark:text-warning">Clashes with {clash.busy_only ? 'something else' : (clash.title ?? 'something else')}</span>
+          <span className="truncate text-[12px] text-warning-ink dark:text-warning">Clashes with {clash.busy_only ? 'something else' : (clash.title ?? 'something else')}</span>
         ) : (
           <span className="text-[12px] text-ink-3">{day} · {time}</span>
         )}

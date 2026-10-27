@@ -36,7 +36,7 @@ export default function Scorecards({ interviews, interview, solo, canEvaluate, o
       <ul aria-label="My interviews" className="w-[220px] shrink-0 overflow-y-auto border-r border-line bg-surface scroll-thin">
         {mine.map((i) => (
           <li key={i.id}>
-            <button type="button" aria-current={i.id === chosen ? 'true' : undefined} onClick={() => onPick(i.id)} className={cx('flex w-full items-center gap-2 border-b border-line/70 px-3 py-2.5 text-left', i.id === chosen ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+            <button type="button" aria-current={i.id === chosen ? 'true' : undefined} onClick={() => onPick(i.id)} className={cx('flex w-full items-center gap-2 border-b border-line/70 px-3 py-2.5 text-left', i.id === chosen ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
               <Avatar name={i.candidate?.name} size={28} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-semibold text-ink">{i.candidate?.name ?? 'Candidate'}</span>

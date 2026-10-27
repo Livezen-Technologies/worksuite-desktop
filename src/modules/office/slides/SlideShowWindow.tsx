@@ -196,7 +196,7 @@ function EndCard() {
 }
 
 function LaserDot({ at }: { at: { x: number; y: number } }) {
-  return <span aria-hidden className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#FF2A2A] shadow-[0_0_12px_4px_rgba(255,42,42,.7)]" style={{ left: `${at.x * 100}%`, top: `${at.y * 100}%` }} />;
+  return <span aria-hidden className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red shadow-[0_0_12px_4px_rgba(255,42,42,.7)]" style={{ left: `${at.x * 100}%`, top: `${at.y * 100}%` }} />;
 }
 
 const fraction = (e: { clientX: number; clientY: number }, el: HTMLElement) => {
@@ -286,7 +286,7 @@ export function SlideShowWindow({ id }: { id: string }) {
 
 function ShowButton({ icon, label, onClick, pressed }: { icon: string; label: string; onClick: () => void; pressed?: boolean }) {
   return (
-    <button type="button" aria-label={label} title={label} aria-pressed={pressed} onClick={onClick} className={cx('flex h-9 w-9 items-center justify-center rounded-[8px] hover:bg-white/15', pressed && 'bg-[#FF2A2A]/80 hover:bg-[#FF2A2A]')}>
+    <button type="button" aria-label={label} title={label} aria-pressed={pressed} onClick={onClick} className={cx('flex h-9 w-9 items-center justify-center rounded-[8px] hover:bg-white/15', pressed && 'bg-red/80 hover:bg-red')}>
       <Icon name={icon} size={17} />
     </button>
   );
@@ -320,7 +320,7 @@ export function PresenterWindow({ id }: { id: string }) {
   const btn = 'flex h-9 items-center gap-1.5 rounded-[8px] border border-white/15 px-3 text-[13px] font-semibold hover:bg-white/10 disabled:opacity-40';
 
   return (
-    <div className="flex h-full w-full flex-col bg-[#111214] text-[#E8EAEE] select-none">
+    <div className="flex h-full w-full flex-col bg-stage text-stage-ink select-none">
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-white/10 px-5">
         <b className="min-w-0 flex-1 truncate text-[14px]">{show.name}</b>
         <div className="flex items-center gap-2" role="timer" aria-label="Time presenting">
@@ -338,7 +338,7 @@ export function PresenterWindow({ id }: { id: string }) {
           <Icon name="clock" size={16} className="text-white/60" />
           <span className="text-[22px] font-bold tabular-nums">{formatClock(new Date(now), h12)}</span>
         </div>
-        <button type="button" onClick={show.end} className="ml-3 h-9 rounded-[8px] bg-[#C92A2A] px-4 text-[13px] font-bold text-white hover:brightness-110">
+        <button type="button" onClick={show.end} className="ml-3 h-9 rounded-[8px] bg-orange px-4 text-[13px] font-bold text-white hover:brightness-110">
           End show
         </button>
       </div>
@@ -372,7 +372,7 @@ export function PresenterWindow({ id }: { id: string }) {
               </button>
               <button
                 type="button"
-                className={cx(btn, laserOn && 'border-[#FF2A2A] bg-[#FF2A2A]/20')}
+                className={cx(btn, laserOn && 'border-red bg-red/20')}
                 aria-pressed={laserOn}
                 onClick={() => {
                   if (laserOn) show.pointAt(null);

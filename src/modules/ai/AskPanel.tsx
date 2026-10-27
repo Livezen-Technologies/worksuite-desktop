@@ -252,7 +252,7 @@ export function AskPanel({
         </p>
       ) : null}
       {off ? (
-        <div role="status" className="space-y-2 rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#7A4308] dark:text-warning">
+        <div role="status" className="space-y-2 rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-strong dark:text-warning">
           <p>{off}</p>
           <div className="flex flex-wrap gap-1.5">
             {surface === 'assistant.panel' ? (
@@ -530,7 +530,7 @@ function Bubble({ e, elsewhere, onRetry, onSetup, onSettle }: { e: AskEntry; els
       {(turn?.tool_runs ?? []).length ? (
         <div className="flex flex-wrap gap-1">
           {turn!.tool_runs.map((r, i) => (
-            <span key={i} title={r.error ?? undefined} className={cx('rounded-full px-2 py-0.5 text-[11px]', r.ok ? 'bg-subtle text-ink-2' : 'bg-warning-bg text-[#7A4308]')}>{r.label}</span>
+            <span key={i} title={r.error ?? undefined} className={cx('rounded-full px-2 py-0.5 text-[11px]', r.ok ? 'bg-subtle text-ink-2' : 'bg-warning-bg text-warning-strong')}>{r.label}</span>
           ))}
         </div>
       ) : null}

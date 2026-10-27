@@ -336,8 +336,8 @@ export const TIME_STATE: Record<string, { label: string; tone: string }> = {
   pending: { label: 'Pending', tone: 'bg-warning-bg text-warning-ink' },
   approved: { label: 'Approved', tone: 'bg-success-bg text-success' },
   sent_back: { label: 'Sent back', tone: 'bg-danger-bg text-danger' },
-  submitted: { label: 'In HR timesheet', tone: 'bg-[#EDE9FE] text-[#5B21B6] dark:bg-[#5B21B6]/25 dark:text-[#C4B5FD]' },
-  invoiced: { label: 'Invoiced', tone: 'bg-[#EDE9FE] text-[#5B21B6] dark:bg-[#5B21B6]/25 dark:text-[#C4B5FD]' },
+  submitted: { label: 'In HR timesheet', tone: 'bg-violet-bg text-violet-ink dark:bg-violet/25' },
+  invoiced: { label: 'Invoiced', tone: 'bg-violet-bg text-violet-ink dark:bg-violet/25' },
 };
 
 export const MILESTONE_STATE: Record<string, { label: string; tone: string }> = {

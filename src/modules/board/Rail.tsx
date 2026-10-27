@@ -22,7 +22,7 @@ export function BoardRail({ view, onPick, onWeb, counts, meeting, packsReady }: 
     const n = counts[id];
     return (
       <button key={id} type="button" disabled={disabled} aria-current={on ? 'page' : undefined} onClick={() => onPick(id)}
-        className={cx('relative flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left disabled:opacity-40', on ? 'bg-[#EEF1FD] font-bold text-[#3B5BDB] dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}>
+        className={cx('relative flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left disabled:opacity-40', on ? 'bg-selection font-bold text-brand-soft dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}>
         <Icon name={icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {n ? <span className="shrink-0 text-[11.5px] text-ink-3 tabular-nums">{n}</span> : null}
@@ -32,7 +32,7 @@ export function BoardRail({ view, onPick, onWeb, counts, meeting, packsReady }: 
   const head = (label: string) => <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>;
   const noMeeting = !meeting;
   return (
-    <nav aria-label="Board" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="Board" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="px-3 pt-3.5 pb-1">
         <div className="text-[14px] font-bold">Board</div>
       </div>

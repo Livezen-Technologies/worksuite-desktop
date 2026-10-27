@@ -5,6 +5,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Button, cx } from '../../components/ui';
 import { accountName } from '../../app/accounts/labels';
+import { SettingsGroup } from '../../components/SettingsKit';
 
 export const HEALTH_ROWS: ReadonlyArray<{ id: HealthComponent; label: string }> = [
   { id: 'api', label: 'API' },
@@ -61,15 +62,10 @@ export function ConnectionHealth({ account }: { account: AccountView }) {
     }
   };
   return (
-    <section aria-labelledby="health-title" className="w-full rounded-[14px] border border-line bg-surface px-5 py-[18px]" data-testid="connection-health">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 id="health-title" className="m-0 text-[15px] font-bold text-ink">
-          Connection health
-        </h3>
-        <span className="truncate text-[12px] text-ink-3">{accountName(account)}</span>
-      </div>
-      {q.isError ? <p className="m-0 mt-2 text-[12.5px] text-ink-3">Connection health isn’t available: {errorMessage(q.error)}</p> : null}
-      <dl className="m-0 mt-2">
+    <div data-testid="connection-health">
+    <SettingsGroup title="Connection health" actions={<span className="truncate text-[12px] text-ink-3">{accountName(account)}</span>} className="!mb-0 w-full">
+      {q.isError ? <p className="m-0 px-[18px] pt-3 text-[12.5px] text-ink-3">Connection health isn’t available: {errorMessage(q.error)}</p> : null}
+      <dl className="m-0 px-[18px] py-1.5">
         {HEALTH_ROWS.map((r, i) => {
           const c = health?.components[r.id];
           return (
@@ -80,7 +76,7 @@ export function ConnectionHealth({ account }: { account: AccountView }) {
           );
         })}
       </dl>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 px-[18px] py-3">
         <Button loading={rerunning} onClick={() => void rerun()}>
           Re-run discovery
         </Button>
@@ -88,6 +84,7 @@ export function ConnectionHealth({ account }: { account: AccountView }) {
           Export diagnostics
         </Button>
       </div>
-    </section>
+    </SettingsGroup>
+    </div>
   );
 }

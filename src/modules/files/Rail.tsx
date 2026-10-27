@@ -436,7 +436,7 @@ export function Rail({
           </span>
         ) : null}
         {n.pinned && !edit ? <Icon name="pin" size={11} aria-label="Pinned" className="shrink-0 text-ink-3" /> : null}
-        {n.starred && !edit ? <Icon name="star" size={11} className="shrink-0 fill-current text-[#E9A23B]" /> : null}
+        {n.starred && !edit ? <Icon name="star" size={11} className="shrink-0 fill-current text-stage-amber" /> : null}
         {!edit ? (
           <button
             type="button"

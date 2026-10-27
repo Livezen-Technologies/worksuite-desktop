@@ -160,7 +160,7 @@ export function MandatoryChip() {
   const v = mandatoryView(u, now);
   if (!v.required || v.locked) return null;
   return (
-    <button type="button" onClick={() => navigate('/settings/updates')} className="no-drag flex h-7 items-center gap-1 rounded-full bg-[#F0A04B] px-3 text-[12px] font-semibold text-[#3B2300]" title={v.msLeft !== null ? `Install within ${durationLeft(v.msLeft)}` : undefined}>
+    <button type="button" onClick={() => navigate('/settings/updates')} className="no-drag flex h-7 items-center gap-1 rounded-full bg-amber px-3 text-[12px] font-semibold text-ink" title={v.msLeft !== null ? `Install within ${durationLeft(v.msLeft)}` : undefined}>
       <Icon name="warning" size={13} /> Update Required
     </button>
   );

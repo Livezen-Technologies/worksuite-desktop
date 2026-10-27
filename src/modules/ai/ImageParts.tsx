@@ -131,7 +131,7 @@ export function ReadCard({ reads, text: all }: { reads: ImageRead[]; text: strin
                             {tok.text}
                           </span>
                         ) : (
-                          <span className="rounded-[4px] bg-warning-bg px-1 text-[12px] text-[#7A4308] italic dark:text-warning" title="This text could not be read">
+                          <span className="rounded-[4px] bg-warning-bg px-1 text-[12px] text-warning-strong italic dark:text-warning" title="This text could not be read">
                             {tok.text}
                           </span>
                         )}
@@ -190,7 +190,7 @@ export function NoVisionCard({
 }) {
   const btn = 'flex h-8 items-center gap-1.5 rounded-[8px] border border-line bg-surface px-3 text-[12.5px] font-semibold text-ink hover:bg-subtle disabled:opacity-50';
   return (
-    <div role="status" data-testid="ai-no-vision" className="space-y-2 rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#7A4308] dark:text-warning">
+    <div role="status" data-testid="ai-no-vision" className="space-y-2 rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-strong dark:text-warning">
       <p className="flex items-start gap-1.5">
         <Icon name="image" size={15} className="mt-0.5 shrink-0" />
         <span>{route.why}</span>

@@ -10,7 +10,7 @@ import { useStore } from '../../core/store';
 import { relative } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Button, Switch, cx } from '../../components/ui';
-import { SectionHeader, SettingRow, SettingsGroup, SourceNote } from './kit';
+import { SectionHeader, SettingRow, SettingsGroup, SourceNote } from '../../components/SettingsKit';
 
 /**
  * Settings › Features & apps (desktop settings `features.*`, `modules.<app>.enabled`): what this person has on this

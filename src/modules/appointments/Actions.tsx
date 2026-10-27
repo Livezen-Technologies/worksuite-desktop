@@ -39,7 +39,7 @@ export function CheckInDialog({ a, visits, noShows, pinned, onClose }: { a: Appo
         <Stat icon="wallet" tone="green" k="Deposit held" v={a.deposit ? money(a.deposit.held, a.deposit.currency) : '—'} />
       </StatGrid>
       {pinned.length || a.internal_notes ? (
-        <div className="mt-3 rounded-[8px] bg-[#FDF1E3] px-3 py-2 text-[12.5px] text-[#9A4A06] dark:bg-warning/15 dark:text-warning">
+        <div className="mt-3 rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-ink dark:bg-warning/15 dark:text-warning">
           <b>Read before starting: </b>
           {[...pinned, a.internal_notes].filter(Boolean).join(' ')}
         </div>
@@ -116,7 +116,7 @@ export function MoveDialog({ a, onClose }: { a: Appointment; onClose: () => void
               <div className="mb-1 text-center text-[11.5px] font-semibold text-ink-2">{dayLabel(d)}</div>
               <div className="flex max-h-[200px] flex-col gap-1 overflow-y-auto scroll-thin">
                 {slots.map((s) => (
-                  <button key={s.starts_at} type="button" aria-pressed={pick?.starts_at === s.starts_at} onClick={() => setPick({ starts_at: s.starts_at, label: s.label, date: d })} className={cx('h-7 rounded-[6px] border text-[11.5px] tabular-nums', pick?.starts_at === s.starts_at ? 'border-primary bg-[#23349E] font-bold text-white dark:bg-primary' : 'border-line hover:bg-subtle')}>
+                  <button key={s.starts_at} type="button" aria-pressed={pick?.starts_at === s.starts_at} onClick={() => setPick({ starts_at: s.starts_at, label: s.label, date: d })} className={cx('h-7 rounded-[6px] border text-[11.5px] tabular-nums', pick?.starts_at === s.starts_at ? 'border-primary bg-stage-primary font-bold text-white dark:bg-primary' : 'border-line hover:bg-subtle')}>
                     {s.label}
                   </button>
                 ))}

@@ -71,7 +71,7 @@ export default function Setup({
             type="button"
             aria-current={section === id ? 'page' : undefined}
             onClick={() => onSection(id)}
-            className={cx('h-[30px] rounded-[7px] px-2.5 text-left text-[12.5px]', section === id ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+            className={cx('h-[30px] rounded-[7px] px-2.5 text-left text-[12.5px]', section === id ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
           >
             {label}
           </button>
@@ -233,7 +233,7 @@ function Warehouses({ org, currency, canCost, openId, onOpen }: { org: string; c
                   className={cx(
                     'flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60',
                     w.status !== 'active' && 'opacity-55',
-                    openId === w.id && 'bg-[#F4F6FE] dark:bg-selection/40',
+                    openId === w.id && 'bg-info-soft dark:bg-selection/40',
                   )}
                 >
                   <span className="flex min-w-0 flex-1 items-center gap-1.5">

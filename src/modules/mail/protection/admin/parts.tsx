@@ -67,7 +67,7 @@ export function ProtTop({ tab, actions, held }: { tab: ProtTab; actions?: ReactN
             className={cx('-mb-px flex h-[39px] shrink-0 items-center gap-[7px] border-b-2 px-3 text-[13px]', tab === id ? 'border-primary font-bold text-primary' : 'border-transparent font-semibold text-ink-2 hover:text-ink')}
           >
             {text(label)}
-            {id === 'quarantine' && held ? <span className="flex h-[18px] items-center rounded-full bg-[#FDF0E1] px-[7px] text-[11px] font-bold text-[#9A4A06] dark:bg-[#3A2610] dark:text-[#F5B26B]">{held}</span> : null}
+            {id === 'quarantine' && held ? <span className="flex h-[18px] items-center rounded-full bg-warning-bg px-[7px] text-[11px] font-bold text-warning-ink dark:text-orange-ink">{held}</span> : null}
           </button>
         ))}
       </div>
@@ -89,7 +89,7 @@ export function Card({ title, extra, children, className }: { title?: ReactNode;
   );
 }
 
-const DOT = { ok: 'bg-[#2E9E6A]', warn: 'bg-[#E0A030]', down: 'bg-[#D25B4B]', off: 'bg-[#8A91A6]', danger: 'bg-[#D25B4B]', neutral: 'bg-[#8A91A6]' } as const;
+const DOT = { ok: 'bg-green', warn: 'bg-amber', down: 'bg-red', off: 'bg-muted', danger: 'bg-red', neutral: 'bg-muted' } as const;
 
 /** A coloured dot that always comes with words beside it (never colour alone). */
 export function Dot({ tone }: { tone: keyof typeof DOT }) {

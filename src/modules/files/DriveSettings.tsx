@@ -13,6 +13,7 @@ import { bytes } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Button, NumberField, Switch, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
+import { SettingRow, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Drive › Settings (worksuite-desktop#95), also in Settings › Files & Sync:
@@ -148,24 +149,17 @@ function OfficeOpenSection() {
   );
 }
 
+/** A card of Drive settings: the Settings kit's group. */
 function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section aria-label={title} className="mt-4">
-      <h2 className="mb-1 text-[14px] font-bold text-ink">{title}</h2>
-      {children}
-    </section>
-  );
+  return <SettingsGroup title={title}>{children}</SettingsGroup>;
 }
 
+/** One Drive setting: the Settings kit's row. */
 function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-6 border-b border-line py-3">
-      <div className="min-w-0 flex-1">
-        <div className="text-[13.5px] font-semibold text-ink">{label}</div>
-        {hint ? <div className="mt-0.5 text-[12.5px] text-ink-3">{hint}</div> : null}
-      </div>
-      <div className="min-w-0 max-w-[60%] shrink-0 break-words">{children}</div>
-    </div>
+    <SettingRow label={label} hint={hint}>
+      {children}
+    </SettingRow>
   );
 }
 

@@ -180,7 +180,7 @@ export function QrScan({ onLink, onClose }: QrScanProps) {
         </div>
         <div className="relative flex h-[220px] items-center justify-center overflow-hidden rounded-[12px] bg-navy-2">
           <video ref={video} muted playsInline aria-label="Camera" className={camera === 'on' ? 'absolute inset-0 h-full w-full object-cover' : 'hidden'} />
-          <div className="relative h-[150px] w-[150px] rounded-[14px] border-[3px] border-[#9FB0FF]" aria-hidden />
+          <div className="relative h-[150px] w-[150px] rounded-[14px] border-[3px] border-indigo-bright" aria-hidden />
           {camera === 'starting' ? <span className="absolute bottom-3 text-[12px] text-navy-ink">Opening the camera…</span> : null}
           {camera === 'unavailable' ? (
             <span role="status" className="absolute inset-x-4 bottom-3 text-center text-[12px] text-navy-ink">
@@ -190,11 +190,11 @@ export function QrScan({ onLink, onClose }: QrScanProps) {
         </div>
         <p className="m-0 text-[13px] leading-normal text-navy-ink">
           Hold the QR from Admin Center up to your camera — or{' '}
-          <button type="button" className="font-semibold text-[#9FB0FF] underline" onClick={() => file.current?.click()}>
+          <button type="button" className="font-semibold text-stage-accent underline" onClick={() => file.current?.click()}>
             choose an image
           </button>{' '}
           /{' '}
-          <button type="button" className="font-semibold text-[#9FB0FF] underline" aria-expanded={pasting} onClick={() => setPasting(true)}>
+          <button type="button" className="font-semibold text-stage-accent underline" aria-expanded={pasting} onClick={() => setPasting(true)}>
             paste a setup link
           </button>
           .
@@ -221,7 +221,7 @@ export function QrScan({ onLink, onClose }: QrScanProps) {
                 setPasted(e.target.value);
                 setNote(null);
               }}
-              className="h-10 rounded-[8px] border border-white/20 bg-navy-2 px-3 font-mono text-[12.5px] text-white outline-none placeholder:text-navy-ink/60 focus:border-[#9FB0FF]"
+              className="h-10 rounded-[8px] border border-white/20 bg-navy-2 px-3 font-mono text-[12.5px] text-white outline-none placeholder:text-navy-ink/60 focus:border-indigo-bright"
             />
             <Button type="submit" variant="primary" disabled={!pasted.trim()}>
               Use this link
@@ -234,7 +234,7 @@ export function QrScan({ onLink, onClose }: QrScanProps) {
             {note}
           </p>
         ) : null}
-        <div className="text-[11px] text-[#9FB0FF]">Signed by the server · no passwords in the code</div>
+        <div className="text-[11px] text-stage-accent">Signed by the server · no passwords in the code</div>
       </div>
     </div>
   );

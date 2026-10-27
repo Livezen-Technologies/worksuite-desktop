@@ -339,7 +339,7 @@ export const TYPES: Array<[string, string]> = [
 
 /** The type colours of MeetingsDash. */
 export const TYPE_COLOUR: Record<string, string> = {
-  internal: 'text-primary', client: 'text-[#0B6770] dark:text-teal', sales: 'text-[#9A4A06] dark:text-warning', vendor: 'text-[#6B3FB5]', interview: 'text-success', training: 'text-ink-2',
+  internal: 'text-primary', client: 'text-teal-ink dark:text-teal', sales: 'text-warning-ink dark:text-warning', vendor: 'text-violet-ink', interview: 'text-success', training: 'text-ink-2',
 };
 
 export const RSVP_LABEL: Record<Rsvp, string> = { accepted: 'Going', tentative: 'Maybe', declined: 'Not going', no_response: 'Awaiting answer' };

@@ -41,18 +41,18 @@ export function useDesk(): Desk {
 }
 
 const TONE: Record<string, string> = {
-  pending: 'bg-[#FDF1E3] text-[#9A4A06] dark:bg-warning/15 dark:text-warning',
-  confirmed: 'bg-[#EAEDFB] text-[#23349E] dark:bg-primary/15 dark:text-primary',
-  checked_in: 'bg-[#F2EEFD] text-[#5B3FB5] dark:bg-[#5B3FB5]/20 dark:text-[#B9A7F0]',
-  in_service: 'bg-[#E8E7FB] text-[#4338CA] dark:bg-[#4338CA]/25 dark:text-[#B7B3F5]',
-  completed: 'bg-[#E7F4ED] text-[#1F7A4D] dark:bg-success/15 dark:text-success',
-  cancelled: 'bg-[#EEF0F6] text-[#4A5068] dark:bg-subtle dark:text-ink-2',
-  no_show: 'bg-[#FDECEA] text-[#B42318] dark:bg-danger/15 dark:text-danger',
-  late: 'bg-[#FDECEA] text-[#B42318] dark:bg-danger/15 dark:text-danger',
-  ok: 'bg-[#E7F4ED] text-[#1F7A4D] dark:bg-success/15 dark:text-success',
-  warn: 'bg-[#FDF1E3] text-[#9A4A06] dark:bg-warning/15 dark:text-warning',
-  info: 'bg-[#EEF1FD] text-[#23349E] dark:bg-primary/15 dark:text-primary',
-  muted: 'bg-[#EEF0F6] text-[#4A5068] dark:bg-subtle dark:text-ink-2',
+  pending: 'bg-warning-bg text-warning-ink dark:bg-warning/15 dark:text-warning',
+  confirmed: 'bg-info-bg text-primary dark:bg-primary/15 dark:text-primary',
+  checked_in: 'bg-selection text-violet-ink dark:bg-violet/20',
+  in_service: 'bg-violet-bg text-blue-ink dark:bg-violet/25 dark:text-info-ink',
+  completed: 'bg-success-bg text-success dark:bg-success/15 dark:text-success',
+  cancelled: 'bg-subtle text-ink-2 dark:bg-subtle dark:text-ink-2',
+  no_show: 'bg-danger-bg text-danger dark:bg-danger/15 dark:text-danger',
+  late: 'bg-danger-bg text-danger dark:bg-danger/15 dark:text-danger',
+  ok: 'bg-success-bg text-success dark:bg-success/15 dark:text-success',
+  warn: 'bg-warning-bg text-warning-ink dark:bg-warning/15 dark:text-warning',
+  info: 'bg-selection text-primary dark:bg-primary/15 dark:text-primary',
+  muted: 'bg-subtle text-ink-2 dark:bg-subtle dark:text-ink-2',
 };
 
 /** The card's left edge on the board and the calendar, by status. */
@@ -106,7 +106,7 @@ export function Chips<T extends string>({ value, onChange, options, label: name 
   return (
     <div role="group" aria-label={name} className="flex flex-wrap items-center gap-1.5">
       {options.map((o) => (
-        <button key={o.id} type="button" aria-pressed={o.id === value} onClick={() => onChange(o.id)} className={cx('h-[28px] rounded-[14px] border px-2.5 text-[12px] font-semibold', o.id === value ? 'border-primary bg-[#EAEDFB] text-[#23349E] dark:bg-selection dark:text-primary' : 'border-line bg-surface text-ink-2 hover:bg-subtle')}>
+        <button key={o.id} type="button" aria-pressed={o.id === value} onClick={() => onChange(o.id)} className={cx('h-[28px] rounded-[14px] border px-2.5 text-[12px] font-semibold', o.id === value ? 'border-primary bg-info-bg text-primary dark:bg-selection dark:text-primary' : 'border-line bg-surface text-ink-2 hover:bg-subtle')}>
           {o.label}
           {o.n ? <span className="ml-1.5 tabular-nums opacity-70">{o.n}</span> : null}
         </button>
@@ -117,7 +117,7 @@ export function Chips<T extends string>({ value, onChange, options, label: name 
 
 /** What a refused write says, shown where it was asked. */
 export function Refused({ children }: { children: ReactNode }) {
-  return children ? <p role="alert" className="m-0 rounded-[8px] bg-[#FDECEA] px-3 py-2 text-[12.5px] text-[#B42318] dark:bg-danger/15 dark:text-danger">{children}</p> : null;
+  return children ? <p role="alert" className="m-0 rounded-[8px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger dark:bg-danger/15 dark:text-danger">{children}</p> : null;
 }
 
 export const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));

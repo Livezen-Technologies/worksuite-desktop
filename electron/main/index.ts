@@ -3,6 +3,7 @@ import { AssetAlerts } from '../services/assets-alerts';
 import { assetsCached, type TrayAssets } from '@shared/assets';
 import { HostingAlerts } from '../services/hosting-alerts';
 import { hostingBadge, hostingCached, type TrayHosting } from '@shared/hosting';
+import { offlineReadModule } from '@shared/offline-reads';
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
@@ -3423,7 +3424,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       userId: () => sessionCtl.userId(),
       cacheModuleFor: (path) => {
         const clean = path.split('?')[0]!;
-        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : eventsCached(clean) ? 'events' : assetsCached(clean) ? 'assets' : hostingCached(clean) ? 'hosting' : null);
+        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : eventsCached(clean) ? 'events' : assetsCached(clean) ? 'assets' : hostingCached(clean) ? 'hosting' : offlineReadModule(clean));
         // Neither saved nor served for an app the person may not open.
         return module && canOpenApp(module, sessionCtl.visibleApps()) ? module : null;
       },

@@ -50,7 +50,7 @@ export function InvoiceAside({ inv, canLink, offline }: { inv: InvoiceDetail; ca
         ) : null}
       </div>
       {inv.disputed ? (
-        <p className="m-0 rounded-[8px] border border-[#F5D48A] bg-[#FFF8E6] px-2.5 py-2 text-[12px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+        <p className="m-0 rounded-[8px] border border-warning-line bg-warning-bg px-2.5 py-2 text-[12px] text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           <b>Disputed.</b> {inv.disputed.reason ?? ''} Reminders are paused while it is open.
         </p>
       ) : null}
@@ -63,7 +63,7 @@ export function InvoiceAside({ inv, canLink, offline }: { inv: InvoiceDetail; ca
                 <span className="truncate text-ink">
                   {p.reference} · {dateLabel(p.paid_on)}
                 </span>
-                <b className="shrink-0 text-[#1F7A4D] tabular-nums dark:text-success">{amount(p.amount)}</b>
+                <b className="shrink-0 text-success tabular-nums dark:text-success">{amount(p.amount)}</b>
               </div>
             ))
           ) : (

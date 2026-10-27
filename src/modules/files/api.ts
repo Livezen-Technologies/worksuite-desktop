@@ -240,18 +240,18 @@ export function kindOf(name: string, ext?: string | null): string {
 
 /** The design's coloured tag: light background, strong text, per kind. */
 export const TONE: Record<string, string> = {
-  folder: 'bg-[#FDF0E1] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  document: 'bg-[#E6EEFB] text-[#2356C4] dark:bg-selection dark:text-primary',
-  spreadsheet: 'bg-[#E4F4EA] text-[#1F7A4D] dark:bg-success-bg dark:text-success',
-  pdf: 'bg-[#FCE9E4] text-[#A8341A] dark:bg-danger-bg dark:text-danger',
-  video: 'bg-[#F1EAFB] text-[#6B3FB5] dark:bg-subtle dark:text-[#B69CF0]',
-  presentation: 'bg-[#FDEBDD] text-[#B4520A] dark:bg-warning-bg dark:text-warning',
-  image: 'bg-[#E3F4F5] text-[#0B6770] dark:bg-subtle dark:text-[#5CC6CF]',
-  archive: 'bg-[#F1F2F6] text-[#4A5168] dark:bg-subtle dark:text-ink-2',
-  code: 'bg-[#EEF1FC] text-[#23349E] dark:bg-selection dark:text-primary',
-  audio: 'bg-[#FDF0E1] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  design: 'bg-[#F1EAFB] text-[#6B3FB5] dark:bg-subtle dark:text-[#B69CF0]',
-  other: 'bg-[#F1F2F6] text-[#4A5168] dark:bg-subtle dark:text-ink-2',
+  folder: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  document: 'bg-info-bg text-brand-soft dark:bg-selection dark:text-primary',
+  spreadsheet: 'bg-success-bg text-success dark:bg-success-bg dark:text-success',
+  pdf: 'bg-danger-bg text-danger dark:bg-danger-bg dark:text-danger',
+  video: 'bg-violet-bg text-violet-ink dark:bg-subtle dark:text-violet',
+  presentation: 'bg-orange-bg text-warning dark:bg-warning-bg dark:text-warning',
+  image: 'bg-teal-bg text-teal-ink dark:bg-subtle',
+  archive: 'bg-subtle text-ink-2 dark:bg-subtle dark:text-ink-2',
+  code: 'bg-selection text-primary dark:bg-selection dark:text-primary',
+  audio: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  design: 'bg-violet-bg text-violet-ink dark:bg-subtle dark:text-violet',
+  other: 'bg-subtle text-ink-2 dark:bg-subtle dark:text-ink-2',
 };
 
 /**

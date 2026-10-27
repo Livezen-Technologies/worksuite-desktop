@@ -8,7 +8,8 @@ import { qk, statusLabel, type TaskStatus } from '../api';
 import { BOARD_COLUMNS } from '../logic';
 import { openWeb } from '../parts';
 import { errorText, pk, preads, pwrites, usePermission, type AlertKey, type Category, type Settings } from '../portfolio';
-import { Failed, Loading, Mono, Panel, inputClass, needsConnection, useAsk } from './kit';
+import { Failed, Loading, Mono, inputClass, needsConnection, useAsk } from './kit';
+import { SettingRowFrame, SettingsGroup } from '../../../components/SettingsKit';
 
 /**
  * W17 · Projects module settings (PRJ-NTF, PRJ-BUD), natively: numbering, money, planning, time, the board's WIP limits,
@@ -228,7 +229,7 @@ function Form({ initial, mayEdit, offline }: { initial: Settings; mayEdit: boole
           </Row>
         </Group>
         <Group title="Board · WIP limits" sub="The most cards a column should hold. Empty means no limit.">
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-3 gap-2.5 px-[18px] py-3">
             {WIP_COLUMNS.map((col) => (
               <label key={col} className="flex flex-col gap-1 text-[12.5px]">
                 <span className="font-semibold text-ink">{statusLabel(col)}</span>
@@ -252,12 +253,8 @@ function Form({ initial, mayEdit, offline }: { initial: Settings; mayEdit: boole
           </div>
         </Group>
         <Categories mayEdit={mayEdit} offline={offline} />
-        <Panel className="gap-2 px-3.5 py-3 lg:col-span-2">
-          <div className="flex flex-wrap items-baseline gap-x-2.5">
-            <h2 className="text-[14px] font-bold text-ink">Alerts this module sends</h2>
-            <span className="text-[11.5px] text-ink-3">each one can be switched off per person on the Notifications screen</span>
-          </div>
-          <div className="grid gap-x-6 sm:grid-cols-2">
+        <SettingsGroup title="Alerts this module sends" description="each one can be switched off per person on the Notifications screen" className="!mb-0 lg:col-span-2">
+          <div className="grid gap-x-6 px-[18px] py-2 sm:grid-cols-2">
             {ALERTS.map((a) => (
               <label key={a.key} className="flex items-center gap-2.5 border-t border-line/70 py-1.5 text-[12.5px] text-ink">
                 <Checkbox disabled={ro} checked={s.alerts[a.key] ?? false} onChange={(e) => set('alerts', { ...s.alerts, [a.key]: e.target.checked })} />
@@ -266,29 +263,26 @@ function Form({ initial, mayEdit, offline }: { initial: Settings; mayEdit: boole
               </label>
             ))}
           </div>
-        </Panel>
+        </SettingsGroup>
       </div>
     </div>
   );
 }
 
+/** A card of settings: the Settings kit's group. */
 function Group({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) {
   return (
-    <Panel className="gap-2.5 px-3.5 py-3">
-      <div>
-        <h2 className="text-[14px] font-bold text-ink">{title}</h2>
-        {sub ? <p className="text-[11.5px] text-ink-3">{sub}</p> : null}
-      </div>
+    <SettingsGroup title={title} description={sub} className="!mb-0">
       {children}
-    </Panel>
+    </SettingsGroup>
   );
 }
 
-/** Label left, control right. */
+/** Label left, control right, in the Settings kit's row. */
 function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: (id: string) => ReactNode }) {
   const id = useId();
   return (
-    <div className="grid items-start gap-x-2.5 gap-y-1 sm:grid-cols-[200px_minmax(0,1fr)]">
+    <SettingRowFrame className="grid items-start gap-x-2.5 gap-y-1 !py-2.5 sm:grid-cols-[200px_minmax(0,1fr)]">
       <label htmlFor={id} className="text-[12.5px] font-semibold text-ink sm:pt-1.5">
         {label}
       </label>
@@ -296,7 +290,7 @@ function Row({ label, hint, children }: { label: string; hint?: ReactNode; child
         {children(id)}
         {hint ? <span className="text-[11.5px] text-ink-3">{hint}</span> : null}
       </span>
-    </div>
+    </SettingRowFrame>
   );
 }
 
@@ -339,15 +333,18 @@ function Categories({ mayEdit, offline }: { mayEdit: boolean; offline: boolean }
   };
 
   return (
-    <Panel className="gap-2 px-3.5 py-3">
-      <div className="flex items-center gap-2">
-        <h2 className="text-[14px] font-bold text-ink">Categories</h2>
-        {mayEdit ? (
-          <Button size="sm" icon="plus" className="ms-auto" disabled={offline} title={offline ? needsConnection('Adding a category') : undefined} onClick={() => void add()}>
+    <SettingsGroup
+      title="Categories"
+      className="!mb-0"
+      actions={
+        mayEdit ? (
+          <Button size="sm" icon="plus" disabled={offline} title={offline ? needsConnection('Adding a category') : undefined} onClick={() => void add()}>
             Add category
           </Button>
-        ) : null}
-      </div>
+        ) : null
+      }
+    >
+      <div className="flex flex-col gap-2 px-[18px] py-3">
       {q.isLoading ? (
         <Loading />
       ) : !q.data ? (
@@ -375,8 +372,9 @@ function Categories({ mayEdit, offline }: { mayEdit: boolean; offline: boolean }
           ))}
         </ul>
       )}
+      </div>
       {dialog}
-    </Panel>
+    </SettingsGroup>
   );
 }
 

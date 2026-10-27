@@ -159,7 +159,7 @@ function Line({ r, w, seesCost, onOpen }: { r: StockRow; w: Record<'wh' | 'avail
         {where}
       </span>
       <span className="flex shrink-0 flex-col" style={{ width: w.avail }}>
-        <b className={cx('truncate tabular-nums', avail <= 0 ? 'text-danger' : r.low ? 'text-[#9A4A06] dark:text-warning' : 'text-ink')}>{qty(avail, r.unit)}</b>
+        <b className={cx('truncate tabular-nums', avail <= 0 ? 'text-danger' : r.low ? 'text-warning-ink dark:text-warning' : 'text-ink')}>{qty(avail, r.unit)}</b>
         <span className="truncate text-[11px] text-ink-3">
           {qty(r.on_hand)} on hand
           {reserved ? ` · ${qty(reserved)} held` : ''}

@@ -64,7 +64,7 @@ export default function Estimates({ openId, onOpen, onOpenQuote, onOpenProposal,
         <Select label="Status" value={status} onValueChange={(v) => (setStatus(v), setPage(1))} options={[{ value: '', label: 'Any status' }, ...ESTIMATE_STATUSES.map(([v, l]) => ({ value: v, label: l }))]} />
       </div>
       <div className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
-        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-[#F7F8FB] px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-info-soft px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
           <span className="w-[110px] shrink-0">Estimate</span>
           <span className="min-w-0 flex-1">Title · for</span>
           <span className="w-[130px] shrink-0">Status</span>
@@ -181,7 +181,7 @@ function EstimateView({ id, onBack, onOpenQuote, onOpenProposal, onOpenRecord }:
           </div>
 
           {e.approval && (e.status === 'pending_approval' || e.approval.status === 'sent_back') ? (
-            <div role="note" className="rounded-[8px] border border-[#F5C77E] bg-[#FFF8EB] px-3 py-2 text-[12.5px] text-ink dark:border-warning/40 dark:bg-warning-bg">
+            <div role="note" className="rounded-[8px] border border-warning-line bg-warning-bg px-3 py-2 text-[12.5px] text-ink dark:border-warning/40 dark:bg-warning-bg">
               <b>{e.approval.status === 'sent_back' ? 'Sent back' : 'Needs approval before it is sent'}</b>
               {e.approval.rules.length ? ` — ${e.approval.rules.map((r) => r.label).join('; ')}` : ''}
               {e.approval.note ? <span className="block text-ink-2">“{e.approval.note}”</span> : null}
@@ -211,7 +211,7 @@ function EstimateView({ id, onBack, onOpenQuote, onOpenProposal, onOpenRecord }:
 
           {e.lines?.length ? (
             <div role="table" aria-label="Lines" className="overflow-x-auto rounded-[10px] border border-line bg-surface">
-              <div role="row" className="flex min-w-[640px] items-center gap-2 border-b border-line bg-[#F7F8FB] px-3 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+              <div role="row" className="flex min-w-[640px] items-center gap-2 border-b border-line bg-info-soft px-3 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
                 <span role="columnheader" className="min-w-[180px] flex-1">Description</span>
                 <span role="columnheader" className="w-[60px] shrink-0 text-right">Qty</span>
                 <span role="columnheader" className="w-[120px] shrink-0 text-right">Rate</span>

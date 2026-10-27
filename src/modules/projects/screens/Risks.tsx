@@ -80,7 +80,7 @@ export function RisksScreen({ projectId = null, offline, onOffline, onGo }: { pr
             <span className="text-[12px] text-ink-3">Impact × probability, open and mitigating</span>
             {d ? <HeatMap heat={d.heat} /> : <Spinner />}
             <p className="border-t border-line pt-1.5 text-[12px] text-ink-2">
-              <strong className="text-danger">Critical</strong> score 12–16 · <strong className="text-[#9A3412] dark:text-[#FDBA74]">High</strong> 6–9 · <strong className="text-warning-ink">Medium</strong> 3–4 · Low 1–2
+              <strong className="text-danger">Critical</strong> score 12–16 · <strong className="text-orange-ink">High</strong> 6–9 · <strong className="text-warning-ink">Medium</strong> 3–4 · Low 1–2
             </p>
           </section>
           <section className="self-start overflow-x-auto rounded-[12px] border border-line bg-surface">

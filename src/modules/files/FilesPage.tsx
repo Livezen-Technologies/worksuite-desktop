@@ -680,7 +680,7 @@ export default function FilesPage(_props: ModuleProps) {
       {editor?.kind === 'code' ? <CodeEditor key={editor.file.id} file={editor.file} onClose={() => (setEditor(null), refresh())} /> : null}
       {editor?.kind === 'viewer' ? <ImageViewer files={editor.files} start={editor.index} onClose={() => (setEditor(null), refresh())} onEdit={(f, version) => setEditor({ kind: 'image', file: f, version: version ?? null, list: editor.files })} /> : null}
       {editor?.kind === 'image' ? (
-        <Suspense fallback={<div className="absolute inset-0 z-30 flex items-center justify-center bg-[#0B1120]"><Spinner label="Opening the photo editor…" /></div>}>
+        <Suspense fallback={<div className="absolute inset-0 z-30 flex items-center justify-center bg-stage"><Spinner label="Opening the photo editor…" /></div>}>
           <PhotoEditor
             key={`${editor.file?.id ?? 'new'}:${editor.version ?? ''}`}
             file={editor.file}

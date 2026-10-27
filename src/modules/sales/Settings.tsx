@@ -57,7 +57,7 @@ export default function Settings({ org, section: asked }: { org: string; section
                 aria-current={on ? 'page' : undefined}
                 title={n.native ? n.label : `${n.label} — opens in your browser`}
                 onClick={() => (n.native ? setSection(n.id) : void call('app:openInBrowser', { path: '/oms' }))}
-                className={cx('flex h-8 items-center gap-2 rounded-[8px] px-2.5 text-left text-[13px]', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+                className={cx('flex h-8 items-center gap-2 rounded-[8px] px-2.5 text-left text-[13px]', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
               >
                 <span className="min-w-0 flex-1 truncate">{n.label}</span>
                 {n.native ? null : <Icon name="external" size={12} className="shrink-0 text-ink-3" />}

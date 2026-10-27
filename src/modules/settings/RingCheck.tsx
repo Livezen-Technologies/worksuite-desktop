@@ -5,6 +5,7 @@ import { call, errorMessage, isMac } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, cx } from '../../components/ui';
+import { SettingRowFrame } from '../../components/SettingsKit';
 import { playTone, type RingOn } from '../calls/tones';
 
 /**
@@ -94,7 +95,7 @@ export function TestChatNotification({ volume, muted, ringtone, ringOn }: { volu
     }
   };
   return (
-    <div className="flex flex-col gap-2 py-3" data-testid="ring-test">
+    <SettingRowFrame className="flex flex-col gap-2" data-testid="ring-test">
       <div className="flex flex-wrap items-center gap-3">
         <Button icon="bell" onClick={() => void run()} disabled={busy}>
           {busy ? 'Testing…' : 'Send a test chat notification'}
@@ -114,6 +115,6 @@ export function TestChatNotification({ volume, muted, ringtone, ringOn }: { volu
           ))}
         </ol>
       ) : null}
-    </div>
+    </SettingRowFrame>
   );
 }

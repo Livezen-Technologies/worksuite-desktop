@@ -149,7 +149,7 @@ function AddChannel({ k, orgs, onClose, onAdded }: { k: ChannelKind; orgs: Array
       </Field>
       <Field
         label="Points at"
-        hint={k.needs_ref && !k.available.length ? <span className="text-[#9A4A06] dark:text-warning">Nothing is set up yet. Set one up {k.made_in ?? 'in Billing'} first, then it appears here.</span> : undefined}
+        hint={k.needs_ref && !k.available.length ? <span className="text-warning-ink dark:text-warning">Nothing is set up yet. Set one up {k.made_in ?? 'in Billing'} first, then it appears here.</span> : undefined}
       >
         <Select<string>
           aria-label="Points at"
@@ -275,7 +275,7 @@ function ChannelPanel({ id, org, can, onClose }: { id: number; org: string; can:
               ...(can.view_logs !== false ? [{ id: 'logs' as const, label: 'Logs' }] : []),
             ]}
           />
-          {c.last_error ? <p className="m-0 rounded-[10px] border border-[#F1B8A8] bg-danger-bg px-3 py-2 text-[12.5px] text-danger">Last failure: {c.last_error}</p> : null}
+          {c.last_error ? <p className="m-0 rounded-[10px] border border-danger-line bg-danger-bg px-3 py-2 text-[12.5px] text-danger">Last failure: {c.last_error}</p> : null}
           {tab === 'connection' ? (
             <div className="flex flex-col gap-2.5 text-[12.5px]">
               <p className="m-0 rounded-[10px] bg-subtle px-3 py-2 leading-relaxed text-ink-2">{d.describe.note}</p>
@@ -587,14 +587,14 @@ function Running({ run, name, driving, canSync, onCancel, onResume }: { run: Syn
         ) : null}
       </div>
       {run.interrupted && !driving ? (
-        <p className="m-0 rounded-[8px] bg-warning-bg px-2.5 py-1.5 text-[12px] text-[#9A4A06] dark:text-warning">
+        <p className="m-0 rounded-[8px] bg-warning-bg px-2.5 py-1.5 text-[12px] text-warning-ink dark:text-warning">
           This sync stopped at page {run.page}
           {run.pages ? ` of ${run.pages}` : ''} when the screen driving it closed. Carry on picks it up from there; nothing is brought in twice.
         </p>
       ) : null}
       {steps.map((s) => (
         <span key={s.label} className={cx('flex items-start gap-2.5 rounded-[8px] px-1.5 py-1 text-[12.5px]', s.state === 'active' && 'bg-selection/50')}>
-          <span className={cx('mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold', s.state === 'done' ? 'bg-[#1F7A4D] text-white' : s.state === 'active' ? 'border-2 border-primary' : 'border-[1.5px] border-line')}>
+          <span className={cx('mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold', s.state === 'done' ? 'bg-success text-white' : s.state === 'active' ? 'border-2 border-primary' : 'border-[1.5px] border-line')}>
             {s.state === 'done' ? <Icon name="check" size={11} /> : null}
           </span>
           <span className="flex min-w-0 flex-1 flex-col">

@@ -110,7 +110,7 @@ export default function Review({ job, canMove, reasons, onJob }: { job: number |
           <ul aria-label="Candidates to review" className="w-[240px] shrink-0 overflow-y-auto rounded-[12px] border border-line bg-surface scroll-thin">
             {left.map((c, i) => (
               <li key={c.id}>
-                <button type="button" aria-current={i === index ? 'true' : undefined} onClick={() => setAt(i)} className={cx('flex w-full items-center gap-2.5 border-b border-line/70 px-3 py-2.5 text-left', i === index ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+                <button type="button" aria-current={i === index ? 'true' : undefined} onClick={() => setAt(i)} className={cx('flex w-full items-center gap-2.5 border-b border-line/70 px-3 py-2.5 text-left', i === index ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
                   <Avatar name={c.name} size={30} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-semibold text-ink">{c.name}</span>

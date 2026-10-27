@@ -23,7 +23,7 @@ export function OrgTile({ id, name, size = 32, all }: { id: string; name: string
   return (
     <span
       className="flex shrink-0 items-center justify-center rounded-[9px] font-bold text-white"
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.36), background: all ? '#2F3E91' : orgTone(id) }}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.36), background: all ? 'var(--ws-navy-3)' : orgTone(id) }}
       aria-hidden
     >
       {all ? 'AO' : initials(name)}

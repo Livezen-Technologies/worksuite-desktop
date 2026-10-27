@@ -141,8 +141,8 @@ function CallDock({ lines }: { lines: Line[] }) {
   return (
     <div className="pointer-events-none fixed bottom-10 left-1/2 z-[55] flex -translate-x-1/2 flex-col items-center gap-1.5">
       {lines.slice(0, 3).map((l) => (
-        <div key={l.id} className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-[#0b1220] py-1.5 pr-1.5 pl-4 text-[12.5px] text-white shadow-2xl">
-          <span className={cx('h-2 w-2 rounded-full', l.held ? 'bg-[#F79009]' : l.state === 'connected' ? 'bg-[#22A861]' : 'bg-white/50')} />
+        <div key={l.id} className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-stage py-1.5 pr-1.5 pl-4 text-[12.5px] text-white shadow-2xl">
+          <span className={cx('h-2 w-2 rounded-full', l.held ? 'bg-amber' : l.state === 'connected' ? 'bg-green' : 'bg-white/50')} />
           <button type="button" className="max-w-[220px] truncate font-semibold" onClick={() => navigate('/phone')} title="Open the call">
             {l.remoteName ?? prettyNumber(l.remote)}
           </button>
@@ -163,7 +163,7 @@ function CallDock({ lines }: { lines: Line[] }) {
               </Button>
             </>
           ) : null}
-          <button type="button" aria-label="End call" onClick={() => void runPhone({ cmd: 'hangup', id: l.id })} className="flex h-7 items-center gap-1 rounded-full bg-[#D92D20] px-3 text-[12px] font-semibold text-white hover:opacity-90">
+          <button type="button" aria-label="End call" onClick={() => void runPhone({ cmd: 'hangup', id: l.id })} className="flex h-7 items-center gap-1 rounded-full bg-orange px-3 text-[12px] font-semibold text-white hover:opacity-90">
             <Icon name="phone-off" size={13} />
             End
           </button>

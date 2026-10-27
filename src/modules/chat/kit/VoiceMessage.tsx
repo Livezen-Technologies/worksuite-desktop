@@ -286,10 +286,10 @@ export function VoiceMessage({ file, own, look, of, src, upload }: {
               done > 0 && (i + 0.5) / bars.length <= done
                 ? onIndigo
                   ? 'bg-white'
-                  : cx('bg-primary', own && 'dark:bg-[#B4C3FF]')
+                  : cx('bg-primary', own && 'dark:bg-indigo-bright')
                 : onIndigo
                   ? 'bg-white/40'
-                  : 'bg-[#9AA6D6] dark:bg-white/25',
+                  : 'bg-muted dark:bg-white/25',
             )}
             style={{ height: `${Math.max(12, peaks ? v : 18)}%` }}
           />

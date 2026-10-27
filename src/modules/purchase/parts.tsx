@@ -51,7 +51,7 @@ export function Chain({ a }: { a: ApprovalState }) {
           <span
             className={cx(
               'flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
-              s.decision === 'approved' ? 'bg-[#E4F4EA] text-[#145C39]' : s.decision === 'rejected' ? 'bg-[#FCE9E4] text-[#8C2A14]' : s.decision === 'skipped' ? 'bg-subtle text-ink-3' : 'bg-[#FFF4E0] text-[#9A4A06]',
+              s.decision === 'approved' ? 'bg-success-bg text-success-ink' : s.decision === 'rejected' ? 'bg-danger-bg text-danger-ink' : s.decision === 'skipped' ? 'bg-subtle text-ink-3' : 'bg-warning-bg text-warning-ink',
             )}
             aria-hidden="true"
           >
@@ -70,7 +70,7 @@ export function Chain({ a }: { a: ApprovalState }) {
 /** "Approval 2/3" as a pill, for lists. */
 export function ChainPill({ a }: { a: ApprovalState }) {
   const w = chainWords(a);
-  return w ? <span className="inline-flex h-[20px] items-center rounded-[10px] bg-[#FFF4E0] px-2 text-[11px] font-bold whitespace-nowrap text-[#9A4A06] dark:bg-warning-bg dark:text-warning">{w}</span> : null;
+  return w ? <span className="inline-flex h-[20px] items-center rounded-[10px] bg-warning-bg px-2 text-[11px] font-bold whitespace-nowrap text-warning-ink dark:bg-warning-bg dark:text-warning">{w}</span> : null;
 }
 
 /**

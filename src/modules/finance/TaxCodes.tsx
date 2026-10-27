@@ -302,7 +302,7 @@ function RateSheet({ company, code, onClose, onDone }: { company: Company; code:
       {h.isLoading ? (
         <p className="m-0 text-[12px] text-ink-3">Loading the rates…</p>
       ) : h.error ? (
-        <p className="m-0 text-[12px] text-[#9A4A06] dark:text-warning">The rate history could not be loaded. That is a failed request, not a code with no rates.</p>
+        <p className="m-0 text-[12px] text-warning-ink dark:text-warning">The rate history could not be loaded. That is a failed request, not a code with no rates.</p>
       ) : rates.length === 0 ? (
         <p className="m-0 text-[12px] text-ink-3">No rate has been set yet, so nothing using this code can be taxed.</p>
       ) : (

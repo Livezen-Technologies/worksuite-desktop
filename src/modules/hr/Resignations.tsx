@@ -152,7 +152,7 @@ function ResignationDetail({ id, onClose, onOffboarding }: { id: number; onClose
           <span><b className="text-ink">{r.type_label}</b></span>
           <span>Asked for {dayLong(r.requested_last_working_date)}</span>
           {r.minimum_last_working_date ? <span>Notice runs to {dayLong(r.minimum_last_working_date)}</span> : null}
-          {r.notice_shortfall_days ? <span className="font-semibold text-[#9A4A06] dark:text-warning">{r.notice_shortfall_days} days short</span> : null}
+          {r.notice_shortfall_days ? <span className="font-semibold text-warning-ink dark:text-warning">{r.notice_shortfall_days} days short</span> : null}
           {r.early_release_requested ? <span className="font-semibold text-ink">Asks for early release</span> : null}
         </div>
         {withdrawal && r.withdrawal_reason ? (

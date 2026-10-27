@@ -86,7 +86,7 @@ export default function Library({ org, companies, canManage }: { org: string; co
         </div>
       </div>
       {picked.length && canManage ? (
-        <div className="flex items-center gap-2 self-start rounded-[9px] border border-[#C7D0F5] bg-[#EEF1FC] px-2.5 py-1.5 dark:border-primary/40 dark:bg-selection">
+        <div className="flex items-center gap-2 self-start rounded-[9px] border border-info-line bg-selection px-2.5 py-1.5 dark:border-primary/40 dark:bg-selection">
           <b className="text-[12.5px] text-primary">{picked.length} selected</b>
           <button type="button" className={btnSmall + ' !h-7 !text-danger'} onClick={() => setRemoving(lib.items.filter((d) => picked.includes(d.id)))}>
             Remove
@@ -99,7 +99,7 @@ export default function Library({ org, companies, canManage }: { org: string; co
       <div className="overflow-hidden rounded-[12px] border border-line bg-surface" aria-label="Library">
         {rows.length ? (
           rows.map((d) => (
-            <div key={d.id} data-library={d.id} className={cx('flex items-center gap-3 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0', picked.includes(d.id) && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+            <div key={d.id} data-library={d.id} className={cx('flex items-center gap-3 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0', picked.includes(d.id) && 'bg-info-soft dark:bg-selection/40')}>
               {canManage ? <Checkbox aria-label={`Choose ${d.name}`} checked={picked.includes(d.id)} onChange={() => setPicked((p) => (p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id]))} /> : null}
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="flex flex-wrap items-center gap-1.5">
@@ -112,7 +112,7 @@ export default function Library({ org, companies, canManage }: { org: string; co
                 </span>
                 {d.note ? <span className="text-[12px] text-ink-2">{d.note}</span> : null}
               </span>
-              <span className={cx('flex w-[150px] shrink-0 flex-col items-end', d.state === 'expired' ? 'text-danger' : d.state === 'expiring' ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
+              <span className={cx('flex w-[150px] shrink-0 flex-col items-end', d.state === 'expired' ? 'text-danger' : d.state === 'expiring' ? 'text-warning-ink dark:text-warning' : 'text-ink-2')}>
                 {d.expires_on ? (
                   <>
                     <span className={cx(d.state !== 'valid' && 'font-bold')}>{d.state === 'expired' ? 'Expired' : `Until ${dayWords(d.expires_on, { year: true })}`}</span>

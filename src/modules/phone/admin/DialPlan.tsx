@@ -137,10 +137,10 @@ export default function DialPlan() {
             )}
             <p className="mt-3 text-[11.5px] text-ink-3">Reserved by Asterisk and never allocated: {RESERVED_NOTE}.</p>
           </Panel>
-          <section className="flex min-h-[420px] flex-col overflow-hidden rounded-[12px] bg-[#0b1220] text-white">
+          <section className="flex min-h-[420px] flex-col overflow-hidden rounded-[12px] bg-stage text-white">
             <div className="flex flex-wrap gap-1 border-b border-white/10 p-2">
               {names.map((n) => (
-                <button key={n} type="button" onClick={() => setFile(n)} className={cx('rounded-[6px] px-2.5 py-1 font-mono text-[11.5px]', shownFile === n ? 'bg-white text-[#0b1220]' : 'text-white/70 hover:bg-white/10')}>
+                <button key={n} type="button" onClick={() => setFile(n)} className={cx('rounded-[6px] px-2.5 py-1 font-mono text-[11.5px]', shownFile === n ? 'bg-white text-stage-on-light' : 'text-white/70 hover:bg-white/10')}>
                   {n}
                 </button>
               ))}
@@ -193,7 +193,7 @@ function Code({ before, after }: { before: string | null; after: string }) {
   return (
     <pre className="min-h-0 flex-1 overflow-auto p-3 font-mono text-[11.5px] leading-[1.55] scroll-thin" aria-label="Generated configuration">
       {lines.map((l, i) => (
-        <div key={i} className={cx('px-1 whitespace-pre', l.kind === 'add' && 'bg-[#12301F] text-[#86D8AE]', l.kind === 'del' && 'bg-[#3A1614] text-[#F7A39B] line-through', l.kind === 'same' && (l.text.trim().startsWith(';') ? 'text-white/45' : 'text-white/85'))}>
+        <div key={i} className={cx('px-1 whitespace-pre', l.kind === 'add' && 'bg-stage-gray text-stage-success', l.kind === 'del' && 'bg-stage-gray text-stage-danger line-through', l.kind === 'same' && (l.text.trim().startsWith(';') ? 'text-white/45' : 'text-white/85'))}>
           {l.kind === 'add' ? '+ ' : l.kind === 'del' ? '- ' : '  '}
           {l.text || ' '}
         </div>

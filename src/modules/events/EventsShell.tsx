@@ -155,7 +155,7 @@ function EventShell({ id, screen, active, goRoute, openInWindow }: { id: number;
       <div className="flex h-full min-h-0">
         {!bare ? (
           <SidePanel id="events" label="the event menu">
-            <nav aria-label="Events" className="flex w-[228px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+            <nav aria-label="Events" className="flex w-[228px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
               <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
                 <button type="button" onClick={() => goRoute('/events')} className="flex items-center gap-1 px-1 text-left text-[11.5px] font-semibold text-ink-3 hover:text-ink">
                   <Icon name="back" size={13} /> All events
@@ -196,7 +196,7 @@ function EventShell({ id, screen, active, goRoute, openInWindow }: { id: number;
                             type="button"
                             aria-current={on ? 'page' : undefined}
                             onClick={() => ctx.go(v)}
-                            className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+                            className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
                           >
                             <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
                             <Icon name={VIEWS[v].icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />

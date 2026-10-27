@@ -149,7 +149,7 @@ export default function Settings({ org, options, section, onSection }: { org: st
                 type="button"
                 aria-current={on ? 'page' : undefined}
                 onClick={() => onSection(s.id)}
-                className={cx('flex h-8 items-center gap-2 rounded-[8px] px-2.5 text-left text-[13px]', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-semibold text-ink hover:bg-subtle')}
+                className={cx('flex h-8 items-center gap-2 rounded-[8px] px-2.5 text-left text-[13px]', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-semibold text-ink hover:bg-subtle')}
               >
                 <span className="min-w-0 flex-1 truncate">{s.label}</span>
                 {dirty ? <span className="size-1.5 shrink-0 rounded-full bg-primary" title="Unsaved changes" /> : null}

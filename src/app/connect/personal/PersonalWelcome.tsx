@@ -118,22 +118,22 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
   const hero = (
     <>
       {adding ? (
-        <button type="button" onClick={back} className="self-start text-[14px] text-[#9FB0FF] hover:underline">
+        <button type="button" onClick={back} className="self-start text-[14px] text-stage-accent hover:underline">
           ← Back to choices
         </button>
       ) : (
         <span />
       )}
       <div className="flex flex-col gap-4">
-        <div className="text-[12px] font-bold tracking-[2px] text-[#9FB0FF]">WORKSUITE CLOUD</div>
+        <div className="text-[12px] font-bold tracking-[2px] text-stage-accent">WORKSUITE CLOUD</div>
         <div className="text-[36px] leading-[1.15] font-extrabold">Your own workspace, on every device.</div>
-        <div className="text-[15px] leading-[1.6] text-[#C9D1F5]">Mail, Chat, Calendar, Tasks, Files, DOC, Sheet and Slides — synced between Windows, macOS, Linux, the web and your phone.</div>
+        <div className="text-[15px] leading-[1.6] text-navy-ink">Mail, Chat, Calendar, Tasks, Files, DOC, Sheet and Slides — synced between Windows, macOS, Linux, the web and your phone.</div>
         <div className="mt-2 flex flex-wrap gap-2.5">
           <span className="rounded-full bg-white/10 px-3 py-1.5 text-[13px]">WorkSuite Professional · Free</span>
           <span className="rounded-full bg-teal/35 px-3 py-1.5 text-[13px]">{gb(freeBytes)} storage</span>
         </div>
       </div>
-      <div className="font-mono text-[12px] text-[#9FB0FF]">
+      <div className="font-mono text-[12px] text-stage-accent">
         {host}
         {verified ? ' · verified by Livezen key' : ''}
       </div>

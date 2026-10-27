@@ -33,7 +33,7 @@ const DOWNLOAD_LABEL: Record<DownloadAction, string> = {
 const TONE: Record<RecordingStatus['tone'], string> = {
   progress: 'bg-primary/15 text-primary',
   success: 'bg-success-bg text-success',
-  warning: 'bg-[#FFF3DC] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
+  warning: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
   danger: 'bg-danger-bg text-danger',
 };
 
@@ -84,7 +84,7 @@ export function RecordingStatusView({ status, on, compact }: { status: Recording
       </div>
       {status.progress && (!compact || !status.playable) ? <ProgressBar progress={status.progress} label={status.label} /> : null}
       {status.note ? (
-        <span role={status.tone === 'danger' || status.stalled ? 'alert' : 'status'} className={cx('text-[12px]', status.tone === 'danger' ? 'text-danger' : status.stalled ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
+        <span role={status.tone === 'danger' || status.stalled ? 'alert' : 'status'} className={cx('text-[12px]', status.tone === 'danger' ? 'text-danger' : status.stalled ? 'text-warning-ink dark:text-warning' : 'text-ink-2')}>
           {status.note}
         </span>
       ) : null}

@@ -4,6 +4,7 @@ import { text } from '../../core/i18n';
 import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Spinner } from '../../components/ui';
+import { SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Spell check’s languages (worksuite-desktop#188), in Settings › Mail ›
@@ -39,9 +40,8 @@ export function SpellingSettings() {
     }
   };
   return (
-    <section aria-label={text('Spelling')} className="mt-6 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
-      <h3 className="text-[15px] font-bold text-ink">{text('Spelling')}</h3>
-      <p className="text-[12px] text-ink-3">{text('Misspelt words are underlined as you write; right-click one for corrections or to add it to the dictionary.')}</p>
+    <SettingsGroup title={text('Spelling')} description={text('Misspelt words are underlined as you write; right-click one for corrections or to add it to the dictionary.')} className="mt-6">
+      <div className="flex flex-col gap-3 px-[18px] py-3.5 text-[13.5px] text-ink">
       {error ? <p className="text-[12.5px] text-ink-3">{text('Spell check languages can be chosen in the desktop app only.')}</p> : !state ? <Spinner label="" /> : null}
       {state?.system ? <p className="text-[12.5px] text-ink-2">{text('On macOS, spelling follows the languages set in System Settings › Keyboard › Text Input.')}</p> : null}
       {state && !state.system ? (
@@ -57,6 +57,7 @@ export function SpellingSettings() {
           ))}
         </ul>
       ) : null}
-    </section>
+      </div>
+    </SettingsGroup>
   );
 }

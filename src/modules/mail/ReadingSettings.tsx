@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Button, TextField, cx } from '../../components/ui';
 import type { FormatRule, MailPrefs, MessageRow } from './types';
+import { SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Conditional formatting (ENH-MAIL-03 DMO-INB-18): a list row coloured or
@@ -88,9 +89,8 @@ export function FormattingSettings({ prefs, set }: { prefs: MailPrefs; set: (p: 
     return w.needsValue ? `${text(w.label)} “${r.value}”` : text(w.label);
   };
   return (
-    <section aria-label={text('Conditional formatting')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
-      <h3 className="text-[15px] font-bold text-ink">{text('Conditional formatting')}</h3>
-      <p className="text-[12px] text-ink-3">{text('Colour or bold a message in the list when it matches. The first rule that matches is used.')}</p>
+    <SettingsGroup title={text('Conditional formatting')} description={text('Colour or bold a message in the list when it matches. The first rule that matches is used.')}>
+      <div className="px-[18px] py-3.5 flex flex-col gap-3 text-[13.5px] text-ink">
       {rules.length ? (
         <ul className="flex flex-col divide-y divide-line rounded-[10px] border border-line">
           {rules.map((r, i) => (
@@ -124,6 +124,7 @@ export function FormattingSettings({ prefs, set }: { prefs: MailPrefs; set: (p: 
           {text('Add rule')}
         </Button>
       </div>
-    </section>
+      </div>
+    </SettingsGroup>
   );
 }

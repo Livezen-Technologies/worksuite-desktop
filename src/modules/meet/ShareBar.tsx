@@ -51,18 +51,18 @@ export function ShareBarWindow() {
   const elapsed = state ? Math.max(0, now - state.since) : 0;
 
   return (
-    <div className="drag flex h-full w-full items-center gap-2 rounded-[14px] bg-[#0F172A] px-2.5 text-white shadow-[0_12px_30px_rgba(0,0,0,.45)]">
+    <div className="drag flex h-full w-full items-center gap-2 rounded-[14px] bg-stage px-2.5 text-white shadow-[0_12px_30px_rgba(0,0,0,.45)]">
       <span
         className={cx(
           'no-drag flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-[12px] font-semibold',
-          state?.paused ? 'bg-[#3A2A10] text-[#F6C77A]' : 'bg-[#14532D] text-[#BBF7D0]',
+          state?.paused ? 'bg-stage-gray-2 text-stage-warning' : 'bg-stage-gray-2 text-stage-success',
         )}
         title={state?.label ? `Sharing ${state.label}` : 'Sharing your screen'}
       >
         <Icon name="screen-share" size={14} />
         <span className="max-w-[220px] truncate">{state?.paused ? 'Paused' : state?.label ? `Sharing ${state.label}` : 'Sharing'}</span>
       </span>
-      <span className="shrink-0 font-mono text-[12px] text-[#94A3B8]" aria-label="Time shared">
+      <span className="shrink-0 font-mono text-[12px] text-stage-ink-3" aria-label="Time shared">
         {known ? hms(elapsed) : '—'}
       </span>
       <span className="flex-1" />
@@ -80,7 +80,7 @@ export function ShareBarWindow() {
           type="button"
           disabled={!known}
           onClick={() => act('meet-pause-share')}
-          className="h-8 rounded-[9px] border border-[#334155] bg-[#1E293B] px-2.5 text-[12.5px] font-semibold text-[#E2E8F0] hover:bg-[#263449] disabled:opacity-50"
+          className="h-8 rounded-[9px] border border-stage-4 bg-stage-line-soft px-2.5 text-[12.5px] font-semibold text-stage-ink hover:bg-stage-gray-2 disabled:opacity-50"
         >
           {state?.paused ? 'Resume' : 'Pause'}
         </button>
@@ -88,7 +88,7 @@ export function ShareBarWindow() {
           type="button"
           disabled={!known}
           onClick={() => act('meet-stop-share')}
-          className="h-8 rounded-[9px] bg-[#C4321C] px-2.5 text-[12.5px] font-bold text-white hover:bg-[#A8291A] disabled:opacity-50"
+          className="h-8 rounded-[9px] bg-badge px-2.5 text-[12.5px] font-bold text-white hover:bg-badge disabled:opacity-50"
         >
           Stop sharing
         </button>
@@ -107,12 +107,12 @@ function BarButton({ label, icon, onClick, warn, badge, disabled }: { label: str
       disabled={disabled}
       className={cx(
         'relative flex h-8 w-8 items-center justify-center rounded-[9px] text-white disabled:opacity-50',
-        warn ? 'bg-[#7F1D1D] hover:bg-[#991B1B]' : 'bg-[#1E293B] hover:bg-[#263449]',
+        warn ? 'bg-stage-gray-2 hover:bg-badge' : 'bg-stage-line-soft hover:bg-stage-gray-2',
       )}
     >
       <Icon name={icon} size={16} />
       {badge ? (
-        <span className="absolute -top-1 -right-1 min-w-[16px] rounded-full bg-[#3B5BDB] px-1 text-[10px] font-bold leading-4 text-white">{badge > 99 ? '99+' : badge}</span>
+        <span className="absolute -top-1 -right-1 min-w-[16px] rounded-full bg-brand px-1 text-[10px] font-bold leading-4 text-white">{badge > 99 ? '99+' : badge}</span>
       ) : null}
     </button>
   );

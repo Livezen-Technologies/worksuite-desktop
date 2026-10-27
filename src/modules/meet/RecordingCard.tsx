@@ -197,7 +197,7 @@ export function RecordingCard({ item, status, download, onPlay, onMain, onMore, 
           aria-label={`Play ${name}`}
           title={status.playable ? 'Play' : pill}
           onClick={onPlay}
-          className="relative flex h-[60px] w-[96px] shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[9px] bg-[#D8E4F6] text-[#24365F] disabled:cursor-default dark:bg-selection dark:text-ink"
+          className="relative flex h-[60px] w-[96px] shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[9px] bg-blue-bg text-slate-ink disabled:cursor-default dark:bg-selection dark:text-ink"
         >
           {thumb ? <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
           {failed ? (
@@ -227,7 +227,7 @@ export function RecordingCard({ item, status, download, onPlay, onMain, onMore, 
         </div>
       ) : null}
       {status.note ? (
-        <div className={cx('flex min-w-0 items-start gap-1.5 text-[12px]', failed ? 'text-danger' : status.stalled ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-3')}>
+        <div className={cx('flex min-w-0 items-start gap-1.5 text-[12px]', failed ? 'text-danger' : status.stalled ? 'text-warning-ink dark:text-warning' : 'text-ink-3')}>
           <span role={problem ? 'alert' : 'status'} className={cx('min-w-0 flex-1', details ? 'whitespace-normal' : 'truncate')} title={details ? undefined : status.note}>
             {status.note}
           </span>

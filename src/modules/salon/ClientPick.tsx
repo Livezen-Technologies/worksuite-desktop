@@ -98,7 +98,7 @@ export function FindClient({ onChosen }: { onChosen: (c: Chosen) => void }) {
   const rows = q.data?.items ?? [];
   return (
     <div className="flex flex-col gap-2.5">
-      <label className="flex min-h-12 items-center gap-2.5 rounded-[12px] border border-[#C9CEDD] bg-surface px-3.5 focus-within:border-2 focus-within:border-primary dark:border-line">
+      <label className="flex min-h-12 items-center gap-2.5 rounded-[12px] border border-slate-line bg-surface px-3.5 focus-within:border-2 focus-within:border-primary dark:border-line">
         <Icon name="search" size={18} className="text-ink-3" />
         <input aria-label="Client" placeholder="Client — name, mobile or email" value={term} onChange={(e) => setTerm(e.target.value)} className="bare-focus min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3" />
       </label>

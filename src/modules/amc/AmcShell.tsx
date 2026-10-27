@@ -54,10 +54,10 @@ export default function AmcShell(_props: ModuleProps) {
   return (
     <div className="flex h-full min-h-0">
       <SidePanel id="amc" label="the AMC menu">
-        <nav aria-label="AMC & Service" className="flex w-[210px] shrink-0 flex-col overflow-y-auto border-r border-line bg-[#FBFBFD] px-2.5 py-3 text-[13px] text-ink scroll-thin dark:bg-surface">
+        <nav aria-label="AMC & Service" className="flex w-[210px] shrink-0 flex-col overflow-y-auto border-r border-line bg-rail px-2.5 py-3 text-[13px] text-ink scroll-thin dark:bg-surface">
           {AMC_NATIVE_VIEWS.map((v) => (
             <button key={v} type="button" aria-current={v === view ? 'page' : undefined} onClick={() => go(`/amc?view=${v}`)}
-              className={cx('flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] px-2.5 text-left', v === view ? 'bg-[#FEF3C7] font-bold text-[#B45309] dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}>
+              className={cx('flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] px-2.5 text-left', v === view ? 'bg-yellow-bg font-bold text-warning dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}>
               <Icon name={ICONS[v]} size={16} className="shrink-0" />
               <span className="flex-1 truncate">{TITLES[v]}</span>
             </button>

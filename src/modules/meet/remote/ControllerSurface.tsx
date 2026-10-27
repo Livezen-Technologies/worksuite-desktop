@@ -39,7 +39,7 @@ export function RemoteControlLayer({ sharer }: { sharer: CallPerson }) {
   return (
     <>
       {session ? <ControlSurface session={session} /> : null}
-      <div className="absolute top-12 left-3 z-[3] flex max-w-[min(640px,70%)] flex-col items-start gap-2 text-[12.5px] text-[#E6ECFA]">
+      <div className="absolute top-12 left-3 z-[3] flex max-w-[min(640px,70%)] flex-col items-start gap-2 text-[12.5px] text-stage-ink">
         {session ? <SessionBar session={session} share={share} /> : <RequestBar share={share} policyOff={policy === 'disabled'} />}
       </div>
       {!session && ended ? <EndedCard ended={ended} canAsk={policy !== 'disabled' && !!share?.availability.can_request} /> : null}
@@ -64,7 +64,7 @@ function EndedCard({ ended, canAsk }: { ended: NonNullable<typeof remote.ended>;
     <div role="status" aria-live="polite" className="absolute inset-0 z-[4] flex items-center justify-center bg-[rgba(7,12,26,.6)] p-6">
       <div className="max-w-md rounded-[12px] bg-[rgba(15,27,61,.95)] px-5 py-4 text-center shadow-xl">
         <b className="text-[15px] text-white">Remote control ended by {ended.by}</b>
-        <p className="mt-1.5 text-[12.5px] text-[#C9D3EE]">
+        <p className="mt-1.5 text-[12.5px] text-navy-ink">
           {ended.reason} {ended.sharer}&rsquo;s screen is still shared in the meeting.
           {ended.length ? ` This session lasted ${ended.length}.` : ''}
           {canAsk ? ' You can ask for control again from the bar above the screen.' : ''}
@@ -73,7 +73,7 @@ function EndedCard({ ended, canAsk }: { ended: NonNullable<typeof remote.ended>;
           type="button"
           autoFocus
           onClick={() => remote.clearEnded()}
-          className="mt-3 h-9 rounded-[9px] bg-[#3B5BDB] px-3.5 text-[13px] font-bold text-white hover:bg-[#2F4CC0]"
+          className="mt-3 h-9 rounded-[9px] bg-brand-soft px-3.5 text-[13px] font-bold text-white hover:bg-brand-soft"
         >
           Back to the meeting
         </button>
@@ -120,18 +120,18 @@ function RequestBar({ share, policyOff }: { share: Share | undefined; policyOff:
           disabled={busy}
           title={offer.hint ?? undefined}
           onClick={() => setDialog({ kind: 'first', message: null, resolve: (reason) => reason !== null && void go(reason) })}
-          className="no-drag flex h-8 items-center gap-1.5 rounded-[8px] bg-[#3B5BDB] px-3 font-bold text-white shadow-lg hover:bg-[#4C6BE6] disabled:opacity-50"
+          className="no-drag flex h-8 items-center gap-1.5 rounded-[8px] bg-brand-soft px-3 font-bold text-white shadow-lg hover:bg-blue disabled:opacity-50"
         >
           <Icon name={busy ? 'spinner' : 'monitor'} size={15} className={busy ? 'animate-spin-slow' : undefined} />
           Request control
         </button>
       ) : (
-        <div role="note" data-testid="control-reason" className="rounded-[10px] bg-[rgba(11,18,38,.85)] px-3 py-2 text-[12px] text-[#C9D3EE] shadow-lg">
+        <div role="note" data-testid="control-reason" className="rounded-[10px] bg-[rgba(11,18,38,.85)] px-3 py-2 text-[12px] text-navy-ink shadow-lg">
           {offer.kind === 'reason' && offer.notes.length > 0 ? (
             <ul className="flex flex-col gap-1">
               {offer.notes.map((n) => (
                 <li key={n.text} className="flex items-center gap-2">
-                  <span className={cx('h-2 w-2 shrink-0 rounded-full', n.ok ? 'bg-[#3DD68C]' : 'bg-[#F5B544]')} />
+                  <span className={cx('h-2 w-2 shrink-0 rounded-full', n.ok ? 'bg-green-bright' : 'bg-amber')} />
                   {n.text}
                 </li>
               ))}
@@ -153,9 +153,9 @@ function WaitingNote({ waiting }: { waiting: Waiting }) {
     <div role="status" aria-live="polite" className="flex items-center gap-2.5 rounded-[10px] bg-[rgba(15,27,61,.92)] py-1.5 pr-1.5 pl-3 shadow-lg">
       <Icon name="spinner" size={15} className="shrink-0 animate-spin-slow" />
       <span>
-        <b>Request sent.</b> Waiting for {waiting.name} to allow control… <span className="text-[#AFC0E8]">({left} s)</span>
+        <b>Request sent.</b> Waiting for {waiting.name} to allow control… <span className="text-stage-accent">({left} s)</span>
       </span>
-      <button type="button" onClick={() => void remote.cancel()} className="no-drag h-7 rounded-[7px] bg-white px-2.5 text-[12px] font-bold text-[#151A2D]">
+      <button type="button" onClick={() => void remote.cancel()} className="no-drag h-7 rounded-[7px] bg-white px-2.5 text-[12px] font-bold text-ink">
         Cancel
       </button>
     </div>
@@ -226,10 +226,10 @@ function SessionBar({ session, share }: { session: ControlSession; share: Share 
   return (
     <div className="no-drag flex flex-wrap items-center gap-1.5 rounded-[12px] border border-white/10 bg-[rgba(15,27,61,.92)] p-1.5 pl-3 shadow-[0_12px_32px_rgba(0,0,0,.45)] backdrop-blur">
       <span className="flex items-center gap-1.5 font-semibold">
-        <span className={cx('h-2 w-2 rounded-full', active ? 'bg-[#3DD68C]' : paused ? 'bg-[#F5B544]' : 'bg-[#8A9BC4]')} />
+        <span className={cx('h-2 w-2 rounded-full', active ? 'bg-green-bright' : paused ? 'bg-amber' : 'bg-muted')} />
         {active ? 'Control active' : paused ? 'Paused' : 'Connecting'}
       </span>
-      <span className="text-[#AFC0E8]">
+      <span className="text-stage-accent">
         · {session.sharer.name}&apos;s {platformName(platform)}
         {remote.rtt !== null ? ` · ${remote.rtt} ms` : ''}
       </span>
@@ -249,7 +249,7 @@ function SessionBar({ session, share }: { session: ControlSession; share: Share 
           Send a file
         </button>
       ) : null}
-      <button type="button" onClick={() => void remote.release()} className="h-7 rounded-[8px] bg-[#E5484D] px-2.5 font-bold text-white hover:bg-[#D93D42]">
+      <button type="button" onClick={() => void remote.release()} className="h-7 rounded-[8px] bg-red px-2.5 font-bold text-white hover:bg-red">
         Release control
       </button>
       {remote.offers.length ? <Offers sharer={session.sharer.name} /> : null}
@@ -277,7 +277,7 @@ function Offers({ sharer }: { sharer: string }) {
             <b>{sharer}</b> sends <b title={f.name}>{f.name}</b> · {bytes(f.size)}
             {confirming === f.id ? ' — a program: accept only if you trust it' : f.executable ? ' · a program' : ''}
           </span>
-          <button type="button" onClick={() => void accept(f, confirming === f.id)} className="h-7 rounded-[8px] bg-white px-2.5 font-bold text-[#151A2D]">
+          <button type="button" onClick={() => void accept(f, confirming === f.id)} className="h-7 rounded-[8px] bg-white px-2.5 font-bold text-ink">
             {confirming === f.id ? 'Accept the program' : 'Accept'}
           </button>
           <button type="button" onClick={() => void remote.declineFile(f)} className="h-7 rounded-[8px] px-2.5 font-semibold hover:bg-white/10">
@@ -292,21 +292,21 @@ function Offers({ sharer }: { sharer: string }) {
 function KeysMenu({ sharer, platform, active, onDone }: { sharer: string; platform: string | null; active: boolean; onDone: () => void }) {
   const keys = specialKeys(platform);
   return (
-    <div role="menu" className="absolute top-[calc(100%+6px)] left-0 z-[50] w-[300px] rounded-[12px] border border-white/10 bg-[#16254F] p-1.5 text-[13px] shadow-[0_16px_40px_rgba(0,0,0,.5)]">
-      <span className="block px-2.5 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.4px] text-[#AFC0E8] uppercase">
+    <div role="menu" className="absolute top-[calc(100%+6px)] left-0 z-[50] w-[300px] rounded-[12px] border border-white/10 bg-navy-2 p-1.5 text-[13px] shadow-[0_16px_40px_rgba(0,0,0,.5)]">
+      <span className="block px-2.5 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.4px] text-stage-accent uppercase">
         Send to {sharer}&apos;s {platformName(platform)}
       </span>
       {keys.available.map((k) => (
         <button key={k.combo} type="button" role="menuitem" disabled={!active} onClick={() => (onDone(), remote.special(k.combo))} className="flex min-h-8 w-full items-center justify-between rounded-[8px] px-2.5 py-1.5 text-left hover:bg-white/10 disabled:opacity-50">
           <span>{k.label}</span>
-          <span className="font-mono text-[11.5px] text-[#AFC0E8]">{k.hint}</span>
+          <span className="font-mono text-[11.5px] text-stage-accent">{k.hint}</span>
         </button>
       ))}
-      <div className="mt-1 flex flex-col gap-1 border-t border-white/10 px-2.5 pt-2 pb-1 text-[11.5px] text-[#AFC0E8]">
+      <div className="mt-1 flex flex-col gap-1 border-t border-white/10 px-2.5 pt-2 pb-1 text-[11.5px] text-stage-accent">
         {keys.notes.map((n) => (
           <p key={n}>{n}</p>
         ))}
-        <label className="flex items-center gap-2 pt-1 text-[#E6ECFA]">
+        <label className="flex items-center gap-2 pt-1 text-stage-ink">
           <Checkbox checked={remote.textMode} onChange={(e) => remote.setTextMode(e.target.checked)} />
           Type as text (for Sinhala, Tamil, Arabic and other layouts)
         </label>
@@ -400,7 +400,7 @@ function StateCard({ session }: { session: ControlSession }) {
     <div className="absolute inset-0 flex items-center justify-center bg-[rgba(7,12,26,.6)] p-6" role="status" aria-live="polite">
       <div className="max-w-md rounded-[12px] bg-[rgba(15,27,61,.95)] px-5 py-4 text-center shadow-xl">
         <b className="text-[15px] text-white">{title}</b>
-        <p className="mt-1.5 text-[12.5px] text-[#C9D3EE]">{body}</p>
+        <p className="mt-1.5 text-[12.5px] text-navy-ink">{body}</p>
       </div>
     </div>
   );

@@ -236,7 +236,7 @@ describe('who wrote it (RDC-11)', () => {
       fromWebsiteMessage(web({ id: 2, from: 'agent', agent: 'Nuwan', agent_id: 7, visibility: 'internal', body: 'Match last year?', at: at(1) }), ctx),
     ], WEBSITE_CAPS);
     const bot = screen.getByText('Auto answer from a starter').closest('[data-bubble-body]')!;
-    expect(bot.className).toContain('bg-[#E3F4F5]');
+    expect(bot.className).toContain('bg-teal-bg');
     expect(within(bot as HTMLElement).getByText('Olema · bot')).toBeTruthy();
     const note = screen.getByText('Match last year?').closest('[data-bubble-body]')!;
     expect(note.className).toContain('border-dashed');

@@ -1,6 +1,6 @@
 {
     "module": "sales",
-    "version": "1.3.2",
+    "version": "1.3.3",
     "paths": [
         "electron/services/sales-desk.ts",
         "shared/sales.ts",

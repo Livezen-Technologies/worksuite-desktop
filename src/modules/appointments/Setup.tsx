@@ -65,7 +65,7 @@ export default function Setup({ onDesk }: { onDesk: () => void }) {
           <ul className="m-0 list-none p-0">
             {(ps.data?.items ?? []).map((x) => (
               <li key={x.id}>
-                <button type="button" aria-current={p?.id === x.id ? 'true' : undefined} onClick={() => setSel(x.id)} className={cx('flex w-full items-center gap-2 border-b border-line/70 px-3.5 py-2 text-left', p?.id === x.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+                <button type="button" aria-current={p?.id === x.id ? 'true' : undefined} onClick={() => setSel(x.id)} className={cx('flex w-full items-center gap-2 border-b border-line/70 px-3.5 py-2 text-left', p?.id === x.id ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: x.color ?? '#9AA1B5' }} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-bold text-ink">{x.name}</span>

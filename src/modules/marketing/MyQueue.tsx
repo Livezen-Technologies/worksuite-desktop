@@ -207,7 +207,7 @@ function Callbacks({ options, onContact, onWork }: { options: Options; onContact
             <span className="text-[12.5px] text-ink-3"> · {[c.phone ?? 'No number', c.campaign, all ? c.assignee?.name : null].filter(Boolean).join(' · ')}</span>
             {c.notes ? <span className="block truncate text-[12.5px] text-ink-2">“{c.notes}”</span> : null}
           </div>
-          <span className={cx('text-[12.5px] whitespace-nowrap tabular-nums', dueNow ? 'font-bold text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>{atLabel(c.at)}</span>
+          <span className={cx('text-[12.5px] whitespace-nowrap tabular-nums', dueNow ? 'font-bold text-warning-ink dark:text-warning' : 'text-ink-2')}>{atLabel(c.at)}</span>
           <div className="flex gap-1.5">
             <button type="button" className={cx(btnSmall, 'gap-1.5')} onClick={() => void dial(c.phone)} disabled={!dialDigits(c.phone)}>
               <Icon name="phone" size={14} /> Call now

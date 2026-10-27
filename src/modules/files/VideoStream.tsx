@@ -60,7 +60,7 @@ export function VideoStream({
       <video {...props} ref={mediaRef} src={hlsUrl ? undefined : (source ?? undefined)} preload="metadata" />
       {levels.length > 0 ? (
         <select
-          className="h-8 rounded border border-[#2A3A66] bg-[#16254F] px-2 text-white"
+          className="h-8 rounded border border-stage-4 bg-navy-2 px-2 text-white"
           aria-label="Video quality"
           value={quality}
           onChange={(e) => {

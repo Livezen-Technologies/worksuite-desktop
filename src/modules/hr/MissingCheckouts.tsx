@@ -66,7 +66,7 @@ export default function MissingCheckouts() {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or number" aria-label="Search name or number" className={input + ' !w-[220px]'} />
       </div>
       {d && d.holding_pay > 0 ? (
-        <div className="rounded-[12px] border border-[#F5D9A8] bg-warning-bg px-4 py-3 text-[12.5px] text-[#7A3E06] dark:border-warning/40 dark:text-warning">
+        <div className="rounded-[12px] border border-warning-line bg-warning-bg px-4 py-3 text-[12.5px] text-warning-strong dark:border-warning/40 dark:text-warning">
           <b>
             {d.holding_pay} {d.holding_pay === 1 ? 'day' : 'days'} would be paid without a recorded finish time.
           </b>{' '}

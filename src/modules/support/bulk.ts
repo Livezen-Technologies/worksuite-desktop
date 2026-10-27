@@ -53,10 +53,10 @@ export function statusWord(status: SupportStatus): string {
 
 /** The priority's coloured dot in the menu. */
 export const PRIORITY_DOT: Record<SupportPriority, string> = {
-  low: 'bg-[#94A3B8]',
-  normal: 'bg-[#3B82F6]',
-  high: 'bg-[#F97316]',
-  urgent: 'bg-[#DC2626]',
+  low: 'bg-muted',
+  normal: 'bg-blue',
+  high: 'bg-amber-strong',
+  urgent: 'bg-red',
 };
 
 /** "1 ticket", "3 tickets": the list's count and the toasts; `more`: there are more than these ("50+ tickets"). */

@@ -150,7 +150,7 @@ export function MessageToolbar({ m, own, caps, handlers: h, items, onMoreReactio
           title={m.starred ? 'Unstar' : 'Star'}
           aria-pressed={!!m.starred}
           onClick={() => h.onStar!(m)}
-          className={cx(toolBtn, m.starred && '!text-[#CA8A04]')}
+          className={cx(toolBtn, m.starred && '!text-amber-strong')}
         >
           <Icon name="star" size={15} />
         </button>

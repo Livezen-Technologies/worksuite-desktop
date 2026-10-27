@@ -215,7 +215,7 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
       ) : null}
 
       <div className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
-        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-[#F7F8FB] px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-info-soft px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
           <Checkbox aria-label="Select all" disabled={!canManage && !canLead} checked={all} indeterminate={!all && rows.some((r) => selected.has(r.id))} onChange={() => setSelected(all ? new Set() : new Set(rows.map((r) => r.id)))} />
           <span className="w-[210px] shrink-0">Lead</span>
           <span className="w-[140px] shrink-0">Company</span>
@@ -229,7 +229,7 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
         <div className="min-h-0 overflow-y-auto scroll-thin">
           {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
           {rows.map((r) => (
-            <div key={r.id} data-lead={r.id} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle', selected.has(r.id) && 'bg-[#F4F6FE] dark:bg-selection/40', openId === r.id && 'bg-selection')} role="button" tabIndex={0} onKeyDown={clickOnKey} onClick={() => onOpen(r.id)}>
+            <div key={r.id} data-lead={r.id} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle', selected.has(r.id) && 'bg-info-soft dark:bg-selection/40', openId === r.id && 'bg-selection')} role="button" tabIndex={0} onKeyDown={clickOnKey} onClick={() => onOpen(r.id)}>
               <Checkbox aria-label={`Select ${r.name}`} disabled={!canManage && !canLead} checked={selected.has(r.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.id)} />
               <span className="flex w-[210px] min-w-0 shrink-0 flex-col">
                 <b className="truncate text-ink">{r.name}</b>
@@ -238,7 +238,7 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
               <span className="w-[140px] shrink-0 truncate text-ink">{r.company ?? '—'}</span>
               <span className="flex w-[120px] shrink-0 items-center gap-1.5">
                 <span className="h-1.5 w-11 overflow-hidden rounded-full bg-subtle">
-                  <span className="block h-1.5" style={{ width: `${Math.min(100, r.score)}%`, background: r.score > 70 ? '#1F7A4D' : r.score > 45 ? '#B45309' : '#8A91A6' }} />
+                  <span className="block h-1.5" style={{ width: `${Math.min(100, r.score)}%`, background: r.score > 70 ? 'var(--ws-success)' : r.score > 45 ? 'var(--ws-warning)' : 'var(--ws-muted)' }} />
                 </span>
                 <b className="text-[12px] text-ink tabular-nums">{r.score}</b>
                 <Rating rating={r.rating} />
@@ -246,7 +246,7 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
               <span className="w-[95px] shrink-0">
                 <LeadStatus status={r.status} />
               </span>
-              <span className={cx('w-[110px] shrink-0 truncate', r.owner_name ? 'text-ink' : 'font-bold text-[#9A4A06] dark:text-warning')}>{r.owner_name ?? 'Unassigned'}</span>
+              <span className={cx('w-[110px] shrink-0 truncate', r.owner_name ? 'text-ink' : 'font-bold text-warning-ink dark:text-warning')}>{r.owner_name ?? 'Unassigned'}</span>
               <span className="flex w-[150px] shrink-0 items-center gap-1.5 text-[12px]">
                 <FollowUpCell lead={r} />
               </span>
@@ -319,9 +319,9 @@ function FollowUpCell({ lead }: { lead: Lead }) {
   if (lead.follow_up === 'none' || !lead.next_followup_at) return <span className="text-ink-3">Nothing scheduled</span>;
   const [label, cls] =
     lead.follow_up === 'overdue'
-      ? ['Late', 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger']
+      ? ['Late', 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger']
       : lead.follow_up === 'due'
-        ? ['Due', 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning']
+        ? ['Due', 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning']
         : ['To come', 'bg-selection text-primary'];
   return (
     <>
@@ -487,7 +487,7 @@ function LeadBody({
         ) : null}
       </div>
       {done ? (
-        <div className="flex items-center gap-2 rounded-[10px] bg-[#F7F8FB] px-3 py-2.5 text-[12.5px] text-ink-2 dark:bg-well">
+        <div className="flex items-center gap-2 rounded-[10px] bg-info-soft px-3 py-2.5 text-[12.5px] text-ink-2 dark:bg-well">
           <span className="flex-1">This lead was converted. Its details are read-only — the account and contact it became are the record now.</span>
           {l.converted_deal_id ? (
             <button type="button" className={btnSmall} onClick={() => onOpenDeal(l.converted_deal_id!)}>
@@ -511,8 +511,8 @@ function LeadBody({
       {tab === 'detail' ? (
         <>
           {d.duplicates.length && !done ? (
-            <div className="flex flex-col gap-2 rounded-[10px] bg-[#FFF7E6] px-3 py-2.5 dark:bg-warning-bg">
-              <b className="text-[12.5px] text-[#8A4B00] dark:text-warning">
+            <div className="flex flex-col gap-2 rounded-[10px] bg-warning-bg px-3 py-2.5 dark:bg-warning-bg">
+              <b className="text-[12.5px] text-yellow-ink dark:text-warning">
                 {d.duplicates.length} possible {d.duplicates.length === 1 ? 'duplicate' : 'duplicates'}
               </b>
               {d.duplicates.map((x) => (
@@ -547,7 +547,7 @@ function LeadBody({
                 {reasons.map(([k, v]) => (
                   <div key={k} className="flex items-center border-b border-line/60 px-3 py-1.5 text-[12.5px] last:border-b-0">
                     <span className="flex-1 text-ink-2">{k}</span>
-                    <b className={v > 0 ? 'text-[#145C39] dark:text-success' : 'text-danger'}>{v > 0 ? `+${v}` : v}</b>
+                    <b className={v > 0 ? 'text-success-ink dark:text-success' : 'text-danger'}>{v > 0 ? `+${v}` : v}</b>
                   </div>
                 ))}
                 <div className="flex items-center bg-well px-3 py-1.5 text-[12.5px]">

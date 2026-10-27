@@ -134,7 +134,7 @@ function VendorCard({ v, mayWrite, busy, onArchive, onDelete }: { v: Vendor; may
 function Figure({ value, label, tone }: { value: string; label: string; tone?: 'green' }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <b className={cx('truncate text-[14px] tabular-nums', tone === 'green' ? 'text-[#166534] dark:text-success' : 'text-ink')}>{value}</b>
+      <b className={cx('truncate text-[14px] tabular-nums', tone === 'green' ? 'text-success-ink dark:text-success' : 'text-ink')}>{value}</b>
       <span className="text-[11px] text-ink-3">{label}</span>
     </span>
   );

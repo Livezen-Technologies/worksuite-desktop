@@ -293,7 +293,7 @@ export default function Approvals({ org, orgs, onGo }: ScreenProps) {
                       <span className="font-mono text-[12px] text-ink-2">{r.ref}</span>
                       <Pill tone={r.entity_type === 'advance' ? 'blue' : 'grey'}>{r.entity_type === 'advance' ? 'Cash advance' : 'Expense'}</Pill>
                       {r.policy.length ? (
-                        <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-[#9A4A06] dark:text-warning">
+                        <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-warning-ink dark:text-warning">
                           <Icon name="warning" size={12} /> Flagged
                         </span>
                       ) : null}

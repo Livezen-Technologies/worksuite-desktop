@@ -78,7 +78,7 @@ export function PeoplePanel() {
     <div className="flex flex-col gap-3 p-3.5 text-[12.5px]">
       {/* The waiting room is for whoever may admit: nobody else sees it at all (#348). */}
       {meet.can('admit') && meet.waiting.length ? (
-        <div className="flex flex-col gap-2 rounded-[10px] border border-[#F1D9B5] bg-[#FFF9EC] p-2.5 dark:bg-warning-bg">
+        <div className="flex flex-col gap-2 rounded-[10px] border border-warning-line bg-warning-bg p-2.5 dark:bg-warning-bg">
           <div className="flex items-center gap-2">
             <b className="flex-1 text-ink">Waiting to join · {meet.waiting.length}</b>
             <button type="button" className={link} onClick={() => void Promise.all(meet.waiting.map((p) => meet.admit(p)))}>Admit all</button>
@@ -142,7 +142,7 @@ export function PeoplePanel() {
                 <RoleBadge role={role} guest={isGuest(p)} />
                 {isGuest(p) ? <span className="text-[11px] text-ink-3">by link</span> : null}
                 {hand ? (
-                  <span role="img" aria-label={`${t('act.handUp')} · ${hand.position}`} title={t('act.handUp')} className="flex items-center gap-0.5 rounded-full bg-[#FFF4E0] px-1.5 py-px text-[10.5px] font-bold text-[#9A5B00] dark:bg-[#3A2A10] dark:text-[#F6C77A]">
+                  <span role="img" aria-label={`${t('act.handUp')} · ${hand.position}`} title={t('act.handUp')} className="flex items-center gap-0.5 rounded-full bg-warning-bg px-1.5 py-px text-[10.5px] font-bold text-warning-ink dark:text-warning-strong">
                     <Icon name="hand" size={11} />
                     {hand.position}
                   </span>

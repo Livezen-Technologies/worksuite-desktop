@@ -42,7 +42,7 @@ export function Rail({ scope, counts, lists, onScope, onNew }: { scope: Scope; c
               <span className="text-[11.5px] font-bold text-ink-2 group-hover:invisible">{counts[id] || ''}</span>
             </button>
             <span className="invisible absolute top-1 right-1 flex gap-0.5 group-hover:visible">
-              <button type="button" aria-label={l.is_favorite ? `Unfavourite ${l.name}` : `Favourite ${l.name}`} title={l.is_favorite ? 'Unfavourite' : 'Favourite (shown first)'} onClick={() => void apiPut(`/api/task-lists/${l.id}`, { is_favorite: !l.is_favorite }).then(refresh, (e) => toast('error', errorMessage(e)))} className={cx('flex h-[22px] w-[22px] items-center justify-center rounded-[5px] hover:bg-surface', l.is_favorite ? 'text-[#B45309]' : 'text-ink-3')}>
+              <button type="button" aria-label={l.is_favorite ? `Unfavourite ${l.name}` : `Favourite ${l.name}`} title={l.is_favorite ? 'Unfavourite' : 'Favourite (shown first)'} onClick={() => void apiPut(`/api/task-lists/${l.id}`, { is_favorite: !l.is_favorite }).then(refresh, (e) => toast('error', errorMessage(e)))} className={cx('flex h-[22px] w-[22px] items-center justify-center rounded-[5px] hover:bg-surface', l.is_favorite ? 'text-warning' : 'text-ink-3')}>
                 <Icon name="star" size={12} />
               </button>
               <button type="button" aria-label={`Edit ${l.name}`} title="Rename or recolour" onClick={() => setEditing(l)} className="flex h-[22px] w-[22px] items-center justify-center rounded-[5px] text-ink-3 hover:bg-surface hover:text-ink">

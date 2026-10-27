@@ -165,7 +165,7 @@ function Body({ data, onRates }: { data: ConsolidatedData; onRates?: () => void 
                     <Cell w={null}>
                       <span className="flex min-w-0 flex-col">
                         <b className="truncate text-ink">{r.company.name}</b>
-                        <span className={cx('truncate text-[11.5px]', v.counted ? 'text-ink-3' : 'text-[#9A4A06] dark:text-warning')}>{v.notes.join(' · ')}</span>
+                        <span className={cx('truncate text-[11.5px]', v.counted ? 'text-ink-3' : 'text-warning-ink dark:text-warning')}>{v.notes.join(' · ')}</span>
                       </span>
                     </Cell>
                     {CONSOLIDATED_FIGURES.map(([k]) => (

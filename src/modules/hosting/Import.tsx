@@ -156,7 +156,7 @@ export default function ImportCsv({ companies, org, nav }: { companies: Org[]; o
               <Btn disabled={busy || !Object.values(map).includes('name')} onClick={() => void preview(file, map)}>
                 Check again with these columns
               </Btn>
-              {!Object.values(map).includes('name') ? <span className="text-[12px] text-[#B42318]">Match one column to the name.</span> : null}
+              {!Object.values(map).includes('name') ? <span className="text-[12px] text-danger">Match one column to the name.</span> : null}
             </div>
           </Card>
           <Card title="Dry run">

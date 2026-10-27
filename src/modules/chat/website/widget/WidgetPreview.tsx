@@ -238,7 +238,7 @@ function HomeScreen({ design, name, people, replyTime, hours, away, dark, t, wha
                 <span key={i} className="flex items-center gap-3 rounded-[10px] px-3 py-2.5">
                   <span className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px]" style={{ background: bg, color: fg }}><Icon name={LINK_ICON(l.label, l.url)} size={17} /></span>
                   <span className="flex-1 truncate text-[14px] font-semibold">{l.label}</span>
-                  <Icon name="chevron-right" size={16} className="text-[#9AA0BC]" />
+                  <Icon name="chevron-right" size={16} className="text-ink-4" />
                 </span>
               );
             })}
@@ -324,7 +324,7 @@ function Launcher({ design, people, style }: { design: WidgetDesign; people: Pre
       data-testid="preview-launcher"
     >
       {round ? <Icon name="message-circle" size={24} /> : <><Stack people={people} size={40} ring={p.accent} /><span>Chat with us</span></>}
-      <span className="absolute -top-1 right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-[#D92D20] px-1 text-[11px] text-white">1</span>
+      <span className="absolute -top-1 right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-orange px-1 text-[11px] text-white">1</span>
     </span>
   );
 }

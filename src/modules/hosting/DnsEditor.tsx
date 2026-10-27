@@ -134,7 +134,7 @@ export default function DnsEditor({ domain, active }: { domain: Domain; active: 
             {records.map((r, i) => {
               const may = canEdit && r.editable !== false;
               return (
-                <tr tabIndex={0} onKeyDown={clickOnKey} key={String(r.id)} aria-selected={i === at} onClick={() => setAt(i)} onDoubleClick={() => may && setForm({ rec: inputOf(r, domain.name), was: r })} className={cx('cursor-default', i === at ? 'bg-[#EEF1FD] shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : 'hover:bg-subtle')}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={String(r.id)} aria-selected={i === at} onClick={() => setAt(i)} onDoubleClick={() => may && setForm({ rec: inputOf(r, domain.name), was: r })} className={cx('cursor-default', i === at ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)] dark:bg-selection' : 'hover:bg-subtle')}>
                   <td className={cx(td, 'font-mono text-[11.5px] font-bold')}>{r.type}</td>
                   <td className={cx(td, 'font-mono text-[11.5px]')}>{hostOf(r, domain.name)}</td>
                   <td className={cx(td, 'max-w-[420px] truncate font-mono text-[11.5px]')} title={r.content}>
@@ -335,7 +335,7 @@ function LivePanel({ domain, host: initial, onClose }: { domain: Domain; host: s
                     const a = t.resolvers[r];
                     return (
                       <td key={r} className={cx(td, 'font-mono text-[11.5px] whitespace-normal')}>
-                        {!a ? '—' : a.ok ? a.values.join(', ') || '—' : <span className="text-[#B42318]">{a.why}</span>}
+                        {!a ? '—' : a.ok ? a.values.join(', ') || '—' : <span className="text-danger">{a.why}</span>}
                       </td>
                     );
                   })}

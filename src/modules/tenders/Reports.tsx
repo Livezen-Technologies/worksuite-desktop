@@ -58,7 +58,7 @@ export default function Reports({ org }: { org: string }) {
           <p className="m-0 text-[12.5px] text-ink-3">{r.note}</p>
           <div className="grid grid-cols-3 gap-3.5">
             <Panel title="Awarded to us" sub="The award value on each tender won, per currency" bodyClassName="px-3.5 py-3">
-              <b className="text-[18px] text-[#145C39] tabular-nums dark:text-success">{moneyList(r.awarded_by_currency)}</b>
+              <b className="text-[18px] text-success-ink tabular-nums dark:text-success">{moneyList(r.awarded_by_currency)}</b>
               <p className="m-0 mt-1.5 text-[11.5px] leading-relaxed text-ink-3">A tender won without an award value recorded adds nothing here, rather than the bid standing in for it.</p>
             </Panel>
             <Panel title="By sector" sub="What came in" bodyClassName="flex flex-col gap-1.5 px-3.5 py-3">

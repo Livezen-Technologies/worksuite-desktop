@@ -349,6 +349,34 @@ export const pdfNewAnnotSchema = z.strictObject({
 });
 export type PdfNewAnnot = z.infer<typeof pdfNewAnnotSchema>;
 
+/**
+ * Words stamped on pages (PRO-EDT-007, PRO-BAT-001/002): a header or footer, a watermark across the page, or Bates
+ * numbers. `{page}`, `{pages}`, `{bates}` and `{date}` are filled in per page by the engine; the text is drawn in
+ * Helvetica (WinAnsi), so it is Latin text — Sinhala and Tamil need the font pipeline still to come.
+ */
+export const STAMP_PLACES = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right', 'center'] as const;
+export const pdfStampSchema = z.strictObject({
+  text: z.string().min(1).max(200),
+  place: z.enum(STAMP_PLACES),
+  size: z.number().min(6).max(96),
+  color: rgb,
+  opacity: z.number().min(0.1).max(1),
+  /** A watermark: corner to corner, at 45°. */
+  diagonal: z.boolean().optional(),
+  /** Points in from the page edge. */
+  margin: z.number().min(0).max(144).optional(),
+  bates: z.strictObject({ prefix: z.string().max(20), start: z.number().int().min(0).max(999_999_999), digits: z.number().int().min(1).max(12), suffix: z.string().max(20) }).optional(),
+  /** The date `{date}` stands for, fixed when the stamp is made (so undo and recovery replay the same words). */
+  date: z.string().max(40).optional(),
+});
+export type PdfStamp = z.infer<typeof pdfStampSchema>;
+
+/** A stamp's words on one page: `n` counts from 0 over the pages stamped, `page` is the page's own number. */
+export function stampText(st: Pick<PdfStamp, 'text' | 'bates' | 'date'>, page: number, pages: number, n: number): string {
+  const b = st.bates ? `${st.bates.prefix}${String(st.bates.start + n).padStart(st.bates.digits, '0')}${st.bates.suffix}` : '';
+  return st.text.replaceAll('{page}', String(page + 1)).replaceAll('{pages}', String(pages)).replaceAll('{bates}', b).replaceAll('{date}', st.date ?? '');
+}
+
 export const pdfEditOpSchema = z.discriminatedUnion('op', [
   z.strictObject({ op: z.literal('annot.add'), page: pageIndex, annot: pdfNewAnnotSchema }),
   z.strictObject({
@@ -368,6 +396,15 @@ export const pdfEditOpSchema = z.discriminatedUnion('op', [
   z.strictObject({ op: z.literal('page.insertBlank'), at: pageIndex, size: z.tuple([z.number().min(36).max(14_400), z.number().min(36).max(14_400)]) }),
   /** Pages of another PDF on this computer, by the handle it was chosen with; the main process keeps a sealed copy with the journal. */
   z.strictObject({ op: z.literal('page.insertFile'), at: pageIndex, file: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), pages: z.array(pageIndex).max(10_000).optional() }),
+  /** Copies of these pages, in their order, inserted at `at` (PRO-ORG-001). */
+  z.strictObject({ op: z.literal('page.duplicate'), pages: z.array(pageIndex).min(1).max(1000), at: pageIndex }),
+  /** Words stamped on these pages: a header, footer, watermark or Bates numbers (PRO-EDT-007, PRO-BAT-001). */
+  z.strictObject({ op: z.literal('page.stamp'), pages: z.array(pageIndex).min(1).max(10_000), stamp: pdfStampSchema }),
+  /**
+   * True redaction on this computer (PDF-RED-001, PRO-RED-003): the text, images and drawings under each area are
+   * removed from the page's content, not covered, and a black box is drawn where they were.
+   */
+  z.strictObject({ op: z.literal('page.redact'), page: pageIndex, rects: z.array(rect).min(1).max(500) }),
 ]);
 export type PdfEditOp = z.infer<typeof pdfEditOpSchema>;
 
@@ -411,7 +448,10 @@ export type SummarizableOp =
   | { op: 'annot.update' | 'annot.remove'; id: string }
   | { op: 'page.rotate' | 'page.delete' | 'page.move'; pages: number[] }
   | { op: 'page.insertBlank' }
-  | { op: 'page.insertFile'; pages?: number[] };
+  | { op: 'page.insertFile'; pages?: number[] }
+  | { op: 'page.duplicate'; pages: number[] }
+  | { op: 'page.stamp'; pages: number[] }
+  | { op: 'page.redact'; rects: unknown[] };
 
 /** What a journal of operations adds up to. An annotation added and then removed before saving counts for neither. */
 export function summarize(ops: readonly SummarizableOp[]): PdfChangeSummary {
@@ -433,6 +473,9 @@ export function summarize(ops: readonly SummarizableOp[]): PdfChangeSummary {
     else if (o.op === 'page.move') s.pages_reordered += o.pages.length;
     else if (o.op === 'page.insertBlank') s.pages_inserted++;
     else if (o.op === 'page.insertFile') s.pages_inserted += o.pages?.length ?? 1;
+    else if (o.op === 'page.duplicate') s.pages_inserted += o.pages.length;
+    else if (o.op === 'page.stamp') s.content_edits += o.pages.length;
+    else if (o.op === 'page.redact') s.content_edits += o.rects.length;
   }
   return s;
 }
@@ -618,4 +661,81 @@ export const DANGEROUS_EXTENSIONS = new Set([
 export function isDangerousName(name: string): boolean {
   const ext = /\.([A-Za-z0-9]+)$/.exec(name.trim())?.[1]?.toLowerCase();
   return !!ext && DANGEROUS_EXTENSIONS.has(ext);
+}
+
+
+// ── tools on this computer (D-G12) ───────────────────────────────────────
+
+/**
+ * What PDF Studio makes from the open document on this computer, with the engine it already ships (PDFium): each
+ * is a new file, the document itself is unchanged.
+ *  - protect: a copy with AES-256 passwords and permissions (PRO-SEC-001);
+ *  - unprotect: a copy with its security removed (the document was opened with its password);
+ *  - split: one file per group of pages (PRO-ORG-003);
+ *  - images: each page as a PNG image (PRO-EXP-001, standard part);
+ *  - text: the document's text, page by page, as a .txt file.
+ */
+const pageList = z.array(pageIndex).min(1).max(10_000);
+export const pdfDeriveSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('protect'),
+    /** Asked to open it; empty for none (permissions only). */
+    userPassword: z.string().max(128),
+    /** Asked to change its security and permissions. */
+    ownerPassword: z.string().min(1).max(128),
+    allow: z.strictObject({ print: z.boolean(), copy: z.boolean(), modify: z.boolean(), annotate: z.boolean() }),
+  }),
+  z.strictObject({ kind: z.literal('unprotect') }),
+  z.strictObject({ kind: z.literal('split'), groups: z.array(pageList).min(1).max(500) }),
+  z.strictObject({ kind: z.literal('images'), pages: pageList.max(500), dpi: z.union([z.literal(72), z.literal(150), z.literal(300)]) }),
+  z.strictObject({ kind: z.literal('text'), pages: pageList.optional() }),
+]);
+export type PdfDeriveRequest = z.infer<typeof pdfDeriveSchema>;
+
+/**
+ * A new PDF made on this computer (no document open needed): PDFs from this computer combined, with page ranges
+ * and a bookmark per file (PRO-CMB-001/002); pictures (PNG, JPEG) one per page (PRO-CRE-002); or blank pages.
+ */
+export const pdfComposeSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('combine'),
+    parts: z.array(z.strictObject({ file: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), pages: z.array(pageIndex).max(10_000).optional(), title: z.string().max(200).optional() })).min(1).max(100),
+    bookmarks: z.boolean(),
+    name: z.string().min(1).max(200),
+  }),
+  /** The pictures are chosen in the main process's own dialog. */
+  z.strictObject({ kind: z.literal('images'), fit: z.enum(['image', 'a4', 'letter']), name: z.string().min(1).max(200) }),
+  z.strictObject({ kind: z.literal('blank'), pages: z.number().int().min(1).max(500), size: z.enum(['a4', 'letter', 'legal']), landscape: z.boolean(), name: z.string().min(1).max(200) }),
+]);
+export type PdfComposeRequest = z.infer<typeof pdfComposeSchema>;
+
+/** Paper sizes in points. */
+export const PAPER: Record<'a4' | 'letter' | 'legal', [number, number]> = { a4: [595.28, 841.89], letter: [612, 792], legal: [612, 1008] };
+
+/** Pages into groups of `every` (the last may be shorter), for splitting. */
+export function splitEvery(count: number, every: number): number[][] {
+  const n = Math.max(1, Math.floor(every));
+  const out: number[][] = [];
+  for (let i = 0; i < count; i += n) out.push(Array.from({ length: Math.min(n, count - i) }, (_, k) => i + k));
+  return out;
+}
+
+/** PDF permission flags (ISO 32000-2 table 22) for a protected copy: the reserved bits set, as a signed 32-bit /P. */
+export function permissionBits(a: { print: boolean; copy: boolean; modify: boolean; annotate: boolean }): number {
+  let p = 0xfffff0c0;
+  if (a.print) p |= 0x4 | 0x800;
+  if (a.modify) p |= 0x8 | 0x400;
+  if (a.copy) p |= 0x10 | 0x200;
+  if (a.annotate) p |= 0x20 | 0x100;
+  return p | 0;
+}
+
+export interface PdfToolResult {
+  saved: boolean;
+  /** Files written. */
+  files: number;
+  /** The file's (or folder's) name, for the toast. */
+  name: string | null;
+  /** A PDF made here, registered so it can be opened at once. */
+  open: PdfLocalPick | null;
 }

@@ -182,7 +182,7 @@ function SubmitSheet({ id, bid, currency, onClose }: { id: number; bid: string |
         </Field>
       </div>
       {refused ? (
-        <div className="flex flex-col gap-1 rounded-[9px] bg-[#FFF4E0] px-3 py-2 text-[12.5px] text-[#7A3B05] dark:bg-warning-bg dark:text-warning" aria-label="Outstanding">
+        <div className="flex flex-col gap-1 rounded-[9px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-strong dark:bg-warning-bg dark:text-warning" aria-label="Outstanding">
           <b>{refused.message}</b>
           {refused.blockers.map((b, i) => (
             <span key={i}>· {b}</span>

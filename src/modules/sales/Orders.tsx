@@ -243,7 +243,7 @@ export default function Orders({ org, status, overdue: overdueAsked = false, ope
       </div>
 
       {chosen.length && !offline ? (
-        <div className="flex flex-wrap items-center gap-1.5 self-start rounded-[9px] border border-[#C7D0F5] bg-[#EEF1FC] px-2 py-1 dark:border-[#2D3A66] dark:bg-[#16203E]" aria-label="Selected orders">
+        <div className="flex flex-wrap items-center gap-1.5 self-start rounded-[9px] border border-info-line bg-selection px-2 py-1 dark:border-primary-soft dark:bg-info-soft" aria-label="Selected orders">
           <b className="px-1 text-[12.5px] text-primary">{chosen.length} selected ·</b>
           {has(perms, 'oms.orders.assign') ? (
             <Select aria-label="Assign to" searchable disabled={busy} value="" onChange={(e) => e.target.value && void run(async () => { const r = await bulkAssign(ids, Number(e.target.value)); after(r.assigned, r.failed, 'assigned'); })} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px]">
@@ -441,7 +441,7 @@ function Row({ o, checked, open, focused, onCheck, onOpen }: { o: Order; checked
       data-order={o.id}
       data-focused={focused || undefined}
       onClick={onOpen}
-      className={cx('relative flex cursor-default items-center gap-2.5 border-b border-line/70 px-3.5 py-2 text-[12.5px] last:border-b-0', open ? 'bg-selection' : checked ? 'bg-[#F4F6FE] dark:bg-[#141D38]' : 'hover:bg-subtle', focused && 'ring-2 ring-primary/40 ring-inset')}
+      className={cx('relative flex cursor-default items-center gap-2.5 border-b border-line/70 px-3.5 py-2 text-[12.5px] last:border-b-0', open ? 'bg-selection' : checked ? 'bg-info-soft dark:bg-rail' : 'hover:bg-subtle', focused && 'ring-2 ring-primary/40 ring-inset')}
     >
       <span role="presentation" onClick={(e) => e.stopPropagation()} className="relative z-10 flex">
         <Checkbox aria-label={`Select ${o.number}`} checked={checked} onChange={(e) => onCheck(e.target.checked)} />

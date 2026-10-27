@@ -4,6 +4,7 @@ import { updatePrefs } from '../../core/app-state';
 import { useFeature } from '../../core/desktop-settings';
 import { Switch } from '../../components/ui';
 import { Select } from '../../components/Select';
+import { SettingRow, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Settings › Desktop › Links (worksuite-desktop#170): whether WorkSuite links
@@ -21,14 +22,11 @@ export function LinksSettings({ prefs }: { prefs: Preferences }) {
     void updatePrefs({ links: itemLinks ? { ...rest, openInApp } : rest });
   };
   return (
-    <section aria-labelledby="settings-links" className="mt-8">
-      <h3 id="settings-links" className="mb-1 text-[15px] font-bold text-ink">
-        Links
-      </h3>
-      <Line label="Open WorkSuite links in the desktop app" hint="Links to files, meetings, tasks and other WorkSuite items open here instead of the browser.">
+    <SettingsGroup title="Links">
+      <SettingRow label="Open WorkSuite links in the desktop app" hint="Links to files, meetings, tasks and other WorkSuite items open here instead of the browser.">
         <Switch label="Open WorkSuite links in the desktop app" checked={l.openInApp} disabled={!itemLinks} onChange={(v) => set({ openInApp: v })} />
-      </Line>
-      <Line label="Open links from Mail in" hint="Where a WorkSuite link clicked in an email opens.">
+      </SettingRow>
+      <SettingRow label="Open links from Mail in" hint="Where a WorkSuite link clicked in an email opens.">
         <Select
           label="Open links from Mail in"
           value={l.mailLinks}
@@ -39,22 +37,10 @@ export function LinksSettings({ prefs }: { prefs: Preferences }) {
           ]}
           onValueChange={(v) => set({ mailLinks: v })}
         />
-      </Line>
-      <Line label="Ask before running actions from links" hint="Downloads and joining a meeting ask first. Anything that changes data — marking done, answering an invitation, requesting access — always asks.">
+      </SettingRow>
+      <SettingRow label="Ask before running actions from links" hint="Downloads and joining a meeting ask first. Anything that changes data — marking done, answering an invitation, requesting access — always asks.">
         <Switch label="Ask before running actions from links" checked={l.confirmActions} onChange={(v) => set({ confirmActions: v })} />
-      </Line>
-    </section>
-  );
-}
-
-function Line({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-6 border-b border-line py-3.5">
-      <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-semibold text-ink">{label}</div>
-        <div className="mt-0.5 text-[12.5px] text-ink-3">{hint}</div>
-      </div>
-      <div className="min-w-0 max-w-[60%] shrink-0">{children}</div>
-    </div>
+      </SettingRow>
+    </SettingsGroup>
   );
 }

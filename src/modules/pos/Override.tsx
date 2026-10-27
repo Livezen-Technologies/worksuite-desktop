@@ -158,7 +158,7 @@ export default function Override({ need, currency, detail, reason: given, onAppr
           onChange={(e) => setReason(e.target.value.slice(0, 200))}
           aria-label={t('pos.reason')}
           placeholder={t('pos.ovr.reasonHint')}
-          className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+          className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
         />
         <p className="text-[12px] text-ink-3">{t('pos.ovr.recorded')}</p>
         {till.offline ? <Note tone="warning">{t('pos.ovr.offline')}</Note> : null}

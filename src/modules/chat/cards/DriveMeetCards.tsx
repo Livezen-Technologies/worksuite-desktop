@@ -48,7 +48,7 @@ export function DriveShareCard({ card, onOpen }: { card: DriveCard; onOpen: (lin
     <CardFrame kind={folder ? 'folder' : 'file'} actions={actions} foot={card.owner ? `From ${card.owner}` : undefined}>
       <div className="flex items-center gap-3 px-3.5 py-3.5">
         {folder ? (
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[12px] bg-[#FDF1DF] text-[#F0A43A] dark:bg-[#2A2213]">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[12px] bg-warning-bg text-stage-amber">
             <Icon name="folder" size={26} />
           </span>
         ) : (
@@ -56,11 +56,11 @@ export function DriveShareCard({ card, onOpen }: { card: DriveCard; onOpen: (lin
         )}
         <span className="min-w-0 flex-1">
           <b className="block truncate text-[15px]">{card.name ?? (folder ? 'Folder' : 'File')}</b>
-          <span className="block truncate text-[12.5px] text-ink-3 dark:text-[#8D96B8]">
+          <span className="block truncate text-[12.5px] text-ink-3 dark:text-slate">
             {folder ? 'Folder' : `${ext || 'File'}${card.size ? ` · ${bytes(card.size)}` : ''}`}
             {card.owner ? ` · ${card.owner}` : ''}
           </span>
-          {card.note ? <span className="mt-1 block text-[12.5px] text-ink-2 dark:text-[#C9CFE6]">{card.note}</span> : null}
+          {card.note ? <span className="mt-1 block text-[12.5px] text-ink-2 dark:text-slate-ink">{card.note}</span> : null}
         </span>
       </div>
     </CardFrame>
@@ -110,7 +110,7 @@ export function MeetShareCard({ uuid }: { uuid: string }) {
     >
       <div className="flex flex-col gap-2 px-3.5 py-3.5">
         <b className="text-[16px]">{m.title || 'WorkSuite meeting'}</b>
-        <span className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-3 dark:text-[#8D96B8]">
+        <span className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-3 dark:text-slate">
           {m.host_name ? <span>Hosted by {m.host_name}</span> : null}
           {m.locked ? (
             <Chip tone="amber">
@@ -119,10 +119,10 @@ export function MeetShareCard({ uuid }: { uuid: string }) {
             </Chip>
           ) : null}
         </span>
-        <div className="flex items-center gap-2 rounded-[10px] bg-well px-2.5 py-2 dark:bg-[#0F1629]">
-          <span className="text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:text-[#8D96B8]">Meeting ID</span>
+        <div className="flex items-center gap-2 rounded-[10px] bg-well px-2.5 py-2 dark:bg-ground">
+          <span className="text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:text-slate">Meeting ID</span>
           <code className="min-w-0 flex-1 truncate font-mono text-[12px]">{uuid}</code>
-          <button type="button" aria-label="Copy meeting link" onClick={(e) => (e.stopPropagation(), copy())} className="flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-3 hover:bg-subtle hover:text-ink dark:hover:bg-[#1A2442]">
+          <button type="button" aria-label="Copy meeting link" onClick={(e) => (e.stopPropagation(), copy())} className="flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-3 hover:bg-subtle hover:text-ink dark:hover:bg-subtle">
             <Icon name="copy" size={14} />
           </button>
         </div>

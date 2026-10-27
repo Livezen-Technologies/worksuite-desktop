@@ -40,9 +40,9 @@ const STATUSES: Array<[Quote['status'], string]> = [
 const TONE: Record<string, string> = {
   draft: 'bg-subtle text-ink-2',
   sent: 'bg-selection text-primary',
-  accepted: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
-  declined: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  expired: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
+  accepted: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
+  declined: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  expired: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
 };
 
 export function QuoteStatus({ status, expired }: { status: string; expired?: boolean }) {
@@ -115,7 +115,7 @@ export default function Quotes({ openId, creating, forAccount, onOpen, onNew, on
         </label>
       </div>
       <div className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
-        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-[#F7F8FB] px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-info-soft px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
           <span className="w-[130px] shrink-0">Quote</span>
           <span className="min-w-0 flex-1">Account</span>
           <span className="w-[110px] shrink-0">Status</span>
@@ -402,7 +402,7 @@ function QuoteEditor({ id, forAccount, onBack, onChanged, onOpen, onOpenAccount,
           ) : null}
 
           <div role="table" aria-label="Lines" className="overflow-x-auto rounded-[10px] border border-line bg-surface">
-            <div role="row" className="flex min-w-[640px] items-center gap-2 border-b border-line bg-[#F7F8FB] px-3 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+            <div role="row" className="flex min-w-[640px] items-center gap-2 border-b border-line bg-info-soft px-3 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
               <span role="columnheader" className="min-w-[180px] flex-1">
                 Description
               </span>

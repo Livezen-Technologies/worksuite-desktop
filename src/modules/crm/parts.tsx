@@ -26,9 +26,9 @@ export function moneyFull(n: number | null | undefined, currency?: string | null
 }
 
 const RATING: Record<string, string> = {
-  hot: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  warm: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  cold: 'bg-[#E8F1FB] text-[#1D5A99] dark:bg-[#172a44] dark:text-[#8DB8F0]',
+  hot: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  warm: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  cold: 'bg-selection text-sky-ink dark:bg-slate-bg dark:text-blue-ink',
 };
 
 export function Rating({ rating }: { rating: string | null | undefined }) {
@@ -38,10 +38,10 @@ export function Rating({ rating }: { rating: string | null | undefined }) {
 
 const STATUS: Record<string, string> = {
   new: 'bg-selection text-primary',
-  contacted: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  qualified: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
-  unqualified: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  converted: 'bg-[#E3F4F5] text-[#0B6770] dark:bg-teal/15 dark:text-teal',
+  contacted: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  qualified: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
+  unqualified: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  converted: 'bg-teal-bg text-teal-ink dark:bg-teal/15 dark:text-teal',
 };
 
 export function LeadStatus({ status }: { status: string }) {

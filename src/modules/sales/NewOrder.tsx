@@ -272,7 +272,7 @@ export default function NewOrder({ org, onClose }: { org: string; onClose: (crea
             preview === null ? (
               <span className="text-ink-3">{previewQ.error ? 'Who would approve it is worked out when it is submitted.' : 'Working out who would approve it…'}</span>
             ) : preview.length ? (
-              <span className="text-[#9A4A06] dark:text-warning" data-approval-preview>
+              <span className="text-warning-ink dark:text-warning" data-approval-preview>
                 Needs {preview.length === 1 ? 'one approval' : `${preview.length} approvals`}: {preview.map((p) => `${p.step}. ${p.label}${p.approver ? ` (${p.approver})` : ''}`).join(' · ')}
               </span>
             ) : (

@@ -7,6 +7,8 @@ import type { ModuleProps } from '../registry';
 import { mayAny, useOptions, usePulse } from './api';
 import { MarketingRail, VIEWS, type MarketingView } from './Rail';
 import { FILTER_KEYS, type ConsentTab, type Filter, type Go, type QueueTab } from './routes';
+import { useOfflineReadOnly } from '../../core/offline-read';
+import { OfflineReadOnlyBanner } from '../../components/OfflineReadOnly';
 
 /**
  * Marketing (WS-MKT-SRS-001 v1.1, the DK01–DK14 designs): the rail, and the
@@ -79,6 +81,8 @@ const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) 
 
 export default function MarketingShell(_props: ModuleProps) {
   const { path, query, go } = useTab();
+  // Offline (D-G14): read-only from this computer's copy; a new campaign waits for the connection.
+  const { readOnly } = useOfflineReadOnly('marketing');
   const pulseAll = useOptions('');
   const known = (pulseAll.data?.companies ?? []).map((c) => String(c.id));
   const [orgIds, setOrgIds] = useOrgSelection('marketing', known, []);
@@ -179,7 +183,7 @@ export default function MarketingShell(_props: ModuleProps) {
       case 'campaigns':
         return campaign
           ? <CampaignView key={campaign} id={campaign} options={o} step={query.get('step')} onStep={(s) => setKey('step', s)} onBack={() => go(to('campaigns'))} onOpen={(id) => go(to('campaigns', { campaign: id }))} />
-          : <Campaigns org={org} options={o} onOpen={(id) => go(to('campaigns', { campaign: id }))} creating={query.get('new') === '1'} onCreating={(v) => setKey('new', v ? '1' : null)} />;
+          : <Campaigns org={org} options={o} onOpen={(id) => go(to('campaigns', { campaign: id }))} creating={query.get('new') === '1' && !readOnly} onCreating={(v) => setKey('new', v ? '1' : null)} />;
       case 'templates': return <Templates org={org} options={o} />;
       case 'topics': return <Topics org={org} options={o} />;
       case 'deliverability': return <Deliverability org={org} options={o} />;
@@ -223,6 +227,7 @@ export default function MarketingShell(_props: ModuleProps) {
         />
       </SidePanel>
       <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-ground px-[22px] py-[18px] scroll-thin">
+        <OfflineReadOnlyBanner module="marketing" className="-mx-[22px] -mt-[18px] mb-3 sticky top-[-18px] z-10" />
         <Suspense fallback={<Spinner />}>{screen()}</Suspense>
       </main>
     </div>

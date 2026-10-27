@@ -50,8 +50,8 @@ const CORNERS: Record<'left' | 'right', Record<Position, string>> = {
   right: { single: 'rounded-[12px_4px_12px_12px]', first: 'rounded-[12px_4px_4px_12px]', middle: 'rounded-[12px_4px_4px_12px]', last: 'rounded-[12px_4px_12px_12px]' },
 };
 
-export const BOT_TONE = 'border border-[#B5DDE0] bg-[#E3F4F5] text-ink dark:border-[#1D6F78]/50 dark:bg-[#12393C]';
-export const NOTE_TONE = 'border border-dashed border-[#D9A441] bg-[#FDF4E3] text-[#6B4A10] dark:bg-warning-bg dark:text-ink';
+export const BOT_TONE = 'border border-teal-line bg-teal-bg text-ink dark:border-teal/50';
+export const NOTE_TONE = 'border border-dashed border-amber bg-warning-bg text-warning-strong dark:bg-warning-bg dark:text-ink';
 /** A colleague's reply on our side of a website chat (C-08): tinted with their name colour (`--c`), so whose is whose shows. */
 export const COLLEAGUE_TONE = 'border border-[color:color-mix(in_srgb,var(--c)_28%,var(--color-surface))] bg-[color:color-mix(in_srgb,var(--c)_10%,var(--color-surface))] text-ink';
 
@@ -65,14 +65,14 @@ export function bubbleTone(m: Pick<KitMessage, 'own' | 'internal'> & { author: {
   if (m.internal) return NOTE_TONE;
   if (m.author.role === 'bot') return BOT_TONE;
   if (look === 'page' && isColleague(m)) return COLLEAGUE_TONE;
-  if (look === 'drawer') return m.own ? 'bg-[#DCE3FB] dark:bg-[#26366E]' : 'bg-surface dark:bg-well';
+  if (look === 'drawer') return m.own ? 'bg-blue-bg dark:bg-primary-soft' : 'bg-surface dark:bg-well';
   return m.own ? 'bg-primary text-white' : 'border border-line bg-surface text-ink';
 }
 
 /** Link colour inside a bubble: pale on indigo, indigo elsewhere. */
 function accentOf(m: KitMessage, look: Look): string {
   if (m.internal || m.author.role === 'bot') return 'text-primary';
-  if (look === 'drawer') return m.own ? 'text-primary dark:text-[#B4C3FF]' : 'text-primary';
+  if (look === 'drawer') return m.own ? 'text-primary dark:text-info-ink' : 'text-primary';
   return m.own && !isColleague(m) ? 'text-white' : 'text-primary';
 }
 
@@ -88,7 +88,7 @@ export function KitAvatar({ author, size }: { author: KitMessage['author']; size
 export function InternalLabel({ author }: { author?: string | null } = {}) {
   const first = author?.trim().split(/\s+/)[0];
   return (
-    <span className={cx('flex items-center gap-1 font-bold text-[#7A4308] dark:text-warning', first ? 'text-[10px] tracking-[0.6px] uppercase' : 'text-[11px]')}>
+    <span className={cx('flex items-center gap-1 font-bold text-warning-strong dark:text-warning', first ? 'text-[10px] tracking-[0.6px] uppercase' : 'text-[11px]')}>
       <Icon name="lock" size={10} /> {first ? text('Internal note · {name} · only staff see this', { name: first }) : text('Internal note — only staff see this')}
     </span>
   );
@@ -96,7 +96,7 @@ export function InternalLabel({ author }: { author?: string | null } = {}) {
 
 /** "Olema · bot" at the top of a bot's bubble (RDC-11: bot messages keep their style and label). */
 function BotLabel({ name }: { name: string }) {
-  return <b className="block text-[11px] font-bold text-[#1D6F78] dark:text-[#7FD3DA]">{text('{name} · bot', { name })}</b>;
+  return <b className="block text-[11px] font-bold text-teal-ink">{text('{name} · bot', { name })}</b>;
 }
 
 /** The message being answered, inside the answer's bubble. */
@@ -107,7 +107,7 @@ function ReplyQuote({ m, look, inside }: { m: KitMessage; look: Look; inside: bo
   const onIndigo = inside && look === 'page' && m.own && !m.internal && !isColleague(m);
   if (look === 'drawer') {
     return (
-      <div data-reply-quote className={cx('mb-1 rounded-[6px] border-l-[3px] border-primary bg-black/[.04] px-2 py-1 text-[11.5px] dark:bg-white/5', m.own && 'dark:border-[#B4C3FF]')}>
+      <div data-reply-quote className={cx('mb-1 rounded-[6px] border-l-[3px] border-primary bg-black/[.04] px-2 py-1 text-[11.5px] dark:bg-white/5', m.own && 'dark:border-indigo-bright')}>
         <b className={cx('block', accentOf(m, look))}>{q.author}</b>
         <span className="line-clamp-2 text-ink-2">{q.snippet}</span>
       </div>
@@ -136,7 +136,7 @@ function Reactions({ m, look, enabled, onReact }: { m: KitMessage; look: Look; e
           className={
             look === 'drawer'
               ? cx('rounded-full bg-surface px-1.5 py-px text-[11.5px] font-semibold text-ink shadow-[0_1px_3px_rgb(var(--ws-shadow-rgb)/.18)]', r.mine && 'ring-1 ring-primary/40')
-              : cx('rounded-full border px-2 py-px text-[11.5px]', r.mine ? 'border-[#C7D0F0] bg-selection dark:border-primary/40' : 'border-line bg-surface hover:bg-subtle')
+              : cx('rounded-full border px-2 py-px text-[11.5px]', r.mine ? 'border-info-line bg-selection dark:border-primary/40' : 'border-line bg-surface hover:bg-subtle')
           }
         >
           {r.emoji} {r.count}

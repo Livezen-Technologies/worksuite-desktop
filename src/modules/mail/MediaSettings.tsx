@@ -11,6 +11,7 @@ import { mailMediaPrefs, type AutoDownload, type AutoDownloadType, type MailMedi
 import { flatten, tree as loadTree } from '../files/api';
 import { useMailPrefs, useMailboxes } from './api';
 import { normaliseDomain, normaliseEmail, ownDomains, type RemoteImagesMode } from './images';
+import { SectionHeader, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Settings › Mail › Images & media (worksuite-desktop#163).
@@ -77,10 +78,9 @@ export function MediaSettings() {
   const folderRows = flatten(folders.data?.tree ?? []);
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-[20px] font-bold text-ink">{text('Images & media')}</h2>
-      <section aria-label={text('Pictures from the web')} className="rounded-[12px] border border-line bg-surface p-4">
-        <h3 className="text-[15px] font-bold text-ink">{text('Pictures from the web')}</h3>
-        <p className="mt-1 text-[12.5px] text-ink-3">{text('A picture from the web tells its sender that, when and where you opened the message. Allowed pictures load through WorkSuite, so the sender sees WorkSuite, not you, and are kept on this computer. Tracking pixels are always removed.')}</p>
+      <SectionHeader title={text('Images & media')} />
+      <SettingsGroup title={text('Pictures from the web')} description={text('A picture from the web tells its sender that, when and where you opened the message. Allowed pictures load through WorkSuite, so the sender sees WorkSuite, not you, and are kept on this computer. Tracking pixels are always removed.')}>
+        <div className="px-[18px] py-3.5">
         <div className="mt-3 max-w-[360px]">
           <Select label={text('Load remote images')} value={mode} options={MODES.map((m) => ({ value: m.value, label: text(m.label) }))} onValueChange={(v) => mail.set({ remoteImages: v })} />
         </div>
@@ -130,10 +130,10 @@ export function MediaSettings() {
         ) : (
           <p className="mt-2 text-[12.5px] text-ink-3">{text('Nobody yet. Choose Always show from… above a message, or add one here.')}</p>
         )}
-      </section>
-      <section aria-label={text('Attachments on this computer')} className="rounded-[12px] border border-line bg-surface p-4">
-        <h3 className="text-[15px] font-bold text-ink">{text('Attachments on this computer')}</h3>
-        <p className="mt-1 text-[12.5px] text-ink-3">{text('Downloaded with the messages Mail keeps offline, encrypted in the local mail store, so they open at once — also offline. Never a file WorkSuite blocks, and never from Junk.')}</p>
+        </div>
+      </SettingsGroup>
+      <SettingsGroup title={text('Attachments on this computer')} description={text('Downloaded with the messages Mail keeps offline, encrypted in the local mail store, so they open at once — also offline. Never a file WorkSuite blocks, and never from Junk.')}>
+        <div className="px-[18px] py-3.5">
         <div className="mt-3 grid max-w-[720px] grid-cols-2 gap-4">
           <Select label={text('Auto-download attachments')} value={media.autoDownload} options={AUTO.map((a) => ({ value: a.value, label: text(a.label) }))} onValueChange={(v) => setMedia({ autoDownload: v })} />
           <Select
@@ -191,7 +191,8 @@ export function MediaSettings() {
           ) : null}
         </div>
         {media.saveTo === 'files' ? <p className="mt-1.5 text-[12.5px] text-ink-3">{text('Each attachment downloaded ahead is also filed in Files by the server, where it versions and shares like any other file.')}</p> : null}
-      </section>
+        </div>
+      </SettingsGroup>
     </div>
   );
 }

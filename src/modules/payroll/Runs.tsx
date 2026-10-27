@@ -85,7 +85,7 @@ export default function Runs({ figures, active, onOpen, onNew }: { figures: bool
                 aria-selected={i === at}
                 onClick={() => setAt({ key: fkey, i })}
                 onDoubleClick={() => onOpen(r.id, 'tab')}
-                className={cx('cursor-default', i === at ? 'bg-[#EEF1FD] shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : r.status === 'submitted' ? 'bg-[#FFFCF3] dark:bg-warning-bg/30' : 'hover:bg-subtle')}
+                className={cx('cursor-default', i === at ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)] dark:bg-selection' : r.status === 'submitted' ? 'bg-rail dark:bg-warning-bg/30' : 'hover:bg-subtle')}
               >
                 <td className={td}>
                   <button type="button" className="font-mono text-[11px] text-primary hover:underline" onClick={() => onOpen(r.id, 'here', r.status === 'submitted')}>

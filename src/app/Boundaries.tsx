@@ -173,7 +173,7 @@ export function PlainLock() {
           className="h-10 rounded-[9px] border border-white/15 bg-white/5 px-3 text-[14px] text-white outline-none placeholder:text-white/40 focus:border-white/40"
         />
         {error ? (
-          <p role="alert" className="m-0 text-[12.5px] text-[#F7A39B]">
+          <p role="alert" className="m-0 text-[12.5px] text-stage-danger">
             {error}
           </p>
         ) : null}

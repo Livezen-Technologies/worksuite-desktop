@@ -242,7 +242,7 @@ function ReadinessRow({ item: i, onRoute }: { item: ReadinessItem; onRoute: (rou
       {i.ok ? (
         <Icon name="check-circle" size={18} className="mt-0.5 shrink-0 text-success" />
       ) : (
-        <Icon name="warning" size={18} className={cx('mt-0.5 shrink-0', blocking ? 'text-danger' : 'text-[#B45309] dark:text-warning')} />
+        <Icon name="warning" size={18} className={cx('mt-0.5 shrink-0', blocking ? 'text-danger' : 'text-warning dark:text-warning')} />
       )}
       <span className="sr-only">{i.ok ? 'Done:' : blocking ? 'Blocks sending:' : 'Open:'}</span>
       <div className="min-w-0 flex-1">
@@ -370,7 +370,7 @@ function RecentCampaigns({ rows, onOpen, canCreate }: { rows: Campaign[]; onOpen
                   <button type="button" onClick={(e) => (e.stopPropagation(), onOpen(c.id))} className="text-left font-semibold text-ink hover:underline">
                     {c.name}
                   </button>
-                  {c.ab ? <span className="ml-1.5 rounded-[4px] bg-[#F1EAFB] px-1 text-[10px] font-bold text-[#5B2FA0] dark:bg-[#2A1F45] dark:text-[#C4A8F0]">A/B</span> : null}
+                  {c.ab ? <span className="ml-1.5 rounded-[4px] bg-violet-bg px-1 text-[10px] font-bold text-violet-ink">A/B</span> : null}
                 </td>
                 <td className={TD}>
                   <Pill tone={CAMPAIGN_PILL[c.status]}>{c.status_label}</Pill>

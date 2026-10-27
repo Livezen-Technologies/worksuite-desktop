@@ -62,7 +62,7 @@ export function VisibilityCards({ value, canEdit }: { value: Visibility; canEdit
       {modes.map((m) => {
         const on = mode === m.id;
         return (
-          <label key={m.id} className={cx('flex cursor-pointer items-start gap-3 rounded-[12px] px-3 py-[11px]', on ? 'bg-[#F3F5FE] shadow-[0_0_0_1.5px_var(--color-primary)] dark:bg-selection' : 'shadow-[0_0_0_1px_var(--color-line)]', !canEdit && 'cursor-not-allowed opacity-60')}>
+          <label key={m.id} className={cx('flex cursor-pointer items-start gap-3 rounded-[12px] px-3 py-[11px]', on ? 'bg-info-soft shadow-[0_0_0_1.5px_var(--color-primary)] dark:bg-selection' : 'shadow-[0_0_0_1px_var(--color-line)]', !canEdit && 'cursor-not-allowed opacity-60')}>
             <input type="radio" name="picture-visibility" checked={on} onChange={() => void save(m.id, m.id === 'organizations' ? orgs : [])} className="mt-[3px] accent-primary" />
             <span className="flex min-w-0 flex-col">
               <b className="text-[13px] text-ink">{m.label}</b>

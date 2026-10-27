@@ -169,7 +169,7 @@ export function ReviewPanel({ task, me, people, refresh }: { task: TaskDetail; m
   const inReview = task.status === 'review';
   if (!inReview && !iWork) return null;
   return (
-    <div className={cx('flex flex-col gap-2 rounded-[10px] border px-3 py-2.5', inReview ? 'border-[#C9B8EE] bg-[#F4EFFC] dark:border-line dark:bg-subtle' : 'border-line bg-surface')}>
+    <div className={cx('flex flex-col gap-2 rounded-[10px] border px-3 py-2.5', inReview ? 'border-primary-soft bg-selection dark:border-line dark:bg-subtle' : 'border-line bg-surface')}>
       <b className="text-ink">{inReview ? (iReview ? 'Waiting for your review' : 'Sent for review') : task.status === 'changes_requested' ? 'Changes were requested' : 'Review'}</b>
       <span className="text-[12px] text-ink-2">
         {reviewers.length ? `Reviewer${reviewers.length === 1 ? '' : 's'}: ${reviewers.map((r) => (r.user_id === me ? 'you' : r.name)).join(', ')}` : 'No reviewer yet — add one under People.'}

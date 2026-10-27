@@ -7,7 +7,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Panel, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
 import {
   addCrm,
   addMember,
@@ -46,6 +46,7 @@ import {
   type PayOptions,
 } from './admin';
 import { K } from './api';
+import { SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Billing's settings that used to open in the browser (G-37), drawn here:
@@ -116,7 +117,8 @@ export function Gateways({ may, org, orgs }: { may: boolean; org: string; orgs: 
     );
   return (
     <>
-      <Panel title="Online payments" sub="Customers pay from the invoice’s pay link, its QR or the portal. Each paid charge records the payment, allocates it and posts it — no retyping." bodyClassName="flex flex-col">
+      <SettingsGroup title="Online payments" description="Customers pay from the invoice’s pay link, its QR or the portal. Each paid charge records the payment, allocates it and posts it — no retyping." className="!mb-0">
+        <div className="min-h-0 flex-1 flex flex-col">
         {(cat.data ?? []).map((k) => {
           const mine = all.filter((a) => a.gateway === k.key);
           const live = mine.some((a) => a.enabled);
@@ -147,10 +149,10 @@ export function Gateways({ may, org, orgs }: { may: boolean; org: string; orgs: 
               {mine.map((a) => (
                 <div key={a.id} data-account={a.id} className="ml-12 flex flex-wrap items-center gap-2 rounded-[8px] bg-subtle px-2.5 py-1.5 text-[12.5px]">
                   <b className="text-ink">{a.name}</b>
-                  <span className={cx('rounded-[8px] px-1.5 text-[11px] font-semibold', a.mode === 'live' ? 'bg-success-bg text-success' : 'bg-warning-bg text-[#9A4A06] dark:text-warning')}>{a.mode === 'live' ? 'live' : 'test'}</span>
+                  <span className={cx('rounded-[8px] px-1.5 text-[11px] font-semibold', a.mode === 'live' ? 'bg-success-bg text-success' : 'bg-warning-bg text-warning-ink dark:text-warning')}>{a.mode === 'live' ? 'live' : 'test'}</span>
                   {!a.enabled ? <span className="text-ink-3">off</span> : null}
                   <span className="text-ink-3">{orgs.find((o) => o.id === a.org_id)?.name ?? (a.org_id ? `Company #${a.org_id}` : 'Every company')}</span>
-                  {a.missing?.length ? <span className="text-[#9A4A06] dark:text-warning">needs {a.missing.join(', ')}</span> : null}
+                  {a.missing?.length ? <span className="text-warning-ink dark:text-warning">needs {a.missing.join(', ')}</span> : null}
                   {tested[a.id] ? (
                     <span className={tested[a.id]!.ok ? 'text-success' : 'text-danger'}>{tested[a.id]!.message}</span>
                   ) : a.last_tested_at ? (
@@ -180,7 +182,8 @@ export function Gateways({ may, org, orgs }: { may: boolean; org: string; orgs: 
         })}
         {!(cat.data ?? []).length ? <Empty text="The server lists no payment gateways." /> : null}
         {editing ? <GatewayForm kind={editing.kind} account={editing.account} orgs={orgs} org={org} onClose={() => setEditing(null)} /> : null}
-      </Panel>
+        </div>
+      </SettingsGroup>
       <PayLinkOptions may={may} org={org} />
     </>
   );
@@ -204,9 +207,7 @@ function PayLinkOptions({ may, org }: { may: boolean; org: string }) {
   const o = draft ?? q.data!;
   const set = (patch: Partial<PayOptions>) => setDraft({ ...o, ...patch });
   return (
-    <Panel
-      title="Pay-link options"
-      action={
+    <SettingsGroup title="Pay-link options" actions={
         may ? (
           <button
             type="button"
@@ -223,9 +224,8 @@ function PayLinkOptions({ may, org }: { may: boolean; org: string }) {
             Save
           </button>
         ) : null
-      }
-      bodyClassName="flex flex-col gap-2 px-3.5 py-3"
-    >
+      } className="!mb-0">
+      <div className="min-h-0 flex-1 flex flex-col gap-2 px-3.5 py-3">
       {OPTION_LABEL.map(([k, label, sub]) => (
         <label key={k} className="flex items-start gap-2 text-[12.5px] text-ink">
           <Checkbox checked={!!o[k]} disabled={!may} onChange={(e) => set({ [k]: e.target.checked } as Partial<PayOptions>)} className="mt-0.5" />
@@ -249,7 +249,8 @@ function PayLinkOptions({ may, org }: { may: boolean; org: string }) {
           <input aria-label="LankaQR merchant ID" disabled={!may} value={o.lankaqr_merchant_id ?? ''} onChange={(e) => set({ lankaqr_merchant_id: e.target.value })} className={input + ' font-mono'} />
         </Field>
       </div>
-    </Panel>
+      </div>
+    </SettingsGroup>
   );
 }
 
@@ -372,18 +373,14 @@ export function Crm({ may, orgs }: { may: boolean; orgs: Orgs }) {
   const rows = q.data ?? [];
   const open = rows.find((r) => r.id === editing) ?? null;
   return (
-    <Panel
-      title="CRM connector"
-      sub="Perfex CRM installations whose customers, invoices and payments come into Billing."
-      action={
+    <SettingsGroup title="CRM connector" description="Perfex CRM installations whose customers, invoices and payments come into Billing." actions={
         may ? (
           <button type="button" className={btnSmall} onClick={() => setAdding(true)}>
             + Connect a CRM
           </button>
         ) : null
-      }
-      bodyClassName="flex flex-col"
-    >
+      } className="!mb-0">
+      <div className="min-h-0 flex-1 flex flex-col">
       {rows.length ? (
         rows.map((c) => (
           <div key={c.id} className="flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0">
@@ -395,7 +392,7 @@ export function Crm({ may, orgs }: { may: boolean; orgs: Orgs }) {
                 {c.event_count ? ` · ${c.event_count} events` : ''}
               </span>
             </span>
-            <span className={cx('rounded-[10px] px-2 py-0.5 text-[11px] font-semibold', c.enabled ? 'bg-success-bg text-success' : c.configured ? 'bg-subtle text-ink-2' : 'bg-warning-bg text-[#9A4A06] dark:text-warning')}>
+            <span className={cx('rounded-[10px] px-2 py-0.5 text-[11px] font-semibold', c.enabled ? 'bg-success-bg text-success' : c.configured ? 'bg-subtle text-ink-2' : 'bg-warning-bg text-warning-ink dark:text-warning')}>
               {c.enabled ? 'On' : c.configured ? 'Off' : 'Needs its key'}
             </span>
             {may ? (
@@ -504,7 +501,8 @@ export function Crm({ may, orgs }: { may: boolean; orgs: Orgs }) {
           {open.last_seen_at ? <span className="text-[12px] text-ink-3">Last answered {dateLabel(open.last_seen_at)}</span> : null}
         </Sheet>
       ) : null}
-    </Panel>
+      </div>
+    </SettingsGroup>
   );
 }
 
@@ -523,18 +521,14 @@ export function Woo({ may, orgs }: { may: boolean; orgs: Orgs }) {
   const rows = q.data ?? [];
   const open = rows.find((r) => r.id === editing) ?? null;
   return (
-    <Panel
-      title="WooCommerce stores"
-      sub="Online shops whose orders become invoices here."
-      action={
+    <SettingsGroup title="WooCommerce stores" description="Online shops whose orders become invoices here." actions={
         may ? (
           <button type="button" className={btnSmall} onClick={() => setAdding(true)}>
             + Connect a store
           </button>
         ) : null
-      }
-      bodyClassName="flex flex-col"
-    >
+      } className="!mb-0">
+      <div className="min-h-0 flex-1 flex flex-col">
       {rows.length ? (
         rows.map((s) => (
           <div key={s.id} className="flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0">
@@ -546,7 +540,7 @@ export function Woo({ may, orgs }: { may: boolean; orgs: Orgs }) {
                 {s.webhook_set ? '' : ' · no webhook secret'}
               </span>
             </span>
-            <span className={cx('rounded-[10px] px-2 py-0.5 text-[11px] font-semibold', s.enabled ? 'bg-success-bg text-success' : s.configured ? 'bg-subtle text-ink-2' : 'bg-warning-bg text-[#9A4A06] dark:text-warning')}>
+            <span className={cx('rounded-[10px] px-2 py-0.5 text-[11px] font-semibold', s.enabled ? 'bg-success-bg text-success' : s.configured ? 'bg-subtle text-ink-2' : 'bg-warning-bg text-warning-ink dark:text-warning')}>
               {s.enabled ? 'On' : s.configured ? 'Off' : 'Needs its keys'}
             </span>
             {may ? (
@@ -704,7 +698,8 @@ export function Woo({ may, orgs }: { may: boolean; orgs: Orgs }) {
           <span className="text-[12px] text-ink-3">Topics: {minted.topics.join(', ')}</span>
         </Sheet>
       ) : null}
-    </Panel>
+      </div>
+    </SettingsGroup>
   );
 }
 
@@ -723,18 +718,14 @@ export function Members({ org, orgs }: { org: string; orgs: Orgs }) {
   const roles = d?.roles?.length ? d.roles : Object.keys(ROLE_LABEL);
   const search = (term: string) => void findAssignable(term).then(setHits, () => setHits([]));
   return (
-    <Panel
-      title="Members"
-      sub={d?.shared_note ?? 'Who works in each company, and in what role.'}
-      action={
+    <SettingsGroup title="Members" description={d?.shared_note ?? 'Who works in each company, and in what role.'} actions={
         d?.can_manage ? (
           <button type="button" className={btnSmall} onClick={() => (setWho(null), setRole('member'), setAdding(true))}>
             + Add somebody
           </button>
         ) : null
-      }
-      bodyClassName="flex flex-col"
-    >
+      } className="!mb-0">
+      <div className="min-h-0 flex-1 flex flex-col">
       {orgs.length > 1 ? (
         <div className="border-b border-line px-3.5 py-2.5">
           <Select<string> aria-label="Members of" searchable value={company} onValueChange={setCompany} placeholder="Choose the company" options={orgs.map((o) => ({ value: String(o.id), label: o.name }))} className={input + ' !w-[300px]'} />
@@ -819,7 +810,8 @@ export function Members({ org, orgs }: { org: string; orgs: Orgs }) {
           <p className="m-0 text-[12px] text-ink-3">What they may do in Billing still follows their permissions; this says which company’s records they work in.</p>
         </Sheet>
       ) : null}
-    </Panel>
+      </div>
+    </SettingsGroup>
   );
 }
 

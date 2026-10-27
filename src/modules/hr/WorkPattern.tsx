@@ -54,11 +54,11 @@ interface TeamRow {
 }
 
 const BAND_TONE: Record<string, string> = {
-  Outstanding: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
-  Strong: 'bg-[#E3F4F5] text-[#0B6770] dark:bg-[#10343A] dark:text-[#7FD8DF]',
-  'Meets expectations': 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  'Needs attention': 'bg-[#FDEBDD] text-[#9A3B06] dark:bg-warning-bg dark:text-warning',
-  Critical: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
+  Outstanding: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
+  Strong: 'bg-teal-bg text-teal-ink',
+  'Meets expectations': 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  'Needs attention': 'bg-orange-bg text-orange-ink dark:bg-warning-bg dark:text-warning',
+  Critical: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
 };
 
 export function withheldReason(w: Withheld, coverage: number): string | null {

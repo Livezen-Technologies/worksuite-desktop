@@ -94,23 +94,23 @@ export function statusLine(
   switch (s.phase) {
     case 'devices':
     case 'placing':
-      return s.answering ? [text('Connecting…'), 'text-[#FDE68A]'] : [text('Calling…'), 'text-[#AFC0E8]'];
+      return s.answering ? [text('Connecting…'), 'text-stage-warning'] : [text('Calling…'), 'text-stage-accent'];
     case 'calling':
-      return [text('Calling…'), 'text-[#AFC0E8]'];
+      return [text('Calling…'), 'text-stage-accent'];
     case 'ringing':
-      return [text('Ringing…'), 'text-[#AFC0E8]'];
+      return [text('Ringing…'), 'text-stage-accent'];
     case 'connecting':
-      return [text('Connecting…'), 'text-[#FDE68A]'];
+      return [text('Connecting…'), 'text-stage-warning'];
     case 'connected':
-      return s.reconnecting || s.remoteLost ? [`${text('Reconnecting…')} · ${clock ?? '0:00'}`, 'text-[#FDE68A]'] : [`${text('Connected')} · ${clock ?? '0:00'}`, 'text-[#9EE6C3]'];
+      return s.reconnecting || s.remoteLost ? [`${text('Reconnecting…')} · ${clock ?? '0:00'}`, 'text-stage-warning'] : [`${text('Connected')} · ${clock ?? '0:00'}`, 'text-stage-success'];
     case 'ended':
-      return [`${text('Call ended')}${s.lost ? ` · ${text('connection lost')}` : ''}${endedAfter ? ` · ${endedAfter}` : ''}`, 'text-[#AFC0E8]'];
+      return [`${text('Call ended')}${s.lost ? ` · ${text('connection lost')}` : ''}${endedAfter ? ` · ${endedAfter}` : ''}`, 'text-stage-accent'];
     case 'unreachable': {
       const r = s.unreachable?.reason;
-      return [text(r === 'busy' ? 'Busy' : r === 'declined' ? 'Declined' : r === 'offline' ? 'Not available right now' : 'No answer'), 'text-[#FFD2C4]'];
+      return [text(r === 'busy' ? 'Busy' : r === 'declined' ? 'Declined' : r === 'offline' ? 'Not available right now' : 'No answer'), 'text-stage-gray-ink'];
     }
     default:
-      return [text('Connecting…'), 'text-[#FDE68A]'];
+      return [text('Connecting…'), 'text-stage-warning'];
   }
 }
 

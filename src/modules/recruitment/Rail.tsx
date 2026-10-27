@@ -27,7 +27,7 @@ export function RecruitmentRail({ view, onPick, onWeb, counts, can }: {
         type="button"
         aria-current={on ? 'page' : undefined}
         onClick={() => onPick(id)}
-        className={cx('relative flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left', on ? 'bg-[#EEF1FD] font-bold text-[#3B5BDB] dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
+        className={cx('relative flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left', on ? 'bg-selection font-bold text-brand-soft dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
       >
         <Icon name={icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -45,7 +45,7 @@ export function RecruitmentRail({ view, onPick, onWeb, counts, can }: {
   const head = (label: string) => <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>;
 
   return (
-    <nav aria-label="Recruitment" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="Recruitment" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       {can.createJob ? (
         <div className="px-2.5 pt-3.5 pb-1">
           <button type="button" onClick={() => onWeb('/recruitment/jobs/new')} className="flex h-[34px] w-full items-center justify-center gap-1.5 rounded-[8px] bg-primary text-[13px] font-bold text-white hover:bg-primary-hover">

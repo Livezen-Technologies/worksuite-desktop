@@ -112,16 +112,16 @@ export function LiveMapWindow() {
   const needs = needsRows(visitors, now, skew);
   return (
     <section aria-label={text('Live map window')} className="flex h-full flex-col bg-surface text-[13px] text-ink">
-      <div className="drag flex h-[38px] shrink-0 items-center gap-2.5 bg-[#111b3b] text-[12.5px] text-[#f1f4fb]" style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 12 : 140 }}>
+      <div className="drag flex h-[38px] shrink-0 items-center gap-2.5 bg-stage-2 text-[12.5px] text-stage-ink" style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 12 : 140 }}>
         <span className="font-bold">{text('Live map')}</span>
-        <span className="text-[#9aa3c4]">· {text('All sites')}</span>
+        <span className="text-ink-4">· {text('All sites')}</span>
         <span className="flex-1" />
         <button type="button" aria-pressed={onTop} onClick={pin} title={onTop ? text('Stop keeping on top') : text('Keep on top')}
-          className={cx('no-drag flex items-center gap-[5px] rounded-[6px] px-2 py-0.5 text-[11px] font-semibold', onTop ? 'bg-[#1f2a5b] text-[#b3c0ff]' : 'text-[#8b93ad] hover:bg-white/10')}>
+          className={cx('no-drag flex items-center gap-[5px] rounded-[6px] px-2 py-0.5 text-[11px] font-semibold', onTop ? 'bg-stage-3 text-stage-accent' : 'text-stage-ink-3 hover:bg-white/10')}>
           <span aria-hidden>📌</span> {text('On top')}
         </button>
-        <span className="flex items-center gap-[5px] text-[11px] font-bold text-[#8fe0b5]">
-          <span className="h-[7px] w-[7px] rounded-full bg-[#2f9e67]" aria-hidden />
+        <span className="flex items-center gap-[5px] text-[11px] font-bold text-stage-success">
+          <span className="h-[7px] w-[7px] rounded-full bg-green" aria-hidden />
           {text('Live')}
         </span>
       </div>

@@ -117,7 +117,7 @@ export default function ProductGrid({
             aria-label={t('pos.search')}
             className="bare-focus min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3"
           />
-          <kbd className="rounded-[4px] border border-[#cbd5e1] px-1.5 py-0.5 font-mono text-[11px] text-ink-2">F2</kbd>
+          <kbd className="rounded-[4px] border border-slate-line px-1.5 py-0.5 font-mono text-[11px] text-ink-2">F2</kbd>
         </label>
         <button
           type="button"
@@ -248,7 +248,7 @@ export default function ProductGrid({
           ‹
         </button>
         {dots(pages, page).map((i) => (
-          <button key={i} type="button" aria-label={t('pos.page', { n: i + 1 })} aria-current={i === page ? 'page' : undefined} onClick={() => onPage(i)} className={cx('h-2 shrink-0 rounded-full', i === page ? 'w-[22px] bg-primary' : 'w-2 bg-[#cbd5e1]')} />
+          <button key={i} type="button" aria-label={t('pos.page', { n: i + 1 })} aria-current={i === page ? 'page' : undefined} onClick={() => onPage(i)} className={cx('h-2 shrink-0 rounded-full', i === page ? 'w-[22px] bg-primary' : 'w-2 bg-primary-soft')} />
         ))}
         <button type="button" aria-label={t('pos.pageNext')} disabled={page >= pages - 1} onClick={() => onPage(page + 1)} className={cx('h-10 w-touch shrink-0 rounded-[10px] text-[18px] text-ink disabled:text-ink-3/60', OFF)}>
           ›

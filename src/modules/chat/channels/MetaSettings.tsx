@@ -7,6 +7,7 @@ import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../../components/ui';
 import { checkMeta, disconnectMeta, isMetaConnected, PLATFORM_ICON, PLATFORM_LABEL, statusLabel, type MetaAccount, type MetaPlatform } from './meta';
+import { SettingsGroup } from '../../../components/SettingsKit';
 
 const ROLES: Record<string, string> = { owner: 'Owner', admin: 'Admin', agent: 'Agent', viewer: 'Viewer' };
 
@@ -47,22 +48,23 @@ export function MetaSettings({ platform, accounts, loading, onConnect, onReconne
   return (
     <Modal title={text('{platform} settings', { platform: label })} onClose={onClose} width={560} footer={<Button variant="primary" onClick={onClose}>{text('Done')}</Button>}>
       <div className="flex flex-col gap-3 text-[12.5px]">
-        <div className="flex items-center gap-2">
-          <b className="flex-1 text-[13px] text-ink">{platform === 'messenger' ? text('Your Pages') : text('Your Instagram accounts')}</b>
-          {onConnect ? <Button size="sm" variant="primary" icon="plus" onClick={onConnect}>{platform === 'messenger' ? text('Connect a Page') : text('Connect Instagram')}</Button> : null}
-        </div>
-        {loading ? <Spinner /> : null}
+        <SettingsGroup
+          title={platform === 'messenger' ? text('Your Pages') : text('Your Instagram accounts')}
+          className="!mb-0"
+          list={platform === 'messenger' ? text('Your Pages') : text('Your Instagram accounts')}
+          actions={onConnect ? <Button size="sm" variant="primary" icon="plus" onClick={onConnect}>{platform === 'messenger' ? text('Connect a Page') : text('Connect Instagram')}</Button> : null}
+        >
+        {loading ? <li className="px-[18px] py-3"><Spinner /></li> : null}
         {!loading && !accounts.length ? (
-          <p className="rounded-[10px] border border-dashed border-line p-3 text-ink-3">
+          <li className="px-[18px] py-3 text-ink-3">
             {onConnect ? text('Nothing is connected yet. Connect one to answer its messages from Chat.') : text('Nothing is shared with you yet. Ask whoever manages your Pages to share one with you.')}
-          </p>
+          </li>
         ) : null}
-        <ul className="flex flex-col gap-2" aria-label={platform === 'messenger' ? text('Your Pages') : text('Your Instagram accounts')}>
           {accounts.map((a) => {
             const up = isMetaConnected(a);
             const off = a.status === 'disconnected';
             return (
-              <li key={a.id} aria-label={a.name} className="flex flex-col gap-2 rounded-[10px] border border-line p-3">
+              <li key={a.id} aria-label={a.name} className="flex flex-col gap-2 px-[18px] py-3">
                 <div className="flex items-start gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-subtle text-ink-2"><Icon name={PLATFORM_ICON[platform]} size={17} /></span>
                   <span className="min-w-0 flex-1">
@@ -99,7 +101,7 @@ export function MetaSettings({ platform, accounts, loading, onConnect, onReconne
               </li>
             );
           })}
-        </ul>
+        </SettingsGroup>
         <p className="text-ink-3">{text('Replies follow {platform}’s rules: within 24 hours of the person’s last message, and only after they have written.', { platform: label })}</p>
       </div>
     </Modal>

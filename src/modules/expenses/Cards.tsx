@@ -284,7 +284,7 @@ function TxnRow({ t, may, busy, onMatch, onAct, onClaim }: { t: CardTxn; may: bo
       <span className="shrink-0 truncate text-ink-2" style={{ width: TXN_COLS.card }}>
         {cardName(t.card, t.last4)}
       </span>
-      <span className={cx('flex shrink-0 flex-col items-end font-semibold tabular-nums', refund ? 'text-[#166534] dark:text-success' : 'text-ink')} style={{ width: TXN_COLS.amount }}>
+      <span className={cx('flex shrink-0 flex-col items-end font-semibold tabular-nums', refund ? 'text-success-ink dark:text-success' : 'text-ink')} style={{ width: TXN_COLS.amount }}>
         {money(t.amount, t.currency)}
         {refund ? <span className="text-[11px] font-normal text-ink-3">refund</span> : null}
       </span>
@@ -367,7 +367,7 @@ function CardList({ cards, may, onImport, onEdit }: { cards: Card[]; may: boolea
               </span>
               <span className="shrink-0 text-right tabular-nums" style={{ width: CARD_COLS.unmatched }}>
                 {c.unmatched > 0 ? (
-                  <span className="font-semibold text-[#9A4A06] dark:text-warning">
+                  <span className="font-semibold text-warning-ink dark:text-warning">
                     {c.unmatched.toLocaleString()} · {money(c.unmatched_value, c.currency)}
                   </span>
                 ) : (

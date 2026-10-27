@@ -85,7 +85,7 @@ export default function Returns({ board }: { org: string; board: UseQueryResult<
         ]}
       />
       {b.no_document.length ? (
-        <div className="rounded-[10px] border border-[#F5D48A] bg-[#FFF8E6] px-3.5 py-2.5 text-[12.5px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+        <div className="rounded-[10px] border border-warning-line bg-warning-bg px-3.5 py-2.5 text-[12.5px] text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           <b>
             {b.no_document.length} {b.no_document.length === 1 ? 'order is' : 'orders are'} marked returned with no return document.
           </b>{' '}

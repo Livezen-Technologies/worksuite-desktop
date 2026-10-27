@@ -361,7 +361,7 @@ export function PdfCanvas({ session, pages, zoom, mode, page, tool, hits, active
         el.scrollLeft = d.left - (e.clientX - d.x);
       }}
       onPointerUp={() => (drag.current = null)}
-      className={cx('relative min-h-0 flex-1 overflow-auto outline-none scroll-thin', presentation ? 'bg-black' : 'bg-[#E4E7EE] dark:bg-[#1B2233]', tool === 'hand' ? 'cursor-grab active:cursor-grabbing' : '')}
+      className={cx('relative min-h-0 flex-1 overflow-auto outline-none scroll-thin', presentation ? 'bg-black' : 'bg-info-bg dark:bg-slate-bg', tool === 'hand' ? 'cursor-grab active:cursor-grabbing' : '')}
     >
       <div className="relative" style={{ width: layout.width, height: layout.height }}>
         {shown.map((i) => {
@@ -372,7 +372,7 @@ export function PdfCanvas({ session, pages, zoom, mode, page, tool, hits, active
             <PageView key={i} revision={revision} requests={requests} placed={p} size={pages[i]!} zoom={zoom} dpr={dpr} settled={settled} visible={visible}>
               {(byPage.get(i) ?? []).map((h, n) =>
                 h.rects.map((r, m) => (
-                  <span key={`${n}-${m}`} aria-hidden="true" className={cx('pointer-events-none absolute rounded-[2px] mix-blend-multiply', h === activeHit ? 'bg-[#FF9F1C]/70 ring-2 ring-[#E8590C]' : 'bg-[#FFE066]/60')} style={rectStyle(r, k)} />
+                  <span key={`${n}-${m}`} aria-hidden="true" className={cx('pointer-events-none absolute rounded-[2px] mix-blend-multiply', h === activeHit ? 'bg-amber/70 ring-2 ring-amber-strong' : 'bg-warning-soft/60')} style={rectStyle(r, k)} />
                 )),
               )}
               {tool === 'select'

@@ -53,7 +53,7 @@ export function GuideCard({ guide, question, others = [], onOpenGuide, onSupport
         <span className="text-[11px] text-ink-3">Guide · this version</span>
       </header>
       {!allowed ? (
-        <p className="flex items-start gap-1.5 rounded-[8px] bg-warning-bg px-2.5 py-1.5 text-[12px] text-[#7A4308] dark:text-warning">
+        <p className="flex items-start gap-1.5 rounded-[8px] bg-warning-bg px-2.5 py-1.5 text-[12px] text-warning-strong dark:text-warning">
           <Icon name="lock" size={13} className="mt-0.5 shrink-0" />
           You can read how it is done, but doing it needs: {guide.permissionLabel ?? 'a permission you do not have'}. Ask your administrator for it.
         </p>

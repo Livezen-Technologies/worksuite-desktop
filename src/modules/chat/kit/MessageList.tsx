@@ -50,7 +50,7 @@ export function SystemLine({ m, look }: { m: KitMessage; look: Look }) {
         <span
           className={cx(
             'flex items-center gap-1.5 rounded-[12px] border px-3 py-1.5 text-center text-[12px] font-semibold',
-            m.tone === 'call' ? 'border-[#BFE3CC] bg-success-bg text-[#1F6B40] dark:border-success/40 dark:text-success' : 'border-[#F6C4B8] bg-danger-bg text-[#8C2A14] dark:border-danger/40 dark:text-danger',
+            m.tone === 'call' ? 'border-success-line bg-success-bg text-success dark:border-success/40 dark:text-success' : 'border-danger-line bg-danger-bg text-danger-ink dark:border-danger/40 dark:text-danger',
           )}
         >
           <Icon name={m.tone === 'call' ? 'phone' : 'phone-off'} size={12} className="shrink-0" /> {words}
@@ -61,7 +61,7 @@ export function SystemLine({ m, look }: { m: KitMessage; look: Look }) {
   if (m.internal) {
     return (
       <div data-system className="my-2 flex justify-center">
-        <span className="flex items-center gap-1 text-center text-[11px] text-[#7A4308] dark:text-warning" title="Only staff see this">
+        <span className="flex items-center gap-1 text-center text-[11px] text-warning-strong dark:text-warning" title="Only staff see this">
           <Icon name="lock" size={10} /> {words}
         </span>
       </div>
@@ -106,8 +106,8 @@ export function TypingLine({ children, side = 'left' }: { children: ReactNode; s
 export function PendingBubble({ label, failed, error, waiting, onRetry, onDiscard, look = 'page' }: { label: string; failed: boolean; error?: string | null; waiting: string; onRetry: () => void; onDiscard?: () => void; look?: Look }) {
   return (
     <div data-pending className="mt-3 flex flex-col items-end gap-1">
-      <div className={cx('max-w-[520px] border border-dashed border-[#8C9AD3] bg-[#DDE3F7] text-ink dark:bg-selection', look === 'drawer' ? 'max-w-[84%] rounded-[10px] px-2.5 py-1.5 text-[13px]' : 'rounded-[12px_4px_12px_12px] px-[13px] py-[9px] text-[13.5px]')}>{label}</div>
-      <span className="text-[11.5px] font-semibold text-[#9A4A06] dark:text-warning">
+      <div className={cx('max-w-[520px] border border-dashed border-muted bg-blue-bg text-ink dark:bg-selection', look === 'drawer' ? 'max-w-[84%] rounded-[10px] px-2.5 py-1.5 text-[13px]' : 'rounded-[12px_4px_12px_12px] px-[13px] py-[9px] text-[13.5px]')}>{label}</div>
+      <span className="text-[11.5px] font-semibold text-warning-ink dark:text-warning">
         {failed ? (
           <>
             Not sent — {error ?? 'the server refused it'} ·{' '}

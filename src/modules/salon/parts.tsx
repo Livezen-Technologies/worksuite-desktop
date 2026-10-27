@@ -154,7 +154,7 @@ type TouchVariant = 'primary' | 'secondary' | 'danger' | 'quiet';
 export function TouchButton({ variant = 'secondary', icon, loading, className, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: TouchVariant; icon?: string; loading?: boolean }) {
   const tones: Record<TouchVariant, string> = {
     primary: 'border border-transparent bg-primary text-white enabled:hover:bg-primary-hover',
-    secondary: 'border border-[#C9CEDD] bg-surface text-ink enabled:hover:bg-subtle dark:border-line',
+    secondary: 'border border-slate-line bg-surface text-ink enabled:hover:bg-subtle dark:border-line',
     danger: 'border border-transparent bg-danger text-white enabled:hover:opacity-90',
     quiet: 'border border-transparent bg-transparent text-ink-2 enabled:hover:bg-subtle',
   };
@@ -179,9 +179,9 @@ const TAG_TONES: Record<TagTone, string> = {
   success: 'bg-success-bg text-success',
   warning: 'bg-warning-bg text-warning',
   danger: 'bg-danger-bg text-danger',
-  violet: 'bg-[#F5F3FF] text-[#6D28D9] dark:bg-[#2E1D4A] dark:text-[#D2B4FE]',
-  blue: 'bg-[#EFF6FF] text-[#1D4ED8] dark:bg-[#172554] dark:text-[#93C5FD]',
-  slate: 'bg-[#F1F5F9] text-[#475569] dark:bg-[#1E293B] dark:text-[#CBD5E1]',
+  violet: 'bg-info-soft text-violet dark:bg-violet-bg dark:text-violet-ink',
+  blue: 'bg-info-soft text-brand-soft dark:bg-blue-bg dark:text-blue-ink',
+  slate: 'bg-slate-bg text-ink-2 dark:text-slate-ink',
 };
 
 /** A round label beside a name: Deposit owed, Allergy, Advance, Gold. */
@@ -291,10 +291,10 @@ export function Stepper({ label, value, min = 1, max = 9, onChange }: { label: s
 }
 
 const DIALOG_TONES = {
-  danger: { band: 'bg-[#FFF1F2] dark:bg-danger-bg', tile: 'bg-[#BE123C]', title: 'text-[#881337] dark:text-danger', sub: 'text-[#9F1239] dark:text-danger' },
-  warning: { band: 'bg-[#FFFBEB] dark:bg-warning-bg', tile: 'bg-[#B45309]', title: 'text-warning-ink', sub: 'text-warning-ink' },
+  danger: { band: 'bg-danger-bg dark:bg-danger-bg', tile: 'bg-rose', title: 'text-rose-ink dark:text-danger', sub: 'text-rose-ink dark:text-danger' },
+  warning: { band: 'bg-rail dark:bg-warning-bg', tile: 'bg-warning', title: 'text-warning-ink', sub: 'text-warning-ink' },
   indigo: { band: 'bg-selection', tile: 'bg-primary', title: 'text-primary', sub: 'text-ink-2' },
-  teal: { band: 'bg-[#E6F7F8] dark:bg-teal/15', tile: 'bg-teal', title: 'text-[#134E4A] dark:text-teal-light', sub: 'text-[#134E4A] dark:text-teal-light' },
+  teal: { band: 'bg-teal-bg dark:bg-teal/15', tile: 'bg-teal', title: 'text-slate-ink dark:text-teal-light', sub: 'text-slate-ink dark:text-teal-light' },
 } as const;
 
 /**
@@ -371,7 +371,7 @@ export function Note({ tone = 'muted', children, action, icon }: { tone?: 'muted
     warning: 'border-[var(--ws-note-line)] bg-warning-bg text-warning-ink',
     danger: 'border-danger/30 bg-danger-bg text-danger',
     indigo: 'border-primary/20 bg-selection text-primary',
-    teal: 'border-teal-light bg-[#E6F7F8] text-[#134E4A] dark:bg-teal/15 dark:text-teal-light',
+    teal: 'border-teal-light bg-teal-bg text-slate-ink dark:bg-teal/15 dark:text-teal-light',
   };
   return (
     <div className={cx('flex items-center gap-3 rounded-[12px] border px-3.5 py-2.5 text-[13px] font-medium', tones[tone])}>
@@ -384,9 +384,9 @@ export function Note({ tone = 'muted', children, action, icon }: { tone?: 'muted
 
 const QUICK_TONES = {
   indigo: 'bg-selection text-primary',
-  teal: 'bg-[#E6F7F8] text-[#0F766E] dark:bg-teal/15 dark:text-teal-light',
-  amber: 'bg-[#FEF3C7] text-[#B45309] dark:bg-warning-bg dark:text-warning',
-  pink: 'bg-[#FCE7F3] text-[#BE185D] dark:bg-[#3A1630] dark:text-[#F9A8D4]',
+  teal: 'bg-teal-bg text-teal dark:bg-teal/15 dark:text-teal-light',
+  amber: 'bg-yellow-bg text-warning dark:bg-warning-bg dark:text-warning',
+  pink: 'bg-rose-bg text-rose dark:text-rose-ink',
 } as const;
 
 /** A big button for the counter's most common jobs (D02). */
@@ -485,7 +485,7 @@ export function MoneyLine({ label, value, currency = '', strong = false, tone }:
   return (
     <div className={cx('flex items-baseline justify-between gap-3 py-[3px]', strong ? 'text-[16px]' : 'text-[14px]')}>
       <dt className="min-w-0 truncate text-ink-2">{label}</dt>
-      <dd className={cx('m-0 tabular-nums', strong ? 'font-extrabold text-ink' : 'font-semibold', !strong && (tone === 'saving' ? 'text-success' : tone === 'advance' ? 'text-[#6D28D9] dark:text-[#D2B4FE]' : 'text-ink'))}>
+      <dd className={cx('m-0 tabular-nums', strong ? 'font-extrabold text-ink' : 'font-semibold', !strong && (tone === 'saving' ? 'text-success' : tone === 'advance' ? 'text-violet dark:text-violet-ink' : 'text-ink'))}>
         {value < 0 ? `− ${amount(-value, currency)}` : amount(value, currency)}
       </dd>
     </div>

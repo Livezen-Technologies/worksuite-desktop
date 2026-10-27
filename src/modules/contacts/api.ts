@@ -112,16 +112,16 @@ export interface DirectoryPerson {
 }
 
 export const TYPES: Array<{ id: ContactType; label: string; tone: string }> = [
-  { id: 'personal', label: 'Personal', tone: 'bg-[#F1F3F8] text-[#3A4158] dark:bg-subtle dark:text-ink-2' },
-  { id: 'employee', label: 'Employee', tone: 'bg-[#E6F6EE] text-[#1F7A4D] dark:bg-success-bg dark:text-success' },
-  { id: 'customer', label: 'Customer', tone: 'bg-[#FEF3E2] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' },
-  { id: 'vendor', label: 'Vendor', tone: 'bg-[#F1EAFB] text-[#5B2FA0] dark:bg-subtle dark:text-[#B69CF0]' },
-  { id: 'supplier', label: 'Supplier', tone: 'bg-[#F1EAFB] text-[#5B2FA0] dark:bg-subtle dark:text-[#B69CF0]' },
-  { id: 'partner', label: 'Partner', tone: 'bg-[#E1F2F4] text-[#0B6770] dark:bg-subtle dark:text-[#5CC6CF]' },
+  { id: 'personal', label: 'Personal', tone: 'bg-slate-bg text-slate-ink dark:bg-subtle dark:text-ink-2' },
+  { id: 'employee', label: 'Employee', tone: 'bg-success-bg text-success dark:bg-success-bg dark:text-success' },
+  { id: 'customer', label: 'Customer', tone: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning' },
+  { id: 'vendor', label: 'Vendor', tone: 'bg-violet-bg text-violet-ink dark:bg-subtle dark:text-violet' },
+  { id: 'supplier', label: 'Supplier', tone: 'bg-violet-bg text-violet-ink dark:bg-subtle dark:text-violet' },
+  { id: 'partner', label: 'Partner', tone: 'bg-teal-bg text-teal-ink dark:bg-subtle' },
   { id: 'organization', label: 'Organization', tone: 'bg-selection text-primary' },
   { id: 'team', label: 'Team', tone: 'bg-selection text-primary' },
   { id: 'emergency', label: 'Emergency', tone: 'bg-danger-bg text-danger' },
-  { id: 'shared', label: 'Shared', tone: 'bg-[#F1F3F8] text-[#3A4158] dark:bg-subtle dark:text-ink-2' },
+  { id: 'shared', label: 'Shared', tone: 'bg-slate-bg text-slate-ink dark:bg-subtle dark:text-ink-2' },
 ];
 export const typeOf = (t: string) => TYPES.find((x) => x.id === t) ?? TYPES[0]!;
 /** What a card's pill says: a personal contact is just a "Contact". */

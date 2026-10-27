@@ -8,6 +8,7 @@ import { toast } from '../../core/toasts';
 import { fetchProfiles, fetchQueue, has, K, openPdf, profileFor, type Access, type QueueItem } from './api';
 import { Note, PageHead, Panel, amt, btn, btnPrimary, num, td, th, useStation } from './parts';
 import { PrintDialog } from './PrintDialog';
+import { useOfflineReadOnly } from '../../core/offline-read';
 
 /**
  * D02 — Print station queue + printer status (CHQ-PRT-01, CHQ-PRN-02, WF-06). Approved cheques; those a printer
@@ -26,7 +27,9 @@ export default function Queue({ access }: { access: Access | undefined }) {
   const lastOk = useRef(false);
   const items = queue.data ?? [];
   const mine = profiles.data ?? [];
-  const canPrint = has(access, 'cheque.print');
+  // Printing needs WorkSuite: offline the lists read from this computer's copy and nothing prints (D-G14).
+  const offline = useOfflineReadOnly('cheque').readOnly;
+  const canPrint = has(access, 'cheque.print') && !offline;
   const printable = items.filter((i) => profileFor(i, mine));
 
   const selected = items.filter((i) => picked.includes(i.cheque_id));
@@ -66,7 +69,7 @@ export default function Queue({ access }: { access: Access | undefined }) {
                 {items.map((i) => {
                   const ok = !!profileFor(i, mine);
                   return (
-                    <tr key={i.cheque_id} className={ok ? (picked.includes(i.cheque_id) ? 'bg-[#EEF1FD] dark:bg-selection' : '') : 'opacity-50'}>
+                    <tr key={i.cheque_id} className={ok ? (picked.includes(i.cheque_id) ? 'bg-selection dark:bg-selection' : '') : 'opacity-50'}>
                       <td className={td}><Checkbox aria-label={`Select ${i.cheque_number}`} checked={picked.includes(i.cheque_id)} disabled={!ok || !canPrint} onChange={() => toggle(i)} /></td>
                       <td className={`${td} ${num}`}>
                         {i.cheque_number}
@@ -88,8 +91,8 @@ export default function Queue({ access }: { access: Access | undefined }) {
           {profile ? (
             <div className="flex flex-col gap-3">
               <div className="relative h-[170px] rounded-[10px] border border-line bg-subtle">
-                <div className="absolute top-[18px] left-1/2 h-[30px] w-[220px] -translate-x-1/2 rounded-[6px] bg-[#CBD5E1] dark:bg-line" />
-                <div className="absolute top-[52px] left-1/2 grid h-[82px] w-[178px] -translate-x-1/2 place-items-center border border-[#B6CFC4] bg-[#F3F9F5] text-[11px] font-semibold text-[#0F766E]">FACE UP · TOP FIRST</div>
+                <div className="absolute top-[18px] left-1/2 h-[30px] w-[220px] -translate-x-1/2 rounded-[6px] bg-primary-soft dark:bg-line" />
+                <div className="absolute top-[52px] left-1/2 grid h-[82px] w-[178px] -translate-x-1/2 place-items-center border border-slate-line bg-ground text-[11px] font-semibold text-teal">FACE UP · TOP FIRST</div>
                 <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 text-[11px] text-ink-2">{profile.tray ?? 'Manual tray'}</div>
               </div>
               <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12.5px]">

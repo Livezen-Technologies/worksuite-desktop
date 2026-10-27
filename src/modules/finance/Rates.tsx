@@ -229,7 +229,7 @@ function AddRate({ d, base, onDone }: { d: FxPayload; base: string; onDone: () =
         </p>
       ) : null}
       {replaces ? (
-        <p className="m-0 text-[12px] text-[#9A4A06] dark:text-warning">
+        <p className="m-0 text-[12px] text-warning-ink dark:text-warning">
           There is already a {f.from} → {f.to} rate from {shortDate(f.on)} ({trimDecimals(replaces.rate, 2)}). Saving replaces it — one pair has one rate a day.
         </p>
       ) : null}

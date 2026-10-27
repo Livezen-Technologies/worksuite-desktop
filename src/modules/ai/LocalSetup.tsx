@@ -123,7 +123,7 @@ export function LocalSetup({ onStart }: { onStart: () => void }) {
         </p>
       ) : null}
       {!started && !fit.storage && fit.slow && hw ? (
-        <p className="rounded-[8px] bg-warning-bg p-2 text-[#7A4308] dark:text-warning">
+        <p className="rounded-[8px] bg-warning-bg p-2 text-warning-strong dark:text-warning">
           It needs about {bytes(m.minMemoryBytes)} of memory and this computer has {bytes(Math.max(hw.memoryBytes, hw.vramBytes))}: it will work, slowly.
         </p>
       ) : null}

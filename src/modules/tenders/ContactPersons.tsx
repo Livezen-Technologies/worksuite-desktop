@@ -223,7 +223,7 @@ function CandidateRow({ c, action }: { c: Candidate; action: ReactNode }) {
       <span className="flex min-w-0 flex-1 flex-col">
         <b className="truncate text-[13px] text-ink">{c.display_name}</b>
         <span className="truncate text-ink-3">{[c.job_title, c.company, c.email, c.phone].filter(Boolean).join(' · ') || 'No other details'}</span>
-        {c.matched_on?.length ? <span className="text-[11.5px] text-[#9A4A06] dark:text-warning">{matchedWords(c)}</span> : null}
+        {c.matched_on?.length ? <span className="text-[11.5px] text-warning-ink dark:text-warning">{matchedWords(c)}</span> : null}
       </span>
       {action}
     </div>
@@ -399,7 +399,7 @@ function NewSheet({ tenderId, first, listed, onClose, onSaved }: { tenderId: num
       <PrimaryBox first={first} value={primary} onChange={setPrimary} />
       {matches ? (
         <div className="flex flex-col gap-1.5" aria-label="Possible duplicates">
-          <p className="m-0 text-[12.5px] font-semibold text-[#9A4A06] dark:text-warning">
+          <p className="m-0 text-[12.5px] font-semibold text-warning-ink dark:text-warning">
             {matches.length === 1 ? 'This looks like somebody already in Contacts.' : 'These look like people already in Contacts.'} Link them instead, so their details stay in one place.
           </p>
           <div className="rounded-[10px] border border-line">

@@ -49,7 +49,7 @@ export default function MyHr({ onPick }: { onPick: (v: HrView) => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
       <div className="flex items-center gap-3">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0E7C86] text-[16px] font-bold text-white">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal text-[16px] font-bold text-white">
           {e.name
             .split(/\s+/)
             .slice(0, 2)
@@ -62,7 +62,7 @@ export default function MyHr({ onPick }: { onPick: (v: HrView) => void }) {
           <span className="truncate text-[12.5px] text-ink-3">
             {[e.employee_no, e.designation, e.department].filter(Boolean).join(' · ')}
             {' · '}
-            <b className={e.status === 'active' ? 'text-success' : 'text-[#9A4A06] dark:text-warning'}>{humanise(e.status)}</b>
+            <b className={e.status === 'active' ? 'text-success' : 'text-warning-ink dark:text-warning'}>{humanise(e.status)}</b>
           </span>
         </div>
         <button type="button" className={btn} onClick={() => onPick('leave')}>

@@ -79,7 +79,7 @@ export function SubscribeDialog({ onClose }: { onClose: () => void }) {
                   <span className="min-w-0 flex-1 truncate rounded-[8px] bg-ground px-2.5 py-2 font-mono text-[11.5px] text-primary selectable" title={shown} aria-label="Your calendar link">{shown}</span>
                   <Button onClick={() => void navigator.clipboard.writeText(shown).then(() => toast('success', 'Link copied.'))}>Copy</Button>
                 </div>
-                <span className="text-[12px] font-semibold text-[#9A4A06] dark:text-warning">Copy it now: it is not shown again. Anyone with it can read your calendar.</span>
+                <span className="text-[12px] font-semibold text-warning-ink dark:text-warning">Copy it now: it is not shown again. Anyone with it can read your calendar.</span>
               </>
             ) : s.exists ? (
               <span className="rounded-[8px] bg-ground px-2.5 py-2 text-ink-2">
@@ -103,7 +103,7 @@ export function SubscribeDialog({ onClose }: { onClose: () => void }) {
             </div>
             <div className="rounded-[9px] bg-ground px-3 py-2.5 leading-[1.55] text-ink-2">{APPS[app]!.how}</div>
             {confirm ? (
-              <div role="alertdialog" aria-label={confirm === 'stop' ? 'Stop the link?' : 'Replace the link?'} className="flex flex-col gap-2 rounded-[9px] border border-[#F1B8A8] bg-danger-bg dark:border-danger/40 px-3 py-2.5">
+              <div role="alertdialog" aria-label={confirm === 'stop' ? 'Stop the link?' : 'Replace the link?'} className="flex flex-col gap-2 rounded-[9px] border border-danger-line bg-danger-bg dark:border-danger/40 px-3 py-2.5">
                 <span className="text-ink">
                   {confirm === 'stop' ? 'Any calendar subscribed to it stops updating. You can make a new link later.' : 'The link you have now stops working, and calendars subscribed to it stop updating until you paste the new one.'}
                 </span>
@@ -117,7 +117,7 @@ export function SubscribeDialog({ onClose }: { onClose: () => void }) {
                 {s.exists || url ? (
                   <>
                     <Button onClick={() => setConfirm('replace')} disabled={busy}>Replace the link</Button>
-                    <button type="button" onClick={() => setConfirm('stop')} disabled={busy} className="h-9 rounded-[8px] border border-[#F1B8A8] bg-surface px-3 font-bold text-danger hover:bg-danger-bg">Stop it</button>
+                    <button type="button" onClick={() => setConfirm('stop')} disabled={busy} className="h-9 rounded-[8px] border border-danger-line bg-surface px-3 font-bold text-danger hover:bg-danger-bg">Stop it</button>
                   </>
                 ) : (
                   <Button variant="primary" loading={busy} onClick={() => void make()}>Make my link</Button>
@@ -213,9 +213,9 @@ export function UndoBar({ label, onUndo, onGone }: { label: string; onUndo: () =
     return () => clearTimeout(t);
   }, [label, onGone]);
   return (
-    <div role="status" className="absolute bottom-5 left-1/2 z-40 flex w-[420px] max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-2.5 rounded-[10px] bg-[#0F1B3D] px-3.5 py-3 text-[13px] text-white shadow-[0_12px_30px_rgb(var(--ws-shadow-rgb)/.3)]">
+    <div role="status" className="absolute bottom-5 left-1/2 z-40 flex w-[420px] max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-2.5 rounded-[10px] bg-navy px-3.5 py-3 text-[13px] text-white shadow-[0_12px_30px_rgb(var(--ws-shadow-rgb)/.3)]">
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <button type="button" onClick={onUndo} className="font-bold text-[#AFC6FF] hover:underline">Undo</button>
+      <button type="button" onClick={onUndo} className="font-bold text-stage-accent hover:underline">Undo</button>
       <button type="button" aria-label="Dismiss" onClick={onGone} className="px-1 text-white/60 hover:text-white">×</button>
     </div>
   );

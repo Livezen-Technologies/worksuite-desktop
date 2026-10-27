@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.0.1 — 2026-10-27
+
+**Changed**
+
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+
+**Fixed**
+
+- the manifest declares Board's offline vault (PARTIAL_WRITE: packs read offline, comments and circular responses queued) instead of NONE (D-G14)
+
 ## 1.0.0 — 2026-10-21
 
 - WorkSuite Board on the desktop (SRS-BOARD-001 v1.2 §13.2 D-01..D-13, §5.26 FR-DX, §5.22 / §5.27.6 offline and

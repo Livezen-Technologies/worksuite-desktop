@@ -95,7 +95,7 @@ export default function Bookings({ org, can }: { org: number; can: Can; active: 
                   const b = bs.find((x) => x.starts_at.slice(0, 10) <= d && x.ends_at.slice(0, 10) >= d);
                   return (
                     <div key={d} className="border-b border-l border-line/70 p-1">
-                      {b ? <div className={cx('truncate rounded-[5px] px-1.5 py-1 text-[11px] font-semibold', b.overdue ? 'bg-[#FDECEA] text-[#B42318]' : b.status === 'pending' ? 'bg-[#FFF4DB] text-[#8A5200]' : b.status === 'checked_out' ? 'bg-[#EAEDFB] text-[#23349E]' : 'bg-[#EEF0F6] text-[#4A5068]')} title={b.purpose ?? undefined}>{b.booked_for ?? b.purpose ?? b.status}</div> : null}
+                      {b ? <div className={cx('truncate rounded-[5px] px-1.5 py-1 text-[11px] font-semibold', b.overdue ? 'bg-danger-bg text-danger' : b.status === 'pending' ? 'bg-warning-bg text-yellow-ink' : b.status === 'checked_out' ? 'bg-info-bg text-primary' : 'bg-subtle text-ink-2')} title={b.purpose ?? undefined}>{b.booked_for ?? b.purpose ?? b.status}</div> : null}
                     </div>
                   );
                 })}

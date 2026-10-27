@@ -10,7 +10,7 @@ import { SINHALA_KEY, useSinhalaProfiles, useSinhalaStatus } from '../../core/si
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
-import { SectionHeader, SettingRow } from './kit';
+import { SectionHeader, SettingRow } from '../../components/SettingsKit';
 import { Button, Chip } from '../../components/ui';
 
 /**

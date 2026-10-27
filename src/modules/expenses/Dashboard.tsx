@@ -90,7 +90,7 @@ export default function Dashboard({ org, onGo }: ScreenProps) {
             {d.mixed ? (
               <>
                 {' '}
-                · <span className="text-[#9A4A06] dark:text-warning">mixed currencies, so there is no single total</span>
+                · <span className="text-warning-ink dark:text-warning">mixed currencies, so there is no single total</span>
               </>
             ) : null}
           </>
@@ -153,7 +153,7 @@ export default function Dashboard({ org, onGo }: ScreenProps) {
       {d.funds.length ? (
         <Panel title="Petty cash" action={<HeadLink onClick={() => onGo('petty')}>Open</HeadLink>} bodyClassName="flex flex-wrap gap-2 px-3.5 py-3">
           {d.funds.map((f) => (
-            <span key={f.id ?? f.name} className={cx('rounded-[8px] px-2.5 py-1.5 text-[12.5px]', f.needsRefill ? 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2')}>
+            <span key={f.id ?? f.name} className={cx('rounded-[8px] px-2.5 py-1.5 text-[12.5px]', f.needsRefill ? 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2')}>
               {f.name}: <b className="tabular-nums">{money(f.balance, f.currency)}</b>
               {f.needsRefill ? ' · below its minimum' : ''}
             </span>
@@ -211,8 +211,8 @@ interface Problem {
 }
 
 const PROBLEM_TONE = {
-  red: 'border-[#F1B8A8] bg-[#FDF1EE] text-[#8C2A14] dark:border-danger/40 dark:bg-danger-bg dark:text-danger',
-  amber: 'border-[#F5D48A] bg-[#FFF8E6] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning',
+  red: 'border-danger-line bg-danger-bg text-danger-ink dark:border-danger/40 dark:bg-danger-bg dark:text-danger',
+  amber: 'border-warning-line bg-warning-bg text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning',
 };
 
 /**
@@ -361,7 +361,7 @@ function Renewals({ d, onGo }: { d: Dash; onGo: (v: ExpenseView, extra?: string)
       {d.renewals.map((r) => (
         <button key={r.id ?? r.name} type="button" disabled={r.id === null} onClick={() => r.id !== null && onGo('subs', `&sub=${r.id}`)} className="flex items-center gap-3 border-b border-line/60 px-3.5 py-2.5 text-left last:border-b-0 enabled:hover:bg-subtle">
           {/* Days, not a date, as the leading figure: "in 3 days" is what is being decided on. */}
-          <span className={cx('flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[10px] text-center', r.daysUntil <= 3 ? 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2')}>
+          <span className={cx('flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[10px] text-center', r.daysUntil <= 3 ? 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2')}>
             <b className="text-[14px] leading-none tabular-nums">{r.daysUntil}</b>
             <span className="mt-0.5 text-[9px] tracking-wide uppercase">{r.daysUntil === 1 ? 'day' : 'days'}</span>
           </span>
@@ -375,7 +375,7 @@ function Renewals({ d, onGo }: { d: Dash; onGo: (v: ExpenseView, extra?: string)
           <span className="flex shrink-0 flex-col items-end">
             <b className="text-[13px] text-ink tabular-nums">{money(r.amount, r.currency)}</b>
             {/* The one that needs a person, said in words rather than by a colour. */}
-            <span className={cx('text-[11px]', r.autoRenew ? 'text-ink-3' : 'text-[#9A4A06] dark:text-warning')}>{r.autoRenew ? 'renews automatically' : 'will not auto-renew'}</span>
+            <span className={cx('text-[11px]', r.autoRenew ? 'text-ink-3' : 'text-warning-ink dark:text-warning')}>{r.autoRenew ? 'renews automatically' : 'will not auto-renew'}</span>
           </span>
         </button>
       ))}

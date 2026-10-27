@@ -199,7 +199,7 @@ function SummarySection({ show, onReply }: { show: TicketShow; onReply?: (body: 
       }
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="rounded-[5px] bg-[#EDE9FE] px-1.5 py-px text-[10.5px] font-bold text-[#6D28D9] dark:bg-[#2A1F4A] dark:text-[#C4B5FD]">AI</span>
+        <span className="rounded-[5px] bg-violet-bg px-1.5 py-px text-[10.5px] font-bold text-violet dark:text-violet-ink">AI</span>
         <span className="text-[11px] text-ink-3">{text('AI summary · may be wrong')}</span>
         {b.brief?.urgency ? (
           <span data-urgency className="ml-auto rounded-full bg-warning-bg px-2 py-0.5 text-[11px] font-semibold text-warning-ink">
@@ -462,7 +462,7 @@ function ClientSection({ show, q, onNavigate }: { show: TicketShow; q: ClientQue
         <ul aria-label={text('Found in conversation')} className="flex flex-col gap-1 rounded-[8px] bg-subtle p-2">
           {found.map((f) => (
             <li key={`${f.field}:${f.value}`} className="flex items-center gap-1.5 text-[11.5px]">
-              <Icon name="sparkles" size={12} className="shrink-0 text-[#7C3AED]" />
+              <Icon name="sparkles" size={12} className="shrink-0 text-violet" />
               <span className="min-w-0 flex-1 truncate text-ink-2">
                 {text('Found in conversation:')} <b className="text-ink">{f.shown}</b>
               </span>
@@ -773,7 +773,7 @@ function ActivityTimeline({ events }: { events: TicketEvent[] }) {
     <ol aria-label={text('Activity timeline')} className="ml-1 flex flex-col gap-2 border-l-2 border-line pl-3">
       {events.slice(0, 30).map((e) => (
         <li key={e.id} className="relative">
-          <span aria-hidden className="absolute top-[5px] -left-[17px] h-1.5 w-1.5 rounded-full bg-[#C3CCF6] dark:bg-primary/50" />
+          <span aria-hidden className="absolute top-[5px] -left-[17px] h-1.5 w-1.5 rounded-full bg-primary-soft dark:bg-primary/50" />
           <div className="text-ink-2">
             <b className="text-ink">{eventWho(e)}</b> {eventWords(e)}
           </div>

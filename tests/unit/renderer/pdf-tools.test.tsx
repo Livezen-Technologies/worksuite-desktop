@@ -95,15 +95,20 @@ afterEach(cleanup);
 
 describe('the tool registry (ENH-01 §4.1)', () => {
   it('has every Acrobat-class tool once, each with screens, a permission and — unless ready — what is missing', () => {
-    const ids = tools.TOOLS.map((t) => t.id);
+    const ids = tools.ALL_TOOLS.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toHaveLength(22);
-    for (const t of tools.TOOLS) {
+    // Nothing of these works anywhere yet, so they are not listed (D-G12).
+    expect(tools.ALL_TOOLS.filter((t) => t.hidden).map((t) => t.id)).toEqual(['standards', 'print-production', 'measure']);
+    expect(tools.TOOLS).toHaveLength(19);
+    for (const t of tools.ALL_TOOLS) {
       expect(t.screens.length).toBeGreaterThan(0);
       expect(t.permission).toMatch(/^files\.pdf\./);
       if (t.status !== 'ready') expect(t.missing.length).toBeGreaterThan(0);
       if (t.status === 'partial') expect(t.works).toBeTruthy();
-      expect(tools.toolGate(t) === null).toBe(t.status === 'ready');
+      expect(tools.toolGate(t) === null).toBe(t.status !== 'ui');
+      // What does not run here says what it needs, never a bare "not yet".
+      if (t.status === 'ui' && !t.hidden) expect(t.needs).toBeTruthy();
     }
   });
 
@@ -183,9 +188,9 @@ describe('home (DK01)', () => {
     tab.query = new URLSearchParams('view=tool&tool=bates');
     render(<PdfStudio tabId="t1" route="/pdf?view=tool&tool=bates" active />);
     expect(screen.getByLabelText('Bates preview').textContent).toBe('LZT-000001 … LZT-000001');
-    const run = screen.getByRole('button', { name: 'Add Bates numbers' });
-    expect(run.getAttribute('aria-disabled')).toBe('true');
-    expect(run.getAttribute('title')).toMatch(/^Not in this version yet — needs: Engine: text stamp op/);
+    const run = screen.getByRole('button', { name: 'Add Bates numbers' }) as HTMLButtonElement;
+    expect(run.disabled).toBe(true);
+    expect(screen.getByText('Open a PDF first.')).toBeTruthy();
   });
 });
 
@@ -197,9 +202,9 @@ describe('All tools in a document (DK02)', () => {
     render(<PdfStudio tabId="t1" route="/pdf?file=12" active />);
     fireEvent.click(await screen.findByRole('button', { name: 'All tools' }));
     const panel = screen.getByRole('complementary', { name: 'Tools panel' });
-    fireEvent.change(within(panel).getByRole('textbox', { name: 'Search tools' }), { target: { value: 'compress' } });
-    fireEvent.click(within(panel).getByRole('button', { name: /Compress a PDF/ }));
-    expect(within(panel).getByRole('heading', { name: 'Compress a PDF' })).toBeTruthy();
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Search tools' }), { target: { value: 'export' } });
+    fireEvent.click(within(panel).getByRole('button', { name: /Export a PDF/ }));
+    expect(within(panel).getByRole('heading', { name: 'Export a PDF' })).toBeTruthy();
     expect(within(panel).getByText(/Tender\.pdf · 1\.2 KB|Tender\.pdf · 1 KB|Tender\.pdf ·/)).toBeTruthy();
     fireEvent.click(within(panel).getByRole('button', { name: '‹ All tools' }));
     expect(within(panel).getByRole('textbox', { name: 'Search tools' })).toBeTruthy();
@@ -247,5 +252,113 @@ describe('All tools in a document (DK02)', () => {
     expect(await within(panel).findByText('1 found to review')).toBeTruthy();
     expect(within(panel).getByText('19••••••••78')).toBeTruthy();
     expect(within(panel).queryByText('198812345678')).toBeNull();
+  });
+});
+
+describe('tools on this computer (D-G12)', () => {
+  const editing = () => view({ mode: 'EDIT', saveState: 'saved', source: { kind: 'local', handle: 'aaaaaaaa-1111', label: 'This computer' } as never, edit: { ...emptyEditState(), modes: ['VIEW', 'ANNOTATE', 'EDIT'], canAnnotate: true, canOrganize: true } });
+  const openTool = async (tool: string, v: PdfSessionView) => {
+    tab.query = new URLSearchParams(`file=12&tool=${tool}`);
+    bridge.handlers.set('pdf:open', async () => v);
+    bridge.handlers.set('pdf:state', async () => v);
+    bridge.handlers.set('pdf:edit', async () => v);
+    render(<PdfStudio tabId="t1" route={`/pdf?file=12&tool=${tool}`} active />);
+    return screen.findByRole('complementary', { name: 'Tools panel' });
+  };
+
+  it('stamps Bates numbers on the pages chosen, as an edit', async () => {
+    const panel = await openTool('bates', editing());
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Pages' }), { target: { value: '2-3' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Add Bates numbers' }));
+    await waitFor(() =>
+      expect(vi.mocked(call)).toHaveBeenCalledWith('pdf:edit', { session: SID, op: { op: 'page.stamp', pages: [1, 2], stamp: expect.objectContaining({ text: '{bates}', place: 'bottom-right', bates: { prefix: 'LZT-', start: 1, digits: 6, suffix: '' } }) } }),
+    );
+  });
+
+  it('draws a header and a diagonal watermark', async () => {
+    const panel = await openTool('bates', editing());
+    fireEvent.click(within(panel).getByRole('radio', { name: /Watermark/ }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Add watermark' }));
+    await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('pdf:edit', { session: SID, op: { op: 'page.stamp', pages: [0, 1, 2], stamp: expect.objectContaining({ text: 'CONFIDENTIAL', diagonal: true }) } }));
+  });
+
+  it('redacts what was found, page by page, after review', async () => {
+    let n = 0;
+    bridge.handlers.set('pdf:search', async () => ({ searchId: `s${++n}` }));
+    const panel = await openTool('redact', editing());
+    fireEvent.click(within(panel).getByRole('checkbox', { name: 'Sri Lankan phone numbers' }));
+    fireEvent.click(within(panel).getByRole('checkbox', { name: 'Email addresses' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Find' }));
+    await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('pdf:search', expect.anything()));
+    await act(async () => {
+      bridge.listeners.get('pdf:search')?.forEach((cb) => cb({ session: SID, searchId: 's1', hits: [{ source: 'text', page: 1, index: 4, before: '', match: '198812345678', after: '', rects: [[10, 20, 50, 10]] }], pagesDone: 3, pageCount: 3, done: true, truncated: false, error: null }));
+    });
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Redact 1 found' }));
+    await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('pdf:edit', { session: SID, op: { op: 'page.redact', page: 1, rects: [[9, 19, 52, 12]] } }));
+    expect(await within(panel).findByText(/Redacted 1 found/)).toBeTruthy();
+  });
+
+  it('protects a copy with the permissions chosen, and needs a permissions password', async () => {
+    bridge.handlers.set('pdf:derive', async () => ({ saved: true, files: 1, name: 'Tender (protected).pdf', open: { handle: 'bbbbbbbb-2222', name: 'Tender (protected).pdf', size: 10 } }));
+    const panel = await openTool('protect', editing());
+    const run = within(panel).getByRole('button', { name: 'Protect as copy…' }) as HTMLButtonElement;
+    expect(run.disabled).toBe(true);
+    const [openPw, permPw] = within(panel).getAllByLabelText(/password/i).filter((e) => e.tagName === 'INPUT') as HTMLInputElement[];
+    fireEvent.change(openPw!, { target: { value: 'open-me' } });
+    fireEvent.change(permPw!, { target: { value: 'owner-pw' } });
+    fireEvent.click(within(panel).getByRole('checkbox', { name: /Copying text/ }));
+    fireEvent.click(run);
+    await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('pdf:derive', { session: SID, req: { kind: 'protect', userPassword: 'open-me', ownerPassword: 'owner-pw', allow: { print: true, copy: true, modify: false, annotate: true } } }));
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Open it' }));
+    expect(tab.navigate).toHaveBeenCalledWith('/pdf?local=bbbbbbbb-2222');
+  });
+
+  it('exports page images and text, and says Office formats need WorkSuite Office', async () => {
+    bridge.handlers.set('pdf:derive', async () => ({ saved: true, files: 3, name: 'Exports', open: null }));
+    const panel = await openTool('export', view());
+    fireEvent.click(within(panel).getByRole('button', { name: 'Export' }));
+    await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('pdf:derive', { session: SID, req: { kind: 'images', pages: [0, 1, 2], dpi: 150 } }));
+    fireEvent.click(within(panel).getByRole('radio', { name: /Word, Excel/ }));
+    expect(within(panel).getByText('Needs WorkSuite Office')).toBeTruthy();
+    expect(within(panel).queryByRole('button', { name: 'Export' })).toBeNull();
+  });
+
+  it('duplicates pages and splits into files from Organize', async () => {
+    bridge.handlers.set('pdf:derive', async () => ({ saved: true, files: 2, name: 'Parts', open: null }));
+    const panel = await openTool('organize', editing());
+    fireEvent.change(within(panel).getByRole('textbox', { name: /Pages to duplicate/ }), { target: { value: '1' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Duplicate' }));
+    await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('pdf:edit', { session: SID, op: { op: 'page.duplicate', pages: [0], at: 1 } }));
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Pages in each file' }), { target: { value: '2' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Split…' }));
+    await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('pdf:derive', { session: SID, req: { kind: 'split', groups: [[0, 1], [2]] } }));
+  });
+
+  it('combines PDFs from this computer, and makes blank pages, with no document open', async () => {
+    bridge.handlers.set('pdf:pickLocal', async () => [{ handle: 'aaaaaaaa-1111', name: 'A.pdf', size: 1 }, { handle: 'cccccccc-3333', name: 'B.pdf', size: 1 }]);
+    bridge.handlers.set('pdf:compose', async () => ({ saved: true, files: 1, name: 'Combined.pdf', open: null }));
+    tab.query = new URLSearchParams('view=tool&tool=combine');
+    render(<PdfStudio tabId="t1" route="/pdf?view=tool&tool=combine" active />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add from this computer' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Pages of B.pdf' }), { target: { value: '2-3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Combine' }));
+    await waitFor(() =>
+      expect(vi.mocked(call)).toHaveBeenCalledWith('pdf:compose', { req: { kind: 'combine', parts: [{ file: 'aaaaaaaa-1111', title: 'A' }, { file: 'cccccccc-3333', pages: [1, 2], title: 'B' }], bookmarks: true, name: 'Combined.pdf' } }),
+    );
+    cleanup();
+    tab.query = new URLSearchParams('view=tool&tool=create');
+    render(<PdfStudio tabId="t1" route="/pdf?view=tool&tool=create" active />);
+    fireEvent.click(screen.getByRole('radio', { name: /Blank pages/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(vi.mocked(call)).toHaveBeenCalledWith('pdf:compose', { req: { kind: 'blank', pages: 1, size: 'a4', landscape: false, name: 'New PDF.pdf' } }));
+  });
+
+  it('shows a server tool as needing the WorkSuite server, with the Pro panel for a Drive PDF — no button that is always off', async () => {
+    const panel = await openTool('compare', view());
+    expect(within(panel).getByText('Needs the WorkSuite server')).toBeTruthy();
+    const pro = within(panel).getByRole('button', { name: 'Open the Pro panel' }) as HTMLButtonElement;
+    expect(pro.disabled).toBe(false);
+    expect(within(panel).queryByRole('button', { name: 'Compare' })).toBeNull();
+    for (const b of within(panel).queryAllByRole('button') as HTMLButtonElement[]) expect(b.disabled, b.textContent ?? '').toBe(false);
   });
 });

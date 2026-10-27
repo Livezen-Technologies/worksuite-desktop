@@ -201,20 +201,20 @@ export function CodeEditor({ file, onClose }: { file: DriveFile; onClose: () => 
   const where = [...(o?.breadcrumb ?? []).map((b) => b.name)].join(' › ') || 'My Drive';
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Edit ${file.name}`} className="no-drag fixed inset-0 z-50 flex flex-col bg-[#0D1424] text-[13px] text-[#E6ECFA]">
-      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[#1E2C57] bg-[#0F1B3D] pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
+    <div role="dialog" aria-modal="true" aria-label={`Edit ${file.name}`} className="no-drag fixed inset-0 z-50 flex flex-col bg-stage text-[13px] text-stage-ink">
+      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-stage-3 bg-navy pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
         <button type="button" aria-label="Back" onClick={close} className="flex h-[34px] w-[34px] items-center justify-center rounded-[8px] hover:bg-white/10"><Icon name="chevron-left" size={18} /></button>
         <b className="truncate text-[14px]">{file.name}</b>
-        <span className="truncate text-[12px] text-[#AFC0E8]">{where} · {LANG[ext] ?? (o?.language || 'Text')}</span>
+        <span className="truncate text-[12px] text-stage-accent">{where} · {LANG[ext] ?? (o?.language || 'Text')}</span>
         {o ? (
-          <span className={cx('shrink-0 rounded-[10px] px-[9px] py-[3px] text-[11.5px] font-bold', saving ? 'bg-[#16254F] text-[#AFC6FF]' : dirty ? 'bg-[#3D2E12] text-[#FFD28A]' : 'bg-[#123D33] text-[#9EE6C3]')}>
+          <span className={cx('shrink-0 rounded-[10px] px-[9px] py-[3px] text-[11.5px] font-bold', saving ? 'bg-navy-2 text-stage-accent' : dirty ? 'bg-stage-gray-2 text-stage-warning' : 'bg-stage-gray-2 text-stage-success')}>
             {saving ? 'Saving…' : dirty ? 'Not saved' : `Saved · version ${saved?.version ?? o.version}`}
           </span>
         ) : null}
         <span className="flex-1" />
-        <label className="flex items-center gap-1.5 text-[12.5px] text-[#C3CEEA]">
+        <label className="flex items-center gap-1.5 text-[12.5px] text-stage-ink-2">
           Compare with
-          <Select aria-label="Compare with" value={chosen} onChange={(e) => setAgainst(e.target.value)} className="h-8 max-w-[260px] rounded-[7px] border border-[#2A3A66] bg-[#16254F] px-2 text-white">
+          <Select aria-label="Compare with" value={chosen} onChange={(e) => setAgainst(e.target.value)} className="h-8 max-w-[260px] rounded-[7px] border border-stage-4 bg-navy-2 px-2 text-white">
             <option value="none">Nothing</option>
             {dirty ? <option value="saved">The last save (version {saved?.version})</option> : null}
             {history.map((v) => (
@@ -222,58 +222,58 @@ export function CodeEditor({ file, onClose }: { file: DriveFile; onClose: () => 
             ))}
           </Select>
         </label>
-        <button type="button" disabled={locked} onClick={() => setText(formatText(current, ext, indent))} className="h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10 disabled:opacity-40">Format</button>
+        <button type="button" disabled={locked} onClick={() => setText(formatText(current, ext, indent))} className="h-[34px] rounded-[8px] border border-stage-4 px-3 font-semibold hover:bg-white/10 disabled:opacity-40">Format</button>
         {o?.editable ? (
-          <button type="button" aria-pressed={readOnly} onClick={() => setReadOnly(!readOnly)} className={cx('h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10', readOnly && 'bg-white/10')}>
+          <button type="button" aria-pressed={readOnly} onClick={() => setReadOnly(!readOnly)} className={cx('h-[34px] rounded-[8px] border border-stage-4 px-3 font-semibold hover:bg-white/10', readOnly && 'bg-white/10')}>
             {readOnly ? 'Edit' : 'Open read-only'}
           </button>
         ) : null}
-        <button type="button" disabled={locked || !dirty || saving} onClick={() => void save()} className="h-[34px] rounded-[8px] bg-[#3B5BDB] px-3.5 font-bold text-white hover:brightness-110 disabled:opacity-40">Save (⌘S)</button>
+        <button type="button" disabled={locked || !dirty || saving} onClick={() => void save()} className="h-[34px] rounded-[8px] bg-brand px-3.5 font-bold text-white hover:brightness-110 disabled:opacity-40">Save (⌘S)</button>
         <button type="button" aria-label="Close editor" onClick={close} className="ml-1 flex h-[34px] w-[34px] items-center justify-center rounded-[8px] text-[18px] hover:bg-white/10">×</button>
       </div>
       {lockedBy || (o && !o.editable) || conflict ? (
-        <div role="status" className="flex shrink-0 items-center gap-2 border-b border-[#1E2C57] bg-[#2A2210] px-4 py-2 text-[12.5px] text-[#FFD28A]">
+        <div role="status" className="flex shrink-0 items-center gap-2 border-b border-stage-3 bg-stage-gray px-4 py-2 text-[12.5px] text-stage-warning">
           <Icon name={conflict ? 'warning' : 'lock'} size={14} />
           <span className="flex-1">{conflict ?? (lockedBy ? `${lockedBy}, so it opens read-only here.` : 'You can read this file but not change it.')}</span>
           {conflict ? (
             <>
-              <button type="button" onClick={() => void loadTheirs()} className="rounded-[6px] border border-[#6B5626] px-2 py-0.5 font-semibold hover:bg-white/5">Load theirs</button>
-              <button type="button" onClick={() => window.confirm('Save your text over their newer version? Theirs stays in Versions.') && void save(true)} className="rounded-[6px] border border-[#6B5626] px-2 py-0.5 font-semibold hover:bg-white/5">Save mine over it</button>
+              <button type="button" onClick={() => void loadTheirs()} className="rounded-[6px] border border-stage-ink-4 px-2 py-0.5 font-semibold hover:bg-white/5">Load theirs</button>
+              <button type="button" onClick={() => window.confirm('Save your text over their newer version? Theirs stays in Versions.') && void save(true)} className="rounded-[6px] border border-stage-ink-4 px-2 py-0.5 font-semibold hover:bg-white/5">Save mine over it</button>
             </>
           ) : null}
         </div>
       ) : null}
-      <div className={cx('grid min-h-0 flex-1 gap-px bg-[#1E2C57]', leftText !== null ? 'grid-cols-2' : 'grid-cols-1')}>
+      <div className={cx('grid min-h-0 flex-1 gap-px bg-stage-3', leftText !== null ? 'grid-cols-2' : 'grid-cols-1')}>
         {leftText !== null ? (
-          <section aria-label="Earlier version" className="flex min-h-0 flex-col bg-[#0D1424]">
-            <div className="flex h-[34px] shrink-0 items-center bg-[#111A31] px-3.5 text-[12px] font-semibold text-[#AFC0E8]">
+          <section aria-label="Earlier version" className="flex min-h-0 flex-col bg-stage">
+            <div className="flex h-[34px] shrink-0 items-center bg-stage-2 px-3.5 text-[12px] font-semibold text-stage-accent">
               {chosen === 'saved' ? `Version ${saved?.version} · as last saved` : `Version ${old.data?.version ?? ''} · ${history.find((v) => String(v.id) === chosen)?.author ?? ''}`}
             </div>
             <div ref={left} className="min-h-0 flex-1 overflow-hidden font-mono text-[12.5px]" style={{ lineHeight: `${LINE}px`, paddingTop: PAD }}>
               {leftLines!.length > 5000 ? (
-                <pre className="px-3 whitespace-pre text-[#D6DEF2]">{leftText}</pre>
+                <pre className="px-3 whitespace-pre text-stage-gray-ink">{leftText}</pre>
               ) : null}
               {leftLines!.length > 5000 ? null : leftLines!.map((l, i) => (
                 <div key={i} className={cx('flex', diff?.removed.has(i) && 'bg-[rgba(196,50,28,0.22)]')}>
-                  <span className="w-11 shrink-0 pr-3.5 text-right text-[#5D6B91] select-none">{i + 1}</span>
-                  <span className={cx('whitespace-pre', diff?.removed.has(i) ? 'text-[#FFB4A3]' : 'text-[#D6DEF2]')}>{l || ' '}</span>
+                  <span className="w-11 shrink-0 pr-3.5 text-right text-stage-ink-4 select-none">{i + 1}</span>
+                  <span className={cx('whitespace-pre', diff?.removed.has(i) ? 'text-stage-danger' : 'text-stage-gray-ink')}>{l || ' '}</span>
                 </div>
               ))}
             </div>
           </section>
         ) : null}
-        <section aria-label="This version" className="flex min-h-0 flex-col bg-[#0D1424]">
+        <section aria-label="This version" className="flex min-h-0 flex-col bg-stage">
           {leftText !== null ? (
-            <div className="flex h-[34px] shrink-0 items-center bg-[#111A31] px-3.5 text-[12px] font-semibold text-[#AFC0E8]">
+            <div className="flex h-[34px] shrink-0 items-center bg-stage-2 px-3.5 text-[12px] font-semibold text-stage-accent">
               Version {saved?.version ?? ''}{dirty ? ' + your changes' : ''} · you · {locked ? 'read-only' : 'editable'}
             </div>
           ) : null}
           <div className="relative min-h-0 flex-1 overflow-hidden font-mono text-[12.5px]" style={{ lineHeight: `${LINE}px` }}>
             {q.isLoading ? <Spinner /> : null}
-            {q.error ? <p className="p-4 text-[#FFB4A3]">{errorMessage(q.error)}</p> : null}
+            {q.error ? <p className="p-4 text-stage-danger">{errorMessage(q.error)}</p> : null}
             {o ? (
               <>
-                <div ref={gutter} aria-hidden="true" className="pointer-events-none absolute top-0 left-0 w-11 pr-3.5 text-right whitespace-pre text-[#5D6B91] select-none" style={{ paddingTop: PAD }}>
+                <div ref={gutter} aria-hidden="true" className="pointer-events-none absolute top-0 left-0 w-11 pr-3.5 text-right whitespace-pre text-stage-ink-4 select-none" style={{ paddingTop: PAD }}>
                   {numbers}
                 </div>
                 <div className="pointer-events-none absolute inset-y-0 right-0 left-11 overflow-hidden">
@@ -294,7 +294,7 @@ export function CodeEditor({ file, onClose }: { file: DriveFile; onClose: () => 
                   onScroll={follow}
                   onSelect={follow}
                   onKeyDown={onKeyDown}
-                  className="bare-focus absolute inset-y-0 right-0 left-11 resize-none bg-transparent pr-4 whitespace-pre text-[#D6DEF2] caret-white outline-none"
+                  className="bare-focus absolute inset-y-0 right-0 left-11 resize-none bg-transparent pr-4 whitespace-pre text-stage-gray-ink caret-white outline-none"
                   style={{ lineHeight: `${LINE}px`, paddingTop: PAD, paddingBottom: PAD, tabSize: indent.size }}
                 />
               </>
@@ -302,7 +302,7 @@ export function CodeEditor({ file, onClose }: { file: DriveFile; onClose: () => 
           </div>
         </section>
       </div>
-      <div className="flex h-7 shrink-0 items-center gap-[18px] bg-[#0F1B3D] px-3.5 text-[11.5px] text-[#AFC0E8]">
+      <div className="flex h-7 shrink-0 items-center gap-[18px] bg-navy px-3.5 text-[11.5px] text-stage-accent">
         <span>{ops && diff ? `${hunks(ops)} ${hunks(ops) === 1 ? 'change' : 'changes'} · +${diff.plus} −${diff.minus}` : leftText !== null ? 'Too different to mark line by line' : dirty ? 'Changed since the last save' : 'No changes'}</span>
         <span>Ln {cursor.ln}, Col {cursor.col}</span>
         <span>{indent.tabs ? 'Tabs' : `Spaces: ${indent.size}`}</span>

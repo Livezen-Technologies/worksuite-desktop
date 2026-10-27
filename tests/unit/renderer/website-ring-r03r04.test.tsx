@@ -143,7 +143,7 @@ describe('R-04: silenced for me, still waiting', () => {
     vi.mocked(call).mockResolvedValue(state({ chats: [chat({ silenced: true })] }) as never);
     show(<RingAlertPill />);
     const pill = await screen.findByRole('button', { name: /^Silenced · 1 waiting, 1:3\d\. Open Website Chats$/ });
-    expect(pill.className).toContain('bg-[#3B2C17]');
+    expect(pill.className).toContain('bg-stage-gray-2');
   });
 
   it('the Live chats row: amber with an amber edge, "Ringing · silenced", nobody yet, the wait in amber', async () => {

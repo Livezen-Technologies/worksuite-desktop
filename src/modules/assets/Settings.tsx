@@ -8,7 +8,8 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { refusal } from '../finance/api';
 import { BASE, saveSettings, type Can, type Company } from './api';
 import { labelPrefs, saveLabelPrefs } from './labelSheets';
-import { Btn, Card, Field, Note, PageHead, input, useReadOnly } from './parts';
+import { Btn, Field, Note, input, useReadOnly } from './parts';
+import { SectionHeader, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Settings (D24): the module's settings as the server keeps them (code series, currency, default life, warranty
@@ -56,24 +57,30 @@ export default function Settings({ can }: { can: Can; companies: Company[] }) {
   return (
     <div className="flex flex-wrap gap-4">
       <div className="flex min-w-0 flex-[2_1_480px] flex-col gap-3">
-        <PageHead title="Settings">
-          <Btn disabled={ro} onClick={() => setF(null)}>Revert</Btn>
-          <Btn primary disabled={ro || busy} onClick={() => void save()}>Save</Btn>
-        </PageHead>
-        <Card title="Assets">
+        <SectionHeader
+          level={1}
+          title="Settings"
+          actions={
+            <>
+              <Btn disabled={ro} onClick={() => setF(null)}>Revert</Btn>
+              <Btn primary disabled={ro || busy} onClick={() => void save()}>Save</Btn>
+            </>
+          }
+        />
+        <SettingsGroup title="Assets" className="!mb-0">
           {q.isPending ? <Spinner /> : q.error ? <div className="p-3"><ErrorNote error={q.error} /></div> : null}
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3 px-3.5 pb-3.5">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3 px-[18px] py-3.5">
             {Object.keys(f).map((k) => (
               <Field key={k} label={LABELS[k] ?? k.replace(/_/g, ' ')}>
                 <input className={input} value={f[k] ?? ''} disabled={ro} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
               </Field>
             ))}
           </div>
-        </Card>
+        </SettingsGroup>
         <Note>A new prefix starts a new series; printed labels keep their codes.</Note>
       </div>
-      <aside aria-label="This computer" className="flex min-w-0 flex-[1_1_300px] flex-col gap-2.5 self-start rounded-[10px] border border-line bg-surface p-3.5">
-        <h2 className="m-0 text-[13.5px] font-bold">This computer</h2>
+      <SettingsGroup title="This computer" className="!mb-0 min-w-0 flex-[1_1_300px] self-start">
+        <div className="flex flex-col gap-2.5 px-[18px] py-3.5">
         <dl className="m-0 grid grid-cols-[100px_1fr] gap-x-2 gap-y-1.5 text-[12.5px]">
           <dt className="text-ink-3">Scanner</dt>
           <dd className="m-0">{heard ? `Heard: ${heard}` : seen ? 'Keyboard mode · ready' : 'Not heard yet'}</dd>
@@ -89,7 +96,8 @@ export default function Settings({ can }: { can: Can; companies: Company[] }) {
             ))}
           </select>
         </Field>
-      </aside>
+        </div>
+      </SettingsGroup>
     </div>
   );
 }

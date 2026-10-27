@@ -161,7 +161,7 @@ export function ChatbotTab({ id, c }: { id: number; c: ChatbotState }) {
             />
           </div>
 
-          <Note tone="amber" className="rounded-[12px] border border-[#f0d08f] px-3.5 py-3 dark:border-warning/40">
+          <Note tone="amber" className="rounded-[12px] border border-warning-line px-3.5 py-3 dark:border-warning/40">
             When staff are online the hand-off rings them like any new chat. Outside hours the assistant takes the visitor's email instead.
           </Note>
         </fieldset>

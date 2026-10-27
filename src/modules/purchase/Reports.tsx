@@ -147,7 +147,7 @@ export default function Reports({
             className={cx(
               "flex flex-col rounded-[8px] px-2.5 py-1.5 text-left",
               r.id === key
-                ? "bg-[#EAEDFB] dark:bg-selection"
+                ? "bg-info-bg dark:bg-selection"
                 : "hover:bg-subtle",
             )}
           >
@@ -155,7 +155,7 @@ export default function Reports({
               className={cx(
                 "text-[13px]",
                 r.id === key
-                  ? "font-bold text-[#1B2A85] dark:text-primary"
+                  ? "font-bold text-info-ink dark:text-primary"
                   : "font-medium text-ink",
               )}
             >

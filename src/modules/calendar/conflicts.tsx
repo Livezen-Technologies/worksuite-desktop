@@ -196,7 +196,7 @@ export function ConflictList({ conflicts, people, onView }: { conflicts: Conflic
           {conflicts
             .filter((c) => c.user_id === uid)
             .map((c, i) => (
-              <div key={`${c.source}:${c.id}:${c.start_at}:${i}`} className={cx('flex items-center gap-2 rounded-[8px] border px-2.5 py-1.5 text-[12.5px]', c.tentative ? 'border-dashed border-line text-ink-2' : 'border-[#F3C78B] bg-warning-bg text-ink')}>
+              <div key={`${c.source}:${c.id}:${c.start_at}:${i}`} className={cx('flex items-center gap-2 rounded-[8px] border px-2.5 py-1.5 text-[12.5px]', c.tentative ? 'border-dashed border-line text-ink-2' : 'border-warning-line bg-warning-bg text-ink')}>
                 <span className="min-w-0 flex-1 truncate">{conflictLine(c)}</span>
                 {onView && !c.busy_only && c.id ? (
                   <button type="button" onClick={() => onView(linkOf(c))} className="shrink-0 text-[12px] font-semibold text-primary hover:underline">
