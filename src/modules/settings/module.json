@@ -1,6 +1,6 @@
 {
     "module": "settings",
-    "version": "1.44.1",
+    "version": "1.45.0",
     "paths": [
         "electron/services/settings.ts",
         "shared/localization.ts",
@@ -16,6 +16,7 @@
         "electron/services/desktop-settings.ts",
         "shared/desktop-settings.ts",
         "src/core/desktop-settings.ts",
-        "src/core/startup.ts"
+        "src/core/startup.ts",
+        "src/components/SettingsKit.tsx"
     ]
 }

@@ -18,8 +18,8 @@ const GROUPS: Array<{ id: Group; title: string }> = [
 
 /** The design's row tints for the two who need us (C-00): at risk red, waiting amber, each with a bar at the left. */
 export const TINT: Partial<Record<string, string>> = {
-  at_risk: 'bg-[#fdecea] shadow-[inset_3px_0_0_#c2392d] dark:bg-danger-bg',
-  waiting: 'bg-[#fdf6e7] shadow-[inset_3px_0_0_#d9922e] dark:bg-warning-bg',
+  at_risk: 'bg-danger-bg shadow-[inset_3px_0_0_var(--ws-orange)] dark:bg-danger-bg',
+  waiting: 'bg-warning-bg shadow-[inset_3px_0_0_var(--ws-amber)] dark:bg-warning-bg',
 };
 
 export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null, hidePlace = false, lastOf, onJoin, onOpen, onStart, onSelect }: {
@@ -67,9 +67,9 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
     <div className="flex flex-col">
       {groups.map((g, gi) => (
         <div key={g.id} role="group" aria-label={text(g.title)}>
-          <p className={cx('flex gap-1.5 px-3.5 pt-2.5 pb-1 text-[10.5px] font-bold tracking-[0.9px] uppercase', g.id === 'needs' ? 'text-[#c2392d] dark:text-danger' : 'text-ink-3')} aria-hidden>
+          <p className={cx('flex gap-1.5 px-3.5 pt-2.5 pb-1 text-[10.5px] font-bold tracking-[0.9px] uppercase', g.id === 'needs' ? 'text-orange dark:text-danger' : 'text-ink-3')} aria-hidden>
             {text(g.title)}
-            <span className="text-[#868997]">{g.rows.length}</span>
+            <span className="text-ink-4">{g.rows.length}</span>
           </p>
           <ul className="flex flex-col">
             {g.rows.slice(0, cut[gi] ?? 0).map(({ v, s }) => {
@@ -123,7 +123,7 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
                       {v.chat?.not_reaching_staff ? <NotReachingBadge /> : null}
                       {call !== null ? (
                         <>
-                          <span className="font-semibold text-[#2b7a4b] dark:text-success">{text('On a call {time}', { time: callClock(call) })}</span>
+                          <span className="font-semibold text-success dark:text-success">{text('On a call {time}', { time: callClock(call) })}</span>
                           {' · '}
                         </>
                       ) : null}
@@ -131,7 +131,7 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
                     </span>
                   </span>
                   {waited !== null ? (
-                    <span className={cx('shrink-0 font-mono text-[12px] font-semibold whitespace-nowrap tabular-nums', s === 'at_risk' ? 'text-[#c2392d] dark:text-danger' : 'text-[#9a5b10] dark:text-warning')} aria-label={text('Waiting {time}', { time: clock(waited) })}>
+                    <span className={cx('shrink-0 font-mono text-[12px] font-semibold whitespace-nowrap tabular-nums', s === 'at_risk' ? 'text-orange dark:text-danger' : 'text-warning-ink dark:text-warning')} aria-label={text('Waiting {time}', { time: clock(waited) })}>
                       {clock(waited)}
                     </span>
                   ) : null}
@@ -158,7 +158,7 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
  */
 export function NotReachingBadge() {
   return (
-    <span className="mr-1.5 inline-flex items-center rounded-full bg-[#fdecea] px-1.5 text-[10px] font-bold tracking-[0.4px] text-[#c2392d] uppercase dark:bg-danger-bg dark:text-danger" title={text('A message from this visitor has not reached any staff device')}>
+    <span className="mr-1.5 inline-flex items-center rounded-full bg-danger-bg px-1.5 text-[10px] font-bold tracking-[0.4px] text-orange uppercase dark:bg-danger-bg dark:text-danger" title={text('A message from this visitor has not reached any staff device')}>
       {text('Not reaching staff')}
     </span>
   );
@@ -195,7 +195,7 @@ export function Pill({ tone, onClick, children, label }: { tone?: 'join'; onClic
       }}
       className={cx(
         'h-7 shrink-0 rounded-full text-[12px] whitespace-nowrap focus-visible:outline-2 focus-visible:outline-primary',
-        tone === 'join' ? 'bg-[#2f9e67] px-3 font-bold text-white hover:bg-[#278a59]' : 'border border-line bg-surface px-2.5 font-semibold text-primary hover:bg-subtle',
+        tone === 'join' ? 'bg-green px-3 font-bold text-white hover:bg-success' : 'border border-line bg-surface px-2.5 font-semibold text-primary hover:bg-subtle',
       )}
     >
       {children}

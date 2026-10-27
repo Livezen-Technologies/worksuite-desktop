@@ -114,7 +114,7 @@ export function WebsiteTable({ title, subtitle, filters, rows, placeholder, foot
             <BulkButton disabled={over || busy} onClick={() => run(allClosed ? 'reopen' : 'close')}>{allClosed ? text('Reopen') : text('Close')}</BulkButton>
           </BulkBar>
           {over ? (
-            <p role="status" className="mt-1.5 flex items-center gap-1.5 rounded-[8px] bg-warning-bg px-3 py-1.5 text-[12.5px] font-semibold text-[#9A4A06] dark:text-warning">
+            <p role="status" className="mt-1.5 flex items-center gap-1.5 rounded-[8px] bg-warning-bg px-3 py-1.5 text-[12.5px] font-semibold text-warning-ink dark:text-warning">
               <Icon name="alert" size={14} />
               {text('{n} are selected. Bulk actions take up to {max} at a time — clear some to go on.', { n: count, max: BULK_LIMIT })}
             </p>

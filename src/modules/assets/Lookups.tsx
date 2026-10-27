@@ -56,7 +56,7 @@ export default function Lookups({ kind, onKind }: { kind: string; onKind: (k: st
           {q.isLoading ? <Spinner /> : q.error ? <div className="p-3"><ErrorNote error={q.error} /></div> : null}
           <Table head={cats ? ['Category', 'Code', ['Life', 'r'], 'Method', ['Assets', 'r'], ''] : ['Name', ['Assets', 'r'], '']}>
             {(q.data?.items ?? []).map((l) => (
-              <tr tabIndex={0} onKeyDown={clickOnKey} key={l.id} onClick={() => pick(l)} className={cx('cursor-default', sel?.id === l.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={l.id} onClick={() => pick(l)} className={cx('cursor-default', sel?.id === l.id ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
                 <td className={td}><b>{l.name}</b></td>
                 {cats ? <td className={td}><span className="font-mono text-[11px]">{l.code ?? ''}</span></td> : null}
                 {cats ? <td className={tdr}>{l.default_life_months ? `${l.default_life_months} mo` : '—'}</td> : null}

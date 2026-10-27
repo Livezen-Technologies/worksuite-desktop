@@ -27,10 +27,10 @@ import { StatGrid } from '../../components/StatCard';
  */
 const TONES = {
   red: 'bg-danger-bg text-danger',
-  amber: 'bg-warning-bg text-[#9A4A06] dark:text-warning',
+  amber: 'bg-warning-bg text-warning-ink dark:text-warning',
   green: 'bg-success-bg text-success',
   grey: 'bg-subtle text-ink-3',
-  violet: 'bg-[#F1EAFB] text-[#5B2FA0] dark:bg-[#2A1F4A] dark:text-[#C4B5FD]',
+  violet: 'bg-violet-bg text-violet-ink',
 };
 
 export default function Recurring({ org, openId, creating, onOpen, onNew, onCloseNew, onOpenInvoice }: {
@@ -88,10 +88,10 @@ export default function Recurring({ org, openId, creating, onOpen, onNew, onClos
             rows.map((p) => {
               const st = profileState(p);
               return (
-                <div key={p.id} data-profile={p.id} className={cx('flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === p.id && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+                <div key={p.id} data-profile={p.id} className={cx('flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === p.id && 'bg-info-soft dark:bg-selection/40')}>
                   <button type="button" onClick={() => onOpen(p.id)} className="flex min-w-0 flex-1 flex-col text-left">
                     <b className="truncate text-ink">{p.name}</b>
-                    <span className={cx('truncate text-[11.5px]', p.cannot_run ? 'text-danger' : p.managed?.live ? 'text-[#5B2FA0] dark:text-[#C4B5FD]' : 'text-ink-3')}>
+                    <span className={cx('truncate text-[11.5px]', p.cannot_run ? 'text-danger' : p.managed?.live ? 'text-violet-ink' : 'text-ink-3')}>
                       {p.cannot_run ? 'cannot run · no company' : p.managed?.live ? `run by ${p.managed.reference}` : p.auto_issue ? 'issues automatically' : 'left as a draft to review'}
                     </span>
                   </button>
@@ -260,7 +260,7 @@ function ProfilePanel({ id, org, onClose, onOpenInvoice, onRun, onFix }: { id: n
         <ErrorNote error={q.error} onRetry={() => void q.refetch()} />
       ) : p && d ? (
         <>
-          {p.managed?.live ? <p className="m-0 rounded-[8px] bg-[#F1EAFB] px-3 py-2 text-[12.5px] text-[#5B2FA0] dark:bg-[#2A1F4A] dark:text-[#C4B5FD]">{p.managed.why}</p> : null}
+          {p.managed?.live ? <p className="m-0 rounded-[8px] bg-violet-bg px-3 py-2 text-[12.5px] text-violet-ink">{p.managed.why}</p> : null}
           {p.cannot_run ? <p className="m-0 rounded-[8px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger">{p.cannot_run}</p> : null}
           {may ? (
             <div className="flex flex-wrap gap-2">

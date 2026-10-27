@@ -22,10 +22,10 @@ export const OFFLINE_TITLE = 'Needs a connection';
 export const ACCENT = '#0891B2';
 
 const CHIP: Record<string, string> = {
-  red: 'bg-[#FDECEA] text-[#B42318] dark:bg-danger/15 dark:text-danger',
-  amber: 'bg-[#FDF1E3] text-[#9A4A06] dark:bg-warning/15 dark:text-warning',
-  grey: 'bg-[#EEF0F6] text-[#4A5168] dark:bg-subtle dark:text-ink-2',
-  green: 'bg-[#E7F4ED] text-[#1F7A4D] dark:bg-success/15 dark:text-success',
+  red: 'bg-danger-bg text-danger dark:bg-danger/15 dark:text-danger',
+  amber: 'bg-warning-bg text-warning-ink dark:bg-warning/15 dark:text-warning',
+  grey: 'bg-subtle text-ink-2 dark:bg-subtle dark:text-ink-2',
+  green: 'bg-success-bg text-success dark:bg-success/15 dark:text-success',
 };
 
 export function Chip({ tone, children, className }: { tone: keyof typeof CHIP | string; children: ReactNode; className?: string }) {

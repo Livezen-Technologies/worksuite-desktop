@@ -55,12 +55,12 @@ export function TitleBar() {
   const pending = status?.pendingChanges ?? 0;
   const pill =
     network === 'OFFLINE'
-      ? { text: pending > 0 ? t('shell.offlineWaiting', { n: pending }) : t('shell.offline'), dot: 'bg-[#8A90A2]', tone: 'bg-white/8 text-navy-ink' }
+      ? { text: pending > 0 ? t('shell.offlineWaiting', { n: pending }) : t('shell.offline'), dot: 'bg-stage-green', tone: 'bg-white/8 text-navy-ink' }
       : network === 'RECONNECTING'
-        ? { text: t('shell.reconnecting'), dot: 'bg-[#F0A04B] animate-pulse', tone: 'bg-[#F0A04B]/12 text-[#F7C68A]' }
+        ? { text: t('shell.reconnecting'), dot: 'bg-stage-amber animate-pulse', tone: 'bg-stage-amber/12 text-stage-danger' }
         : network === 'LIMITED'
-          ? { text: t('shell.limited'), dot: 'bg-[#F0A04B]', tone: 'bg-[#F0A04B]/12 text-[#F7C68A]' }
-          : { text: t('shell.online'), dot: 'bg-[#43B581]', tone: 'bg-[#43B581]/12 text-[#7EE2B0]' };
+          ? { text: t('shell.limited'), dot: 'bg-stage-amber', tone: 'bg-stage-amber/12 text-stage-danger' }
+          : { text: t('shell.online'), dot: 'bg-stage-green', tone: 'bg-stage-green/12 text-stage-success' };
 
   const unread = status?.unread.notifications ?? 0;
   // In macOS full screen the traffic lights hide with the menu bar, so their room is given back (#221).
@@ -129,11 +129,11 @@ export function TitleBar() {
       {/* 32 px across, edge included (TopBar design: a 2 px indigo edge, no ring outside it), so it lines up with the buttons beside it. */}
       <button
         type="button"
-        className={cx('no-drag flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 bg-[#E8ECFA] transition-colors', overlay === 'profile' ? 'border-[#9DB0F7]' : 'border-[#3B5BDB] hover:border-[#7C93F2]')}
+        className={cx('no-drag flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 bg-info-bg transition-colors', overlay === 'profile' ? 'border-indigo-bright' : 'border-brand-soft hover:border-indigo-bright')}
         onClick={() => openOverlay('profile')}
         aria-label={`Account: ${who.name ?? ''}`}
       >
-        <UserPicture name={who.name} src={who.avatar} size={28} className="!bg-[#E8ECFA] text-[11px] !text-[#1E2F8A]" />
+        <UserPicture name={who.name} src={who.avatar} size={28} className="!bg-info-bg text-[11px] !text-info-ink" />
       </button>
       {buttons?.side === 'right' ? <WindowControls layout={buttons} maximized={maximized} className="ms-1" /> : null}
     </header>

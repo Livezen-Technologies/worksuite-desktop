@@ -67,10 +67,10 @@ function dotOf(v: OnlineVisitor, idle: number): { colour: string; label: string 
  */
 function lastActive(v: OnlineVisitor, idle: number, now: number): { label: string; tone: string } {
   const [st] = visitorStatus(v);
-  if (st === 'Waiting') return { label: text('Waiting {time}', { time: clock(since(v.chat?.waiting_since, now) ?? 0) }), tone: 'font-semibold text-[#9a5b10] dark:text-warning' };
+  if (st === 'Waiting') return { label: text('Waiting {time}', { time: clock(since(v.chat?.waiting_since, now) ?? 0) }), tone: 'font-semibold text-warning-ink dark:text-warning' };
   if (st === 'Chatting') return { label: text('Chatting'), tone: 'font-semibold text-primary' };
   if (v.pages <= 1 && v.on_site_seconds < 60) return { label: text('Just arrived'), tone: 'text-ink-3' };
-  if (idle < 20) return { label: text('Now'), tone: 'font-semibold text-[#2b7a4b] dark:text-success' };
+  if (idle < 20) return { label: text('Now'), tone: 'font-semibold text-success dark:text-success' };
   if (idle < 60) return { label: text('{n} s ago', { n: Math.round(idle / 10) * 10 }), tone: 'text-ink-3' };
   return { label: text('{n} min ago', { n: Math.floor(idle / 60) }), tone: 'text-ink-3' };
 }
@@ -340,7 +340,7 @@ function VisitorCard({ v, asOf, left, leftAt, focusStart, onOpenChat, onClose }:
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[14.5px] font-bold text-ink">{who}</h2>
-          <p role={left ? 'status' : undefined} className={cx('truncate text-[11.5px] font-semibold', left ? 'text-ink-3' : st === 'Waiting' ? 'text-[#9a5b10] dark:text-warning' : st === 'Chatting' ? 'text-primary' : 'text-[#2b7a4b] dark:text-success')}>{presence}</p>
+          <p role={left ? 'status' : undefined} className={cx('truncate text-[11.5px] font-semibold', left ? 'text-ink-3' : st === 'Waiting' ? 'text-warning-ink dark:text-warning' : st === 'Chatting' ? 'text-primary' : 'text-success dark:text-success')}>{presence}</p>
         </div>
         <button type="button" aria-label={text('Block visitor')} title={text('Block visitor')} onClick={() => setBlocking(true)} className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] border border-line bg-surface text-ink-2 hover:bg-subtle hover:text-ink">
           <Icon name="ban" size={14} />
@@ -413,8 +413,8 @@ function ReadingNow({ v, left, pageSeconds }: { v: OnlineVisitor; left: boolean;
         {left ? (
           <span className="text-[11px] font-bold text-ink-3">{text('Left')}</span>
         ) : (
-          <span className="flex items-center gap-[5px] text-[11px] font-bold text-[#2b7a4b] dark:text-success">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#2f9e67]" aria-hidden />
+          <span className="flex items-center gap-[5px] text-[11px] font-bold text-success dark:text-success">
+            <span className="h-1.5 w-1.5 rounded-full bg-green" aria-hidden />
             {text('Live')}
           </span>
         )}
@@ -425,8 +425,8 @@ function ReadingNow({ v, left, pageSeconds }: { v: OnlineVisitor; left: boolean;
           aria-label={[text('Schematic of {title}', { title }), address, scroll !== null ? text('{n}% down the page', { n: scroll }) : null].filter(Boolean).join(' · ')}
           className={cx('overflow-hidden rounded-[8px] border border-line bg-surface shadow-[0_4px_12px_rgba(17,27,59,0.06)]', left && 'opacity-60')}
         >
-          <div className="flex h-[22px] items-center gap-[5px] bg-[#eceef4] px-2 dark:bg-subtle" aria-hidden>
-            {[0, 1, 2].map((i) => <span key={i} className="h-1.5 w-1.5 rounded-full bg-[#c9ccd8]" />)}
+          <div className="flex h-[22px] items-center gap-[5px] bg-subtle px-2 dark:bg-subtle" aria-hidden>
+            {[0, 1, 2].map((i) => <span key={i} className="h-1.5 w-1.5 rounded-full bg-primary-soft" />)}
             <span className="ml-1.5 flex h-3.5 min-w-0 flex-1 items-center truncate rounded-[4px] bg-surface px-1.5 text-[9.5px] text-ink-3">{address}</span>
           </div>
           <div className="relative flex h-[112px] gap-2.5 p-2.5" aria-hidden>
@@ -440,8 +440,8 @@ function ReadingNow({ v, left, pageSeconds }: { v: OnlineVisitor; left: boolean;
             {section ? (
               <div className="relative flex w-[92px] shrink-0 flex-col gap-1 rounded-[6px] border-2 border-primary bg-selection p-1.5">
                 <div className="line-clamp-3 text-[9px] leading-tight text-ink-2">{section}</div>
-                <div className="h-1 rounded-[2px] bg-[#dfe4fb] dark:bg-line" />
-                <div className="h-1 w-[70%] rounded-[2px] bg-[#dfe4fb] dark:bg-line" />
+                <div className="h-1 rounded-[2px] bg-blue-bg dark:bg-line" />
+                <div className="h-1 w-[70%] rounded-[2px] bg-blue-bg dark:bg-line" />
                 {left ? null : (
                   <svg className="absolute -bottom-1 -left-2" width="14" height="18" viewBox="0 0 14 18">
                     <path d="M1 1l11 7-5 1.5L4.5 15z" fill="currentColor" stroke="var(--color-surface, #fff)" strokeWidth="1.2" className="text-ink" />
@@ -450,8 +450,8 @@ function ReadingNow({ v, left, pageSeconds }: { v: OnlineVisitor; left: boolean;
               </div>
             ) : null}
             {scroll !== null ? (
-              <span className="absolute top-2 right-[3px] h-[96px] w-[3px] rounded-[2px] bg-[#eceef4] dark:bg-line">
-                <span className="absolute left-0 h-[26px] w-[3px] rounded-[2px] bg-[#9aa3c4]" style={{ top: `${(Math.max(0, Math.min(100, scroll)) / 100) * 70}px` }} />
+              <span className="absolute top-2 right-[3px] h-[96px] w-[3px] rounded-[2px] bg-subtle dark:bg-line">
+                <span className="absolute left-0 h-[26px] w-[3px] rounded-[2px] bg-muted" style={{ top: `${(Math.max(0, Math.min(100, scroll)) / 100) * 70}px` }} />
               </span>
             ) : null}
           </div>
@@ -515,7 +515,7 @@ function ThisVisit({ v, a, loading, left, idle, onSite, pageSeconds }: { v: Onli
                   : timeLabel(e.at);
             return (
               <li key={e.id} className="relative" aria-current={current ? 'page' : undefined}>
-                <span className={cx('absolute rounded-full', current ? 'top-[3px] -left-[17px] h-2 w-2 bg-primary shadow-[0_0_0_3px_var(--color-selection,#e0e5fb)]' : 'top-1 -left-4 h-1.5 w-1.5 bg-[#c3ccf6] dark:bg-line')} aria-hidden />
+                <span className={cx('absolute rounded-full', current ? 'top-[3px] -left-[17px] h-2 w-2 bg-primary shadow-[0_0_0_3px_var(--color-selection)]' : 'top-1 -left-4 h-1.5 w-1.5 bg-primary-soft dark:bg-line')} aria-hidden />
                 <div className={cx('truncate text-[12px]', current ? 'font-bold text-primary' : 'text-ink')} title={siteAndPath(e.url)}>{pathOf(e.url)}</div>
                 <div className="text-[11px] text-ink-3">{sub}</div>
               </li>

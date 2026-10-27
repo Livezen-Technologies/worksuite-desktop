@@ -345,7 +345,7 @@ function AiAssist({ show, onInsert }: { show: TicketShow; onInsert: (r: Omit<Ins
           ) : null}
           {reply?.phase === 'done' ? (
             <div className="mt-2 flex flex-col gap-1.5">
-              <textarea value={reply.text} onChange={(e) => setReply({ ...reply, text: e.target.value })} rows={6} aria-label={text('Suggested reply')} className="w-full resize-y rounded-[8px] border border-[#DDD6FE] bg-[#F5F3FF] px-2.5 py-2 text-[12.5px] text-ink outline-none focus:border-primary dark:border-[#3B2F63] dark:bg-[#1A1530]" />
+              <textarea value={reply.text} onChange={(e) => setReply({ ...reply, text: e.target.value })} rows={6} aria-label={text('Suggested reply')} className="w-full resize-y rounded-[8px] border border-violet-line bg-info-soft px-2.5 py-2 text-[12.5px] text-ink outline-none focus:border-primary dark:bg-rail" />
               {reply.sources.length ? (
                 <div className="text-[11.5px] text-ink-3">
                   {text('Based on:')}

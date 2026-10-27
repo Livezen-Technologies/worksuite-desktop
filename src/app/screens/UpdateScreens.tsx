@@ -134,7 +134,7 @@ export function UpdateIndicator() {
         title={label}
         aria-expanded={open}
         onClick={() => openOverlay('update')}
-        className={cx('no-drag flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold', u.security ? 'bg-[#F0A04B]/20 text-[#F7C68A] hover:bg-[#F0A04B]/30' : 'bg-[#43B581]/15 text-[#7EE2B0] hover:bg-[#43B581]/25', open && 'ring-1 ring-white/30')}
+        className={cx('no-drag flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold', u.security ? 'bg-stage-amber/20 text-stage-danger hover:bg-stage-amber/30' : 'bg-stage-green/15 text-stage-success hover:bg-stage-green/25', open && 'ring-1 ring-white/30')}
       >
         <Icon name={u.security ? 'shield-alert' : 'download'} size={14} /> Update ready
       </button>
@@ -146,10 +146,10 @@ export function UpdateIndicator() {
       aria-label={label}
       title={label}
       onClick={() => openOverlay('update')}
-      className={cx('no-drag relative flex h-8 w-8 items-center justify-center rounded-[8px] hover:bg-white/10', ready ? 'text-[#7EE2B0]' : 'text-navy-ink hover:text-white', open && 'bg-white/12 text-white')}
+      className={cx('no-drag relative flex h-8 w-8 items-center justify-center rounded-[8px] hover:bg-white/10', ready ? 'text-stage-success' : 'text-navy-ink hover:text-white', open && 'bg-white/12 text-white')}
     >
       <Icon name="download" size={18} className={cx(moving && 'motion-safe:animate-pulse')} />
-      {ready ? null : <span aria-hidden className={cx('absolute top-1 right-1 h-2 w-2 rounded-full ring-2 ring-navy', failed ? 'bg-[#F0A04B]' : 'bg-[#5B7CFA]')} />}
+      {ready ? null : <span aria-hidden className={cx('absolute top-1 right-1 h-2 w-2 rounded-full ring-2 ring-navy', failed ? 'bg-amber' : 'bg-blue')} />}
     </button>
   );
 }

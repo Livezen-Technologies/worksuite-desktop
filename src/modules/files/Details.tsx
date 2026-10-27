@@ -45,14 +45,14 @@ export function Details({ item, list, onClose, tab: firstTab }: { item: Item; li
     <aside aria-label="File details" className="flex w-[360px] shrink-0 flex-col border-l border-line bg-surface">
       <div className="flex flex-col gap-2.5 border-b border-line px-4 pt-3.5 pb-2.5">
         <div className="relative overflow-hidden rounded-[10px]">
-          {isFile ? <Tile f={item.f} height={150} /> : <div className="flex h-[110px] items-center justify-center bg-[#FDF0E1] dark:bg-warning-bg"><FolderIcon color={item.f.color} locked={item.f.is_locked} size={56} /></div>}
+          {isFile ? <Tile f={item.f} height={150} /> : <div className="flex h-[110px] items-center justify-center bg-warning-bg dark:bg-warning-bg"><FolderIcon color={item.f.color} locked={item.f.is_locked} size={56} /></div>}
           <button type="button" aria-label="Close details" onClick={onClose} className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-surface/90 text-ink-2 shadow hover:text-ink">
             <Icon name="x" size={14} />
           </button>
         </div>
         <div className="flex items-center gap-2">
           <b className="min-w-0 flex-1 text-[14.5px] break-words text-ink">{f.name}</b>
-          <button type="button" aria-label={f.starred ? 'Remove star' : 'Star'} aria-pressed={!!f.starred} onClick={() => d.star(item, !f.starred)} className={cx('flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[7px]', f.starred ? 'bg-[#FFF6E5] text-[#E9A23B] dark:bg-warning-bg' : 'text-ink-3 hover:bg-subtle')}>
+          <button type="button" aria-label={f.starred ? 'Remove star' : 'Star'} aria-pressed={!!f.starred} onClick={() => d.star(item, !f.starred)} className={cx('flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[7px]', f.starred ? 'bg-stage-ink text-stage-amber dark:bg-warning-bg' : 'text-ink-3 hover:bg-subtle')}>
             <Icon name="star" size={16} className={f.starred ? 'fill-current' : ''} />
           </button>
         </div>
@@ -592,7 +592,7 @@ function Access({ item }: { item: Item }) {
   const a = q.data;
   const person = (name: string, via: string, level: string) => (
     <div key={`${name}${via}`} className="flex items-center gap-2.5">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E3F4F5] text-[10.5px] font-bold text-[#0B6770] dark:bg-subtle dark:text-[#5CC6CF]">{initials(name)}</span>
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-bg text-[10.5px] font-bold text-teal-ink dark:bg-subtle">{initials(name)}</span>
       <span className="flex min-w-0 flex-1 flex-col">
         <b className="truncate text-ink">{name}</b>
         <span className="text-[11.5px] text-ink-3">{via}</span>

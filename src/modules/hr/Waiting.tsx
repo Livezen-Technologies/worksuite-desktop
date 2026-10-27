@@ -28,7 +28,7 @@ const TILES: Array<{ key: keyof ApprovalsResponse['cards']; label: string; focus
   { key: 'changes_requested', label: 'Changes requested', focus: 'changes_requested' },
   { key: 'overdue', label: 'Needs deciding now', focus: 'overdue', tone: 'text-danger' },
   { key: 'approved_today', label: 'Approved today', focus: null, tone: 'text-success' },
-  { key: 'declined_today', label: 'Declined today', focus: null, tone: 'text-[#8C2A14] dark:text-danger' },
+  { key: 'declined_today', label: 'Declined today', focus: null, tone: 'text-danger-ink dark:text-danger' },
 ];
 
 export default function Waiting({ onPick }: { onPick: (v: HrView) => void }) {

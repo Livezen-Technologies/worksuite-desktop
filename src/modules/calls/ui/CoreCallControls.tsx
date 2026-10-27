@@ -89,7 +89,7 @@ export function CoreCallControls({
         visible ? 'opacity-100' : 'pointer-events-none opacity-0',
       )}
     >
-      {status ? <div className="rounded-full bg-[rgba(11,18,38,.82)] px-3 py-1 text-[12px] font-semibold text-[#E6ECFA] backdrop-blur">{status}</div> : null}
+      {status ? <div className="rounded-full bg-[rgba(11,18,38,.82)] px-3 py-1 text-[12px] font-semibold text-stage-ink backdrop-blur">{status}</div> : null}
       <div className="flex items-center gap-1 rounded-[18px] border border-white/10 bg-[rgba(15,27,61,.88)] p-1.5 shadow-[0_12px_32px_rgba(0,0,0,.45)] backdrop-blur-md">
         {buttons.map((b) => (
           <BarButton key={b.id} b={b} size={size} compact={compact} open={open === b.id} onOpen={(v) => setOpen(v ? b.id : null)} bar={bar} />
@@ -101,14 +101,14 @@ export function CoreCallControls({
             aria-label={end.label}
             title={end.label}
             onClick={() => (setOpen(null), end.onClick())}
-            className={cx('flex items-center justify-center bg-[#E5484D] text-white hover:bg-[#D93D42]', end.menu ? 'rounded-l-[13px]' : 'rounded-[13px]')}
+            className={cx('flex items-center justify-center bg-red text-white hover:bg-red', end.menu ? 'rounded-l-[13px]' : 'rounded-[13px]')}
             style={{ width: size + 12, height: size }}
           >
             <Icon name="phone-off" size={compact ? 18 : 20} />
           </button>
           {end.menu ? (
             <>
-              <button ref={endMenu} type="button" aria-label="More ways to leave" aria-haspopup="menu" aria-expanded={open === 'end'} onKeyDown={openKey(() => setOpen('end'))} onClick={() => setOpen(open === 'end' ? null : 'end')} className="flex w-6 items-center justify-center rounded-r-[13px] border-l border-white/20 bg-[#E5484D] text-white hover:bg-[#D93D42]" style={{ height: size }}>
+              <button ref={endMenu} type="button" aria-label="More ways to leave" aria-haspopup="menu" aria-expanded={open === 'end'} onKeyDown={openKey(() => setOpen('end'))} onClick={() => setOpen(open === 'end' ? null : 'end')} className="flex w-6 items-center justify-center rounded-r-[13px] border-l border-white/20 bg-red text-white hover:bg-red" style={{ height: size }}>
                 <Icon name="chevron-down" size={14} />
               </button>
               {open === 'end' ? <Menu sections={entriesToSections(end.menu, 'end')} label={text('More ways to leave')} anchor={endMenu} avoid={bar} align="end" onClose={() => setOpen(null)} /> : null}
@@ -146,13 +146,13 @@ function BarButton({ b, size, compact, open, onOpen, bar }: { b: ControlButton; 
         onClick={() => (sections ? onOpen(!open) : (onOpen(false), b.onClick?.()))}
         className={cx(
           'relative flex items-center justify-center rounded-[13px] transition-colors disabled:opacity-40',
-          b.tone === 'warn' ? 'bg-white text-[#B42318]' : b.tone === 'on' ? 'bg-white text-[#0F1B3D]' : b.tone === 'active' ? 'bg-[#3B5BDB] text-white' : 'text-[#E6ECFA] hover:bg-white/12',
+          b.tone === 'warn' ? 'bg-white text-stage-danger-ink' : b.tone === 'on' ? 'bg-white text-stage-on-light' : b.tone === 'active' ? 'bg-brand text-white' : 'text-stage-ink hover:bg-white/12',
           open && !b.tone && 'bg-white/16',
         )}
         style={{ width: size, height: size }}
       >
         <Icon name={b.icon} size={compact ? 18 : 20} />
-        {b.badge ? <span className="absolute -top-1 -right-1 min-w-[17px] rounded-full bg-[#E0522F] px-1 text-[10.5px] leading-[17px] font-bold text-white">{b.badge}</span> : null}
+        {b.badge ? <span className="absolute -top-1 -right-1 min-w-[17px] rounded-full bg-red px-1 text-[10.5px] leading-[17px] font-bold text-white">{b.badge}</span> : null}
       </button>
       {open && sections ? <Menu sections={sections} label={b.label} anchor={ref} avoid={bar} onClose={() => onOpen(false)} /> : null}
     </div>

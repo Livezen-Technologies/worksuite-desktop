@@ -228,7 +228,7 @@ export default function Domains({ org, nav, active, expiring, filter: initial, c
               }}
               onDoubleClick={() => nav.openDomain(x.id, 'tab', x.name)}
               onContextMenu={(e) => onRowMenu(e, i, x)}
-              className={cx('grid h-9 cursor-default grid-cols-[22px_minmax(0,2fr)_minmax(0,1fr)_80px_minmax(0,1fr)] items-center gap-2 border-b border-line/60 px-3 text-[12.5px]', i === at ? 'bg-[#EEF1FD] shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : ticked.has(x.id) ? 'bg-[#F5F7FF] dark:bg-primary/10' : 'hover:bg-subtle')}
+              className={cx('grid h-9 cursor-default grid-cols-[22px_minmax(0,2fr)_minmax(0,1fr)_80px_minmax(0,1fr)] items-center gap-2 border-b border-line/60 px-3 text-[12.5px]', i === at ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)] dark:bg-selection' : ticked.has(x.id) ? 'bg-info-soft dark:bg-primary/10' : 'hover:bg-subtle')}
             >
               <Checkbox tabIndex={-1} aria-label={text('Select {name}', { name: x.name })} checked={ticked.has(x.id)} onClick={(e) => e.stopPropagation()} onChange={() => setTicked(toggle(ticked, x.id))} />
               <span className="truncate font-semibold text-ink">{x.name}</span>

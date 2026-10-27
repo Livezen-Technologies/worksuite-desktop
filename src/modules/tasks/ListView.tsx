@@ -77,7 +77,7 @@ export function ListView({ tasks, lists, me, today, now, completed, selected, ca
             }}
             aria-label="Quick add"
             placeholder={`+ Task title… (Enter to add to ${quickAdd})`}
-            className="h-[38px] w-full rounded-[9px] border border-dashed border-[#B8C1DA] bg-surface px-3 text-[13px] text-ink outline-none focus:border-solid focus:border-primary dark:border-line"
+            className="h-[38px] w-full rounded-[9px] border border-dashed border-primary-soft bg-surface px-3 text-[13px] text-ink outline-none focus:border-solid focus:border-primary dark:border-line"
           />
         </div>
       ) : null}
@@ -146,7 +146,7 @@ export function ListView({ tasks, lists, me, today, now, completed, selected, ca
                   </Select>
                   <span>{t.priority !== 'none' ? <span className={cx('rounded-[5px] px-[7px] py-[2px] text-[10.5px] font-bold', pr.tone)}>{pr.label}</span> : null}</span>
                   <span className="truncate text-ink-2">{t.assignee_id === me ? 'You' : (t.assignee_name ?? '—')}</span>
-                  <span className={cx('truncate font-semibold', due.tone === 'overdue' ? 'text-danger' : due.tone === 'soon' ? 'text-[#B45309] dark:text-warning' : due.tone === 'done' ? 'text-success' : 'text-ink-2')}>{due.label || '—'}</span>
+                  <span className={cx('truncate font-semibold', due.tone === 'overdue' ? 'text-danger' : due.tone === 'soon' ? 'text-warning dark:text-warning' : due.tone === 'done' ? 'text-success' : 'text-ink-2')}>{due.label || '—'}</span>
                   <span className="flex items-center gap-1.5" aria-label={`${p}% done`}>
                     <span className="h-[5px] flex-1 overflow-hidden rounded-full bg-subtle"><span className={cx('block h-full rounded-full', p === 100 ? 'bg-success' : 'bg-primary')} style={{ width: `${p}%` }} /></span>
                     <span className="w-8 text-right text-[11px] text-ink-3">{p}%</span>

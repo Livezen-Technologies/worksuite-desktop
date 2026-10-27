@@ -69,7 +69,7 @@ describe('the invite dialog (C-09, TEAM-20…22, TEAM-25)', () => {
 
     const status = await within(dialog).findByText('Available · 1 chat · Education sales');
     expect(status.className).toContain('text-success');
-    expect(within(dialog).getByText('Busy · 3 chats · Support').className).toContain('text-[#9A5B10]');
+    expect(within(dialog).getByText('Busy · 3 chats · Support').className).toContain('text-warning-ink');
     const offline = within(dialog).getByText('Offline').closest('label')!.querySelector('input')! as HTMLInputElement;
     expect(offline.disabled).toBe(true);
 

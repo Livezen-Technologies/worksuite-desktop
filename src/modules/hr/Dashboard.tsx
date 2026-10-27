@@ -80,7 +80,7 @@ export default function Dashboard({ onPick, onGo }: { onPick: (v: HrView) => voi
                   <b className="flex-1 truncate text-ink">{x.name}</b>
                   <b className="text-primary">{x.percent}%</b>
                 </span>
-                <span className="h-1.5 overflow-hidden rounded-[3px] bg-[#E9ECF3] dark:bg-subtle">
+                <span className="h-1.5 overflow-hidden rounded-[3px] bg-info-bg dark:bg-subtle">
                   <span className="block h-1.5 bg-primary" style={{ width: `${Math.max(2, Math.min(100, x.percent))}%` }} />
                 </span>
                 <span className="truncate text-[12px] text-ink-3">

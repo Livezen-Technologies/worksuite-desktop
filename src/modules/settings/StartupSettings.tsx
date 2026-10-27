@@ -7,7 +7,7 @@ import { appLabel } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { Select } from '../../components/Select';
 import { Button } from '../../components/ui';
-import { RadioCards, SettingRow, SettingsGroup, SourceNote, type RadioCardOption } from './kit';
+import { RadioCards, SettingRow, SettingsGroup, SourceNote, type RadioCardOption } from '../../components/SettingsKit';
 
 /**
  * Settings › Desktop & startup › Open at startup (desktop settings `startup.screen`): Home, where I left off, an app,

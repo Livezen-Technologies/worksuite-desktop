@@ -254,11 +254,11 @@ export function Preview({ d, name, className }: { d: MeetDevices; name: string; 
   const { mic, cam } = d.prefs;
   const toggle = 'flex h-11 w-11 items-center justify-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-white';
   return (
-    <div className={cx('relative aspect-video w-full overflow-hidden rounded-[16px] bg-[#16254F]', className)}>
+    <div className={cx('relative aspect-video w-full overflow-hidden rounded-[16px] bg-navy-2', className)}>
       {cam && d.video ? (
         <VideoView track={d.video} mirror className="absolute inset-0 h-full w-full object-cover" />
       ) : (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 text-[13px] text-[#C3CEEA]">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 text-[13px] text-stage-ink-2">
           <Avatar name={name || '?'} size={88} />
           {cam ? t('dev.cameraStarting') : t('dev.cameraOff')}
         </div>

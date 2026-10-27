@@ -1,5 +1,5 @@
 import type { PdfEngineCapabilities, PdfEngineErrorCode, PdfSearchOptions } from '@shared/pdf';
-import { EngineError, ENGINE_MESSAGES, isEngineError, type CancelToken, type EngineEditOp, type EngineFile, type PDFEngine, type RenderRequest } from './engine';
+import { EngineError, ENGINE_MESSAGES, isEngineError, type CancelToken, type EngineCompose, type EngineEditOp, type EngineFile, type PDFEngine, type RenderRequest } from './engine';
 
 /**
  * What the main process and a pdf-worker say to each other. One worker
@@ -22,6 +22,10 @@ export type WorkerRequest =
   | { id: number; op: 'textSpan'; page: number; from: [number, number]; to: [number, number] }
   | { id: number; op: 'save' }
   | { id: number; op: 'extract'; pages: number[] }
+  | { id: number; op: 'protect'; userPassword: string; ownerPassword: string; permissions: number }
+  | { id: number; op: 'unprotect' }
+  | { id: number; op: 'pageText'; pages: number[] }
+  | { id: number; op: 'compose'; req: EngineCompose }
   | { id: number; op: 'unload' }
   | { id: number; op: 'close' };
 
@@ -110,6 +114,14 @@ export function workerHandler(engine: Promise<WorkerEngineLike>, post: (m: Worke
         return void answer(msg.id, (e) => e.save());
       case 'extract':
         return void answer(msg.id, (e) => e.extract(msg.pages));
+      case 'protect':
+        return void answer(msg.id, (e) => e.protect(msg.userPassword, msg.ownerPassword, msg.permissions));
+      case 'unprotect':
+        return void answer(msg.id, (e) => e.unprotect());
+      case 'pageText':
+        return void answer(msg.id, (e) => e.pageText(msg.pages));
+      case 'compose':
+        return void answer(msg.id, (e) => e.compose(msg.req));
       case 'unload':
         return void answer(msg.id, (e) => e.unload());
       case 'close':

@@ -91,7 +91,7 @@ export default function Bonds({ id, currency, canManage, can }: { id: number; cu
                   {s.note ? <span className="text-[12px] text-ink-2">{s.note}</span> : null}
                 </span>
                 <b className="w-[150px] shrink-0 text-right text-ink tabular-nums">{money(s.amount, s.currency)}</b>
-                <span className={cx('flex w-[130px] shrink-0 flex-col items-end text-[12px]', warn ? (days! < 0 ? 'text-danger' : days! <= 7 ? 'font-bold text-danger' : 'font-semibold text-[#9A4A06] dark:text-warning') : 'text-ink-2')}>
+                <span className={cx('flex w-[130px] shrink-0 flex-col items-end text-[12px]', warn ? (days! < 0 ? 'text-danger' : days! <= 7 ? 'font-bold text-danger' : 'font-semibold text-warning-ink dark:text-warning') : 'text-ink-2')}>
                   {s.valid_until ? <span>Until {dayWords(s.valid_until, { year: true })}</span> : <span className="text-ink-3">No expiry recorded</span>}
                   {live && days !== null ? <span>{days < 0 ? `lapsed ${-days} ${days === -1 ? 'day' : 'days'} ago` : days === 0 ? 'lapses today' : `${days} ${days === 1 ? 'day' : 'days'} left`}</span> : null}
                 </span>

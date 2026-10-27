@@ -7,6 +7,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { fetchAccess, fetchHome, K } from './api';
 import { useOnline, useStation } from './parts';
+import { OfflineReadOnlyBanner } from '../../components/OfflineReadOnly';
 import { StepUpHost } from './StepUp';
 
 /**
@@ -35,19 +36,20 @@ export default function ChequeShell(_props: ModuleProps) {
   const view: ChequeView = VIEWS.has(asked) ? (asked === 'batch' && !batchId ? 'batches' : (asked as ChequeView)) : 'home';
   useTabTitle(`Cheque Manager · ${TITLES[view]}`);
   const st = useStation();
-  const access = useQuery({ queryKey: K.access, queryFn: ({ signal }) => fetchAccess(signal), staleTime: 60_000, enabled: online });
-  const home = useQuery({ queryKey: K.home, queryFn: ({ signal }) => fetchHome(signal), enabled: online && !!access.data, refetchInterval: 30_000 });
+  // Offline (D-G14) the lists read from this computer's copy, read-only; printing needs WorkSuite (the server checks every print).
+  const access = useQuery({ queryKey: K.access, queryFn: ({ signal }) => fetchAccess(signal), staleTime: 60_000 });
+  const home = useQuery({ queryKey: K.home, queryFn: ({ signal }) => fetchHome(signal), enabled: !!access.data, refetchInterval: online ? 30_000 : false });
   const to = (v: ChequeView, extra = '', newTab = false) => {
     const r = `/cheque?tab=${v}${extra}`;
     if (newTab) openInNewTab(r, `Cheque Manager · ${TITLES[v]}`);
     else go(r);
   };
 
-  if (!online) {
+  if (!online && access.isError) {
     return (
       <div className="m-6 max-w-[520px] text-[13px] text-ink-2">
         <p className="m-0 font-bold text-ink">Cheque printing needs WorkSuite.</p>
-        <p className="m-0 mt-1">Every print is checked by the server first, so nothing can print while this computer is offline.</p>
+        <p className="m-0 mt-1">Every print is checked by the server first, so nothing can print while this computer is offline. Nothing from Cheque Manager has been kept on this computer yet.</p>
       </div>
     );
   }
@@ -62,11 +64,11 @@ export default function ChequeShell(_props: ModuleProps) {
       type="button"
       aria-current={at === id ? 'page' : undefined}
       onClick={(e: MouseEvent) => to(id, '', e.metaKey || e.ctrlKey)}
-      className={cx('flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left', at === id ? 'bg-[#EEF1FD] font-bold text-[#3B5BDB] dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
+      className={cx('flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left', at === id ? 'bg-selection font-bold text-brand-soft dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
     >
       <Icon name={icon} size={16} className={cx('shrink-0', at === id ? 'text-primary' : 'text-ink-3')} />
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {counts[id] ? <span className="shrink-0 rounded-[9px] bg-[#EAEDFB] px-1.5 text-[11px] font-bold text-[#23349E] tabular-nums dark:bg-primary/15 dark:text-primary">{counts[id]}</span> : null}
+      {counts[id] ? <span className="shrink-0 rounded-[9px] bg-info-bg px-1.5 text-[11px] font-bold text-primary tabular-nums dark:bg-primary/15 dark:text-primary">{counts[id]}</span> : null}
     </button>
   );
 
@@ -74,7 +76,7 @@ export default function ChequeShell(_props: ModuleProps) {
     <div className="flex h-full min-h-0">
       <StepUpHost />
       <SidePanel id="cheque" label="the Cheque Manager menu">
-        <nav aria-label="Cheque Manager" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+        <nav aria-label="Cheque Manager" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
           <div className="px-4 pt-3.5 pb-1">
             <div className="text-[15px] font-extrabold">Cheque Manager</div>
             <div className="truncate text-[11.5px] text-ink-3">{st.data?.host ? `Print station · ${st.data.host}` : 'Print station'}</div>
@@ -90,6 +92,7 @@ export default function ChequeShell(_props: ModuleProps) {
         </nav>
       </SidePanel>
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-ground" aria-label={`Cheque Manager · ${TITLES[view]}`}>
+        <OfflineReadOnlyBanner module="cheque" />
         <div className="min-h-0 flex-1 overflow-y-auto px-[22px] py-[18px] scroll-thin">
           <Suspense fallback={<Spinner />}>
             {view === 'home' ? (

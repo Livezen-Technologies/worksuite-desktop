@@ -102,7 +102,7 @@ function Title({ children, strike }: { children: ReactNode; strike?: boolean }) 
   return <b className={`block text-[15px] leading-snug ${strike ? 'line-through opacity-70' : ''}`}>{children}</b>;
 }
 function Sub({ children }: { children: ReactNode }) {
-  return <span className="block text-[12.5px] text-ink-3 dark:text-[#8D96B8]">{children}</span>;
+  return <span className="block text-[12.5px] text-ink-3 dark:text-slate">{children}</span>;
 }
 const pad = 'flex flex-col gap-2 px-3.5 py-3.5';
 const openAct = (label: string, open: () => void): CardAction => ({ label, tone: 'primary', onClick: open });
@@ -118,7 +118,7 @@ function TaskCard({ t, open }: { t: Rec; open: () => void }) {
     <CardFrame kind="task" org={str(t.org_name)} actions={[openAct('Open task', open)]} foot={str(t.task_key) ?? undefined}>
       <div className={pad}>
         <div className="flex items-start gap-2.5">
-          <span className={`mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] border-2 ${done ? 'border-[#1F9D6B] bg-[#1F9D6B] text-white' : 'border-line dark:border-[#4A5A8C]'}`}>{done ? <Icon name="check" size={13} /> : null}</span>
+          <span className={`mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] border-2 ${done ? 'border-green bg-green text-white' : 'border-line dark:border-muted'}`}>{done ? <Icon name="check" size={13} /> : null}</span>
           <Title strike={done}>{str(t.title) ?? 'Task'}</Title>
         </div>
         <div className="flex flex-wrap gap-1.5 pl-8">
@@ -144,7 +144,7 @@ function NoteCard({ n, open }: { n: Rec; open: () => void }) {
     <CardFrame kind="note" actions={[openAct('Open note', open)]} foot={role === 'editor' || role === 'owner' ? 'Can edit' : role === 'viewer' ? 'Can view' : undefined}>
       <div className={pad}>
         <Title>{str(n.title) ?? 'Untitled note'}</Title>
-        {str(n.excerpt) ? <p className="m-0 line-clamp-3 text-[13px] text-ink-2 dark:text-[#C9CFE6]">{str(n.excerpt)}</p> : null}
+        {str(n.excerpt) ? <p className="m-0 line-clamp-3 text-[13px] text-ink-2 dark:text-slate-ink">{str(n.excerpt)}</p> : null}
         {tags.length ? (
           <span className="flex flex-wrap gap-1.5">
             {tags.map((t) => (
@@ -171,7 +171,7 @@ function EventCard({ e, open }: { e: Rec; open: () => void }) {
     <CardFrame kind="event" actions={actions} foot={str(e.my_rsvp) ? human(str(e.my_rsvp)) : 'Invited'}>
       <div className="flex gap-3 px-3.5 py-3.5">
         {d && !Number.isNaN(d.getTime()) ? (
-          <span className="flex w-[58px] shrink-0 flex-col items-center self-start rounded-[12px] bg-[#FCE7F1] py-1.5 text-[#9D174D] dark:bg-[#2A1624] dark:text-[#FFB3D4]">
+          <span className="flex w-[58px] shrink-0 flex-col items-center self-start rounded-[12px] bg-rose-bg py-1.5 text-rose-ink">
             <span className="text-[10.5px] font-extrabold tracking-[.6px]">{d.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</span>
             <b className="text-[22px] leading-tight">{d.getDate()}</b>
             <span className="text-[10.5px] font-extrabold tracking-[.6px]">{d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}</span>
@@ -275,8 +275,8 @@ function InvoiceCard({ i, open }: { i: Rec; open: () => void }) {
               ['Due', i.due],
             ] as Array<[string, unknown]>
           ).map(([k, v]) => (
-            <span key={k} className="flex flex-col rounded-[10px] bg-well px-2.5 py-2 dark:bg-[#0F1629]">
-              <span className="text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:text-[#8D96B8]">{k}</span>
+            <span key={k} className="flex flex-col rounded-[10px] bg-well px-2.5 py-2 dark:bg-ground">
+              <span className="text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:text-slate">{k}</span>
               <b className="truncate text-[13.5px]">{money(numOf(v), cur)}</b>
             </span>
           ))}
@@ -298,7 +298,7 @@ function ContactCard({ c, open }: { c: Rec; open: () => void }) {
   return (
     <CardFrame kind="contact" actions={actions} foot="Contact">
       <div className="flex items-center gap-3 px-3.5 py-3.5">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#E3F6EE] text-[15px] font-extrabold text-[#0B6B4A] dark:bg-[#11281F] dark:text-[#4FC3A1]">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-success-bg text-[15px] font-extrabold text-success-ink dark:text-green">
           {name
             .split(/\s+/)
             .filter(Boolean)
@@ -384,7 +384,7 @@ function FolderCard({ l, open }: { l: Rec; open: () => void }) {
     <CardFrame kind="folder" actions={[openAct('Open', open)]}>
       <div className={pad}>
         <div className="flex items-center gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] bg-[#FDF1DF] text-[#F0A43A] dark:bg-[#2A2213]">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] bg-warning-bg text-stage-amber">
             <Icon name="folder" size={24} />
           </span>
           <span className="min-w-0 flex-1">
@@ -398,7 +398,7 @@ function FolderCard({ l, open }: { l: Rec; open: () => void }) {
         {files.length ? (
           <div className="flex flex-col gap-1">
             {files.map((f, i) => (
-              <span key={i} className="flex items-center gap-2 rounded-[8px] bg-well px-2 py-1.5 text-[12.5px] dark:bg-[#0F1629]">
+              <span key={i} className="flex items-center gap-2 rounded-[8px] bg-well px-2 py-1.5 text-[12.5px] dark:bg-ground">
                 <FileBadge name={str(f.name) ?? 'file'} size={20} />
                 <span className="min-w-0 flex-1 truncate">{str(f.name)}</span>
               </span>

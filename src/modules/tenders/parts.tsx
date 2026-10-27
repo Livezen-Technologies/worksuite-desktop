@@ -10,7 +10,7 @@ export function openWeb(path = '/tenders') {
 
 /** How long is left, in the server's words, coloured by how soon. */
 export function Left({ r, className }: { r: Remaining; className?: string }) {
-  const c = r.tone === 'critical' || r.tone === 'closed' ? 'text-danger' : r.tone === 'warning' ? 'text-[#9A4A06] dark:text-warning' : r.tone === 'ok' ? 'text-ink-2' : 'text-ink-3';
+  const c = r.tone === 'critical' || r.tone === 'closed' ? 'text-danger' : r.tone === 'warning' ? 'text-warning-ink dark:text-warning' : r.tone === 'ok' ? 'text-ink-2' : 'text-ink-3';
   return <span className={cx('whitespace-nowrap', r.tone === 'critical' && 'font-bold', c, className)}>{r.text}</span>;
 }
 

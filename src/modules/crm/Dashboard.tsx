@@ -82,8 +82,8 @@ export default function Dashboard({ onPick, onNewLead, onOpenDeal, onOpenLead, o
           <Panel title="Follow-ups" action={<Link onClick={() => onPick('fu')}>Open the list</Link>}>
             <div className="grid grid-cols-3 gap-2 px-3.5 py-2.5">
               {[
-                ['Late', fu?.overdue ?? 0, 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger'],
-                ['Today', fu?.today ?? 0, 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning'],
+                ['Late', fu?.overdue ?? 0, 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger'],
+                ['Today', fu?.today ?? 0, 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning'],
                 ['Later', fu?.upcoming ?? 0, 'bg-selection text-primary'],
               ].map(([l, v, c]) => (
                 <button key={l as string} type="button" onClick={() => onPick('fu')} className={cx('rounded-[8px] px-2.5 py-2 text-left', c as string)}>

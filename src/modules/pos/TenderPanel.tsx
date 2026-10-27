@@ -377,7 +377,7 @@ export default function Tender({
       <div className="flex w-[420px] shrink-0 flex-col gap-3.5 overflow-y-auto bg-pos-bar p-7 text-white scroll-thin max-lg:w-[340px]">
         <div className="truncate text-[13px] text-pos-bar-ink">{t('pos.pay.sale', { who })}</div>
         <div>
-          <div className="text-[13px] text-[#cbd5e1]">{t('pos.total')}</div>
+          <div className="text-[13px] text-stage-gray-ink">{t('pos.total')}</div>
           <div className="font-mono text-[34px] font-bold tabular-nums">{formatMoney(total, currency)}</div>
         </div>
         <Adjustments
@@ -404,7 +404,7 @@ export default function Tender({
           const on = i === cur;
           const v = Number(r.amount.replace(/,/g, '')) || 0;
           return (
-            <div key={i} className={cx('flex items-center gap-3 rounded-pos bg-white/[.08] p-3.5', on && 'shadow-[inset_0_0_0_2px_#7FD8DF]')}>
+            <div key={i} className={cx('flex items-center gap-3 rounded-pos bg-white/[.08] p-3.5', on && 'shadow-[inset_0_0_0_2px_var(--ws-teal-line)]')}>
               <button type="button" onClick={() => setCur(i)} aria-label={`${label(r.method)} ${i + 1}`} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                 <span className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]', r.method === 'cash' ? 'bg-teal' : 'bg-primary')}>
                   <Icon name={ICON[r.method]} size={18} />
@@ -433,8 +433,8 @@ export default function Tender({
         })}
         <div className="mt-auto flex flex-col gap-2">
           <div className="flex justify-between text-[15px]">
-            <span className="text-[#cbd5e1]">{t('pos.pay.toPay')}</span>
-            <span className={cx('font-mono font-bold tabular-nums', s.due > 0 && 'text-[#fca5a5]')}>{formatMoney(s.due)}</span>
+            <span className="text-stage-gray-ink">{t('pos.pay.toPay')}</span>
+            <span className={cx('font-mono font-bold tabular-nums', s.due > 0 && 'text-stage-danger')}>{formatMoney(s.due)}</span>
           </div>
           <div className="flex items-baseline justify-between rounded-pos bg-pos-change px-4 py-3.5 text-pos-change-ink">
             <span className="text-[16px] font-bold">{t('pos.pay.changeToGive')}</span>
@@ -496,7 +496,7 @@ export default function Tender({
                     maxLength={40}
                     onChange={(e) => set(cur, { reference: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40) })}
                     onKeyDown={(e) => e.key === 'Enter' && void checkVoucher(cur)}
-                    className="h-touch-md min-w-0 flex-1 rounded-[12px] bg-pos-panel px-3.5 font-mono text-[15px] text-ink shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+                    className="h-touch-md min-w-0 flex-1 rounded-[12px] bg-pos-panel px-3.5 font-mono text-[15px] text-ink shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
                   />
                   <PosButton className="h-touch-md px-4 text-[14px]" disabled={checking || row.reference.trim().length < 4 || till.offline} onClick={() => void checkVoucher(cur)}>
                     {checking ? <Icon name="spinner" size={16} className="animate-spin" /> : null}
@@ -522,7 +522,7 @@ export default function Tender({
                 value={row.reference}
                 maxLength={80}
                 onChange={(e) => set(cur, { reference: e.target.value.slice(0, 80) })}
-                className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] text-ink shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+                className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] text-ink shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
               />
             )}
             {source === 'estimate' ? <Note tone="warning">{t('pos.provisional')}</Note> : null}
@@ -604,7 +604,7 @@ function Adjustments({
         {coupon
           ? cart.coupon && !cart.coupon.valid
             ? (
-                <div className="flex items-start gap-2 text-[#fca5a5]">
+                <div className="flex items-start gap-2 text-stage-danger">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{t('pos.adj.couponOff', { code: coupon })}</span>
                     <span className="block text-[11px]">{couponMessage(t, cart.coupon.reason, cart.coupon.message)}</span>
@@ -725,7 +725,7 @@ function Complete({ done, currency, onDone }: { done: { sale: PosSale; queued: b
               value={to}
               maxLength={150}
               onChange={(e) => setTo(e.target.value)}
-              className="h-touch-md min-w-0 flex-1 rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+              className="h-touch-md min-w-0 flex-1 rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
             />
             <PosButton tone="primary" className="h-touch-md px-6" disabled={bad || !to.trim() || busy === 'email'} onClick={() => void run('email', () => emailReceipt(sale.ref, to.trim()))}>
               {t('pos.send')}
@@ -738,7 +738,7 @@ function Complete({ done, currency, onDone }: { done: { sale: PosSale; queued: b
         {sale.priced_by === 'estimate' ? <p className="text-[12px] text-ink-3">{t('pos.provisional')}</p> : null}
         <div className="mt-auto flex items-center gap-2.5">
           <div className={cx('flex flex-1 items-center gap-2 text-[13px]', done.queued ? 'text-warning-ink' : 'text-success')}>
-            <span className={cx('h-2 w-2 shrink-0 rounded-full', done.queued ? 'bg-warning' : 'bg-[#22C55E]')} />
+            <span className={cx('h-2 w-2 shrink-0 rounded-full', done.queued ? 'bg-warning' : 'bg-green-bright')} />
             {done.queued ? t('pos.saleQueued', { ref: sale.ref }) : sale.number ? t('pos.done.sentOrder', { n: sale.number }) : t('pos.done.sent')}
           </div>
           <PosButton tone="primary" autoFocus className="h-touch-xl w-[260px] rounded-pos-lg text-[18px] font-extrabold" onClick={onDone}>

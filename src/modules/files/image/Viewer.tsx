@@ -327,7 +327,7 @@ export function ImageViewer({ files, start, onClose, onEdit }: ViewerProps) {
 
   if (compare && o) {
     return (
-      <div role="region" aria-label={`Compare versions of ${f.name}`} className="no-drag absolute inset-0 z-30 flex flex-col bg-[#0B1120]">
+      <div role="region" aria-label={`Compare versions of ${f.name}`} className="no-drag absolute inset-0 z-30 flex flex-col bg-stage">
         <CompareView fileId={f.id} versions={o.versions} current={o.file.version} canRestore={canEdit} onClose={() => setCompare(false)} onReopen={(v) => (setCompare(false), onEdit(f, v.version))} onRestore={(v) => void restoreVersion(f.id, v.id).then(() => (toast('success', `v${v.version} restored as a new version`), setCompare(false), void qc.invalidateQueries({ queryKey: ['files'] })), (e) => toast('error', errorMessage(e)))} />
       </div>
     );
@@ -413,7 +413,7 @@ export function ImageViewer({ files, start, onClose, onEdit }: ViewerProps) {
                 <img ref={img} key={src} src={paused ?? src} alt={o?.file.alt_text || o?.file.description || f.name} draggable={false} className="block h-full w-full select-none" style={!W ? { maxWidth: box.w, maxHeight: box.h } : undefined} />
                 {tab === 'comments' && info
                   ? (o?.region_comments ?? []).map((c) => (
-                      <span key={c.comment_id} title={c.excerpt ? `${c.author?.name ?? 'Comment'}: ${c.excerpt}` : 'Comment'} className="absolute border-2 border-[#F59E0B] bg-[#F59E0B]/10" style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%`, width: `${c.w * 100}%`, height: `${c.h * 100}%` }} />
+                      <span key={c.comment_id} title={c.excerpt ? `${c.author?.name ?? 'Comment'}: ${c.excerpt}` : 'Comment'} className="absolute border-2 border-amber bg-amber/10" style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%`, width: `${c.w * 100}%`, height: `${c.h * 100}%` }} />
                     ))
                   : null}
                 {region && region.w > 0.005 ? <span className="absolute border-2 border-dashed border-primary bg-primary/10" style={{ left: `${region.x * 100}%`, top: `${region.y * 100}%`, width: `${region.w * 100}%`, height: `${region.h * 100}%` }} /> : null}
@@ -583,7 +583,7 @@ function InfoTab({ o, fileId, canRate, canTag, onRate }: { o: ImageOpen; fileId:
         <span className="text-[11px] font-bold tracking-[0.06em] text-ink-2 uppercase">Rating</span>
         <div role="radiogroup" aria-label="Rating" className="flex gap-1">
           {[1, 2, 3, 4, 5].map((n) => (
-            <button key={n} type="button" role="radio" aria-checked={mine === n} aria-label={`${n} ${n === 1 ? 'star' : 'stars'} (Alt+${n})`} disabled={!canRate} onClick={() => onRate(mine === n ? 0 : n)} className={cx('text-[20px] leading-none disabled:cursor-default', mine >= n ? 'text-[#F5B400]' : 'text-line')}>
+            <button key={n} type="button" role="radio" aria-checked={mine === n} aria-label={`${n} ${n === 1 ? 'star' : 'stars'} (Alt+${n})`} disabled={!canRate} onClick={() => onRate(mine === n ? 0 : n)} className={cx('text-[20px] leading-none disabled:cursor-default', mine >= n ? 'text-stage-amber' : 'text-line')}>
               ★
             </button>
           ))}

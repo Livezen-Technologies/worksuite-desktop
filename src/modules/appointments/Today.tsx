@@ -55,7 +55,7 @@ export default function Today({ date, onAlerts }: { date: string; onAlerts: () =
       </Head>
 
       {late.length ? (
-        <div role="alert" className="mb-3.5 flex flex-wrap items-center gap-3 rounded-[12px] border border-[#F5C2BD] bg-[#FDECEA] px-4 py-2.5 text-[13px] text-[#7A1A12] dark:border-danger/40 dark:bg-danger/15 dark:text-danger">
+        <div role="alert" className="mb-3.5 flex flex-wrap items-center gap-3 rounded-[12px] border border-danger-line bg-danger-bg px-4 py-2.5 text-[13px] text-danger-ink dark:border-danger/40 dark:bg-danger/15 dark:text-danger">
           <b>{late.length === 1 ? '1 running late' : `${late.length} running late`}</b>
           <span className="min-w-0 flex-1">
             {late.slice(0, 2).map((a) => `${a.customer.name} (${a.local.start}, ${a.provider.name})`).join(' · ')}
@@ -69,7 +69,7 @@ export default function Today({ date, onAlerts }: { date: string; onAlerts: () =
         {LANES.map(([l, title]) => {
           const list = lane(l);
           return (
-            <section key={l} aria-label={title} className="flex min-h-[200px] flex-col gap-2.5 rounded-[14px] bg-[#EEF0F6] p-2.5 dark:bg-subtle">
+            <section key={l} aria-label={title} className="flex min-h-[200px] flex-col gap-2.5 rounded-[14px] bg-subtle p-2.5 dark:bg-subtle">
               <div className="flex items-baseline justify-between px-1">
                 <h2 className="m-0 text-[13px] font-bold text-ink">{title}</h2>
                 <span className="text-[11.5px] text-ink-3">{l === 'arriving' ? `late + next 2 h · ${list.length}` : list.length}</span>
@@ -97,7 +97,7 @@ export default function Today({ date, onAlerts }: { date: string; onAlerts: () =
                       {l === 'checkout' ? <Pill tone="warn" className="mt-1.5">Completed, not paid</Pill> : null}
                     </button>
                     {x ? (
-                      <button type="button" disabled={x.off} onClick={x.run} className="mt-2.5 h-10 w-full rounded-[10px] bg-[#23349E] text-[13.5px] font-bold text-white hover:brightness-110 disabled:opacity-50 dark:bg-primary">
+                      <button type="button" disabled={x.off} onClick={x.run} className="mt-2.5 h-10 w-full rounded-[10px] bg-stage-primary text-[13.5px] font-bold text-white hover:brightness-110 disabled:opacity-50 dark:bg-primary">
                         {x.label}
                       </button>
                     ) : null}

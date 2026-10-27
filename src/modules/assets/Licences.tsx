@@ -60,7 +60,7 @@ export default function Licences({ org, can }: { org: number; can: Can; active: 
         <Card>
           <Table head={['Software', ['Seats', 'r'], 'Renews', ['Cost', 'r']]}>
             {list.map((l) => (
-              <tr tabIndex={0} onKeyDown={clickOnKey} key={l.id} onClick={() => setSel(l.id)} className={cx('cursor-default', l.id === cur?.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={l.id} onClick={() => setSel(l.id)} className={cx('cursor-default', l.id === cur?.id ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
                 <td className={td}><b>{l.name}</b>{l.version ? <span className="text-ink-3">{` ${l.version}`}</span> : null}</td>
                 <td className={tdr}><span className={l.over_allocated ? 'text-danger' : ''}>{`${l.seats_used} / ${l.seats_total}`}</span></td>
                 <td className={td}>{l.days_left != null && l.days_left < 0 ? <Badge status="expired">Expired</Badge> : shortDate(l.expiry_date) || '—'}</td>
@@ -123,7 +123,7 @@ export default function Licences({ org, can }: { org: number; can: Can; active: 
             </div>
           ) : null}
           {cur.days_left != null && cur.days_left >= 0 && cur.days_left <= 30 && cur.seats_available > 0 ? (
-            <p className="m-0 rounded-[8px] bg-[#FFF8E6] px-3 py-2 text-[12px] text-[#7A3B05] dark:bg-warning-bg dark:text-warning">{`Renews in ${cur.days_left} days for ${cur.seats_total} seats; ${cur.seats_available} ${cur.seats_available === 1 ? 'is' : 'are'} free.`}</p>
+            <p className="m-0 rounded-[8px] bg-warning-bg px-3 py-2 text-[12px] text-warning-strong dark:bg-warning-bg dark:text-warning">{`Renews in ${cur.days_left} days for ${cur.seats_total} seats; ${cur.seats_available} ${cur.seats_available === 1 ? 'is' : 'are'} free.`}</p>
           ) : null}
         </section>
       ) : null}

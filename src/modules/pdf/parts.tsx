@@ -27,7 +27,7 @@ export function Radios<T extends string>({ label, value, options, onChange, disa
     <div role="radiogroup" aria-label={label} className="flex flex-col gap-1">
       {options.map((o) => (
         <label key={o.id} className={cx('flex cursor-pointer items-start gap-2 rounded-[8px] px-2 py-1.5 text-[12.5px]', value === o.id ? 'bg-selection text-ink' : 'text-ink-2 hover:bg-subtle', disabled && 'cursor-not-allowed opacity-60')}>
-          <input type="radio" className="mt-0.5 accent-[var(--color-primary,#2563eb)]" checked={value === o.id} disabled={disabled} onChange={() => onChange(o.id)} />
+          <input type="radio" className="mt-0.5 accent-[var(--color-primary)]" checked={value === o.id} disabled={disabled} onChange={() => onChange(o.id)} />
           <span className="min-w-0 flex-1">
             <span className="block font-semibold">{o.label}</span>
             {o.hint ? <span className="block text-[11.5px] text-ink-3">{o.hint}</span> : null}
@@ -80,7 +80,7 @@ export function Pick<T extends string>({ label, value, options, onChange, disabl
 
 export function ProBadge({ note }: { note?: string }) {
   return (
-    <span title={note ? `PDF Studio Pro · ${note}` : 'PDF Studio Pro'} className="inline-flex items-center rounded-[5px] bg-[#EEF2FF] px-1.5 py-[1px] text-[10px] font-bold tracking-[.3px] text-[#4338CA] uppercase dark:bg-selection dark:text-primary">
+    <span title={note ? `PDF Studio Pro · ${note}` : 'PDF Studio Pro'} className="inline-flex items-center rounded-[5px] bg-selection px-1.5 py-[1px] text-[10px] font-bold tracking-[.3px] text-blue-ink uppercase dark:bg-selection dark:text-primary">
       Pro
     </span>
   );

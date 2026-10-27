@@ -90,7 +90,7 @@ export default function Devices() {
         </button>
       </PageHead>
       {q.data && !q.data.settings.enabled ? (
-        <div className="rounded-[12px] border border-[#F5D9A8] bg-warning-bg px-4 py-3 text-[12.5px] text-[#7A3E06] dark:border-warning/40 dark:text-warning">
+        <div className="rounded-[12px] border border-warning-line bg-warning-bg px-4 py-3 text-[12.5px] text-warning-strong dark:border-warning/40 dark:text-warning">
           <b>Device attendance is switched off.</b> Terminals can be registered and set up, but everything they send is refused until it is turned on in Settings → Devices. They keep their own copy and upload it later.
         </div>
       ) : null}
@@ -246,7 +246,7 @@ function Setup({ d, onChanged }: { d: Device; onChanged: () => void }) {
           </div>
         ) : null}
         {key ? (
-          <div className="rounded-[9px] border border-[#B7E4C7] bg-success-bg dark:border-success/40 px-3 py-2">
+          <div className="rounded-[9px] border border-success-line bg-success-bg dark:border-success/40 px-3 py-2">
             <b className="text-success">Device key — copy it now</b>
             <div className="mt-1 font-mono text-[12.5px] break-all text-ink select-all">{key}</div>
             <span className="text-[11.5px] text-ink-3">It is stored as a hash and cannot be shown again.</span>

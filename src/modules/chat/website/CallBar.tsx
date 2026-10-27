@@ -183,7 +183,7 @@ function OnCall({ call: c, s, me, visitor, now, busy, onHold, onInvite, onTransf
   const heard = s.phase === 'joining' ? 'Connecting the call' : s.phase === 'reconnecting' ? 'Reconnecting the call' : s.held ? 'Call on hold' : s.muted ? 'On the call, muted' : `On a call with ${visitor}`;
   const pill = cx(
     'flex h-[34px] shrink-0 items-center gap-1.5 rounded-full border bg-surface px-[13px] text-[13px] font-semibold hover:brightness-95 disabled:opacity-50',
-    amber ? 'border-[#F2D39B] text-[#7A4308] dark:text-warning' : 'border-[#BFE3CC] text-[#14502E] dark:text-success',
+    amber ? 'border-warning-line text-warning-strong dark:text-warning' : 'border-success-line text-success-ink dark:text-success',
     'aria-pressed:bg-subtle',
   );
   return (
@@ -192,7 +192,7 @@ function OnCall({ call: c, s, me, visitor, now, busy, onHold, onInvite, onTransf
       aria-label="Call controls"
       className={cx(
         'flex min-h-[58px] shrink-0 flex-wrap items-center gap-2.5 border-b px-4 py-2',
-        amber ? 'border-[#F2D39B] bg-warning-bg' : 'border-[#BFE3CC] bg-success-bg',
+        amber ? 'border-warning-line bg-warning-bg' : 'border-success-line bg-success-bg',
       )}
     >
       <span className="sr-only" role="status" aria-live="polite">{heard}</span>
@@ -200,13 +200,13 @@ function OnCall({ call: c, s, me, visitor, now, busy, onHold, onInvite, onTransf
       <span
         aria-hidden="true"
         title={s.speaking ? `${visitor} is speaking` : undefined}
-        className={cx('h-2.5 w-2.5 shrink-0 rounded-full', amber ? 'bg-warning shadow-[0_0_0_4px_rgb(242_211_155/.6)]' : 'bg-success shadow-[0_0_0_4px_#CDEBD8] dark:shadow-none', s.speaking && 'motion-safe:animate-pulse')}
+        className={cx('h-2.5 w-2.5 shrink-0 rounded-full', amber ? 'bg-warning shadow-[0_0_0_4px_rgb(242_211_155/.6)]' : 'bg-success shadow-[0_0_0_4px_var(--ws-success-line)] dark:shadow-none', s.speaking && 'motion-safe:animate-pulse')}
       />
       <div className="min-w-[180px] flex-1">
-        <div className={cx('truncate text-[14px] font-bold', amber ? 'text-[#7A4308] dark:text-warning' : 'text-[#14502E] dark:text-success')}>
+        <div className={cx('truncate text-[14px] font-bold', amber ? 'text-warning-strong dark:text-warning' : 'text-success-ink dark:text-success')}>
           Voice call · {visitor} <span className="font-mono font-medium tabular-nums">{since(c.answered_at, now)}</span>
         </div>
-        <div className={cx('truncate text-[12px]', amber ? 'text-[#8A5A12] dark:text-warning' : 'text-[#2B7A4B] dark:text-success')}>{line}</div>
+        <div className={cx('truncate text-[12px]', amber ? 'text-yellow-ink dark:text-warning' : 'text-success dark:text-success')}>{line}</div>
       </div>
       <button type="button" aria-pressed={s.muted} title={`${s.muted ? 'Unmute' : 'Mute'} (${muteKey})`} onClick={() => void websiteCall.mute()} className={pill}>
         <Icon name={s.muted ? 'mic-off' : 'mic'} size={14} /> {s.muted ? 'Unmute' : 'Mute'}
@@ -353,9 +353,9 @@ function Strip({ tone, icon, label, children }: { tone: 'success' | 'warning' | 
       aria-label={label}
       className={cx(
         'flex shrink-0 flex-wrap items-center gap-2 border-b px-3.5 py-1.5 text-[12.5px]',
-        tone === 'success' && 'border-[#A9DDBF] bg-success-bg text-[#0F5132] dark:text-success',
-        tone === 'warning' && 'border-[#F2D39B] bg-warning-bg text-[#7A4308] dark:text-warning',
-        tone === 'danger' && 'border-[#F6C4B8] bg-danger-bg text-[#8C2A14] dark:text-danger',
+        tone === 'success' && 'border-success-line bg-success-bg text-success-ink dark:text-success',
+        tone === 'warning' && 'border-warning-line bg-warning-bg text-warning-strong dark:text-warning',
+        tone === 'danger' && 'border-danger-line bg-danger-bg text-danger-ink dark:text-danger',
         tone === 'muted' && 'border-line bg-subtle text-ink-2',
       )}
     >

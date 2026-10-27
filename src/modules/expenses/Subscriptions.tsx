@@ -297,10 +297,10 @@ export default function Subscriptions({
   );
 }
 
-const TONE_TEXT = { red: 'text-danger', amber: 'text-[#9A4A06] dark:text-warning', grey: 'text-ink' } as const;
+const TONE_TEXT = { red: 'text-danger', amber: 'text-warning-ink dark:text-warning', grey: 'text-ink' } as const;
 const TONE_BADGE = {
-  red: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  amber: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
+  red: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  amber: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
   grey: 'bg-subtle text-ink-2',
 } as const;
 
@@ -348,7 +348,7 @@ function RenewalRow({ s, onOpen }: { s: Sub; onOpen: () => void }) {
       <span className="flex shrink-0 flex-col items-end">
         <b className="text-[13px] tabular-nums text-ink">{money(s.charge, s.currency)}</b>
         {/* The thing a number cannot say: whether somebody has to act before the date, or whether it happens by itself. */}
-        <span className={cx('text-[11.5px]', s.auto_renew ? 'text-ink-3' : 'text-[#9A4A06] dark:text-warning')}>{s.auto_renew ? 'renews automatically' : 'will not auto-renew'}</span>
+        <span className={cx('text-[11.5px]', s.auto_renew ? 'text-ink-3' : 'text-warning-ink dark:text-warning')}>{s.auto_renew ? 'renews automatically' : 'will not auto-renew'}</span>
       </span>
       <Icon name="chevron-right" size={15} className="shrink-0 text-ink-3 opacity-0 group-hover:opacity-100" />
     </button>

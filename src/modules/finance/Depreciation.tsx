@@ -142,7 +142,7 @@ export default function Depreciation({ company, onGo }: ScreenProps) {
         {reasons.length ? (
           <ul className="mt-2 mb-0 flex list-none flex-col gap-1.5 p-0">
             {reasons.map(([why, n]) => (
-              <li key={why} className="flex gap-2 text-[12px] text-[#9A4A06] dark:text-warning">
+              <li key={why} className="flex gap-2 text-[12px] text-warning-ink dark:text-warning">
                 <span className="shrink-0 rounded-[5px] bg-warning-bg px-1.5 font-bold tabular-nums">{n}</span>
                 <span>{why}</span>
               </li>

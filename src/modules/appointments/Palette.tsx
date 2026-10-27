@@ -46,7 +46,7 @@ export default function Palette({ onClose, onGo }: { onClose: () => void; onGo: 
   }, [needle, day, clients.data, desk, onClose, onGo]);
 
   return (
-    <div className="no-drag fixed inset-0 z-50 flex items-start justify-center bg-[#0B1020]/40 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="no-drag fixed inset-0 z-50 flex items-start justify-center bg-stage/40 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label="Command palette" className="flex w-[820px] max-w-[92vw] overflow-hidden rounded-[14px] border border-line bg-surface shadow-2xl">
         <div className="min-w-0 flex-1">
           <input
@@ -69,7 +69,7 @@ export default function Palette({ onClose, onGo }: { onClose: () => void; onGo: 
             {items.map((x, n) => (
               <li key={`${x.group}-${x.label}-${n}`}>
                 {n === 0 || items[n - 1]!.group !== x.group ? <div className="px-2.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[.06em] text-ink-3 uppercase">{x.group}</div> : null}
-                <button type="button" role="option" aria-selected={n === i} onMouseEnter={() => setI(n)} onClick={x.run} className={cx('flex w-full items-baseline gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-[13px]', n === i ? 'bg-[#EEF1FD] dark:bg-selection' : '')}>
+                <button type="button" role="option" aria-selected={n === i} onMouseEnter={() => setI(n)} onClick={x.run} className={cx('flex w-full items-baseline gap-2 rounded-[8px] px-2.5 py-1.5 text-left text-[13px]', n === i ? 'bg-selection dark:bg-selection' : '')}>
                   <span className="font-semibold text-ink">{x.label}</span>
                   {x.hint ? <span className="min-w-0 flex-1 truncate text-[12px] text-ink-3">{x.hint}</span> : <span className="flex-1" />}
                   {x.key ? <span className="font-mono text-[11px] text-ink-3">{x.key}</span> : null}

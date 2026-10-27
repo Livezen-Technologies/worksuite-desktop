@@ -144,7 +144,7 @@ export default function ReconcileWorkspace({
   const m = (v: string | null | undefined) => (v === null || v === undefined ? '—' : money(v, cur));
   const total = Number(txns.data?.pages[0]?.total ?? 0);
   const shown = openTxn === null ? null : (rows.find((t) => String(t.id) === openTxn) ?? null);
-  const toneText = good ? 'text-[#145C39] dark:text-success' : 'text-[#7A3B05] dark:text-warning';
+  const toneText = good ? 'text-success-ink dark:text-success' : 'text-warning-strong dark:text-warning';
 
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
@@ -169,7 +169,7 @@ export default function ReconcileWorkspace({
       </div>
 
       {/* ── the one number ── */}
-      <section aria-label="Difference" className={cx('rounded-[14px] border p-4', good ? 'border-[#B9E2C8] bg-[#EFF8F2] dark:border-success/40 dark:bg-success-bg' : 'border-[#F5D48A] bg-[#FFF8E6] dark:border-warning/40 dark:bg-warning-bg')}>
+      <section aria-label="Difference" className={cx('rounded-[14px] border p-4', good ? 'border-success-line bg-slate-bg dark:border-success/40 dark:bg-success-bg' : 'border-warning-line bg-warning-bg dark:border-warning/40 dark:bg-warning-bg')}>
         <div className="flex flex-wrap items-end justify-between gap-5">
           <StatCard
             className="min-w-[220px]"
@@ -250,7 +250,7 @@ export default function ReconcileWorkspace({
                 <span className="truncate text-ink">{t.description ?? <span className="text-ink-3">No description</span>}</span>
                 {t.note ? <span className="truncate text-[11.5px] text-ink-3">{t.status === 'ignored' ? `Parked: ${t.note}` : t.note}</span> : null}
               </span>
-              <span className={cx('w-[130px] shrink-0 text-right font-semibold whitespace-nowrap tabular-nums', isNegative(t.amount) ? 'text-danger' : 'text-[#166534] dark:text-success')}>{money(t.amount)}</span>
+              <span className={cx('w-[130px] shrink-0 text-right font-semibold whitespace-nowrap tabular-nums', isNegative(t.amount) ? 'text-danger' : 'text-success-ink dark:text-success')}>{money(t.amount)}</span>
               <span className="w-[100px] shrink-0">
                 <Pill tone={TXN_TONE[t.status] ?? 'grey'}>{TXN_LABEL[t.status] ?? t.status}</Pill>
               </span>
@@ -310,7 +310,7 @@ function Fig({ label, value, sub }: { label: string; value: string; sub: string 
 }
 
 function KindPill({ kind, children }: { kind: string; children: ReactNode }) {
-  if (kind === 'payable') return <span className="inline-flex h-[20px] shrink-0 items-center rounded-[10px] bg-[#F1EAFB] px-2 text-[11px] font-bold whitespace-nowrap text-[#5B2FA0] dark:bg-[#2A1F45] dark:text-[#C4A8F0]">{children}</span>;
+  if (kind === 'payable') return <span className="inline-flex h-[20px] shrink-0 items-center rounded-[10px] bg-violet-bg px-2 text-[11px] font-bold whitespace-nowrap text-violet-ink">{children}</span>;
   return <Pill tone={kind === 'receivable' ? 'blue' : 'grey'}>{children}</Pill>;
 }
 
@@ -403,12 +403,12 @@ function TxnPanel({
       }
     >
       <div className="flex items-center gap-3 rounded-[10px] bg-ground px-3.5 py-2.5">
-        <span className={cx('text-[20px] font-bold tabular-nums', isNegative(txn.amount) ? 'text-danger' : 'text-[#166534] dark:text-success')}>{money(txn.amount)}</span>
+        <span className={cx('text-[20px] font-bold tabular-nums', isNegative(txn.amount) ? 'text-danger' : 'text-success-ink dark:text-success')}>{money(txn.amount)}</span>
         <Pill tone={TXN_TONE[txn.status] ?? 'grey'}>{TXN_LABEL[txn.status] ?? txn.status}</Pill>
         <span className="flex-1" />
         <span className="text-right text-[11.5px] text-ink-3">
           Difference now
-          <b className={cx('block text-[13px] tabular-nums', agreed ? 'text-success' : 'text-[#9A4A06] dark:text-warning')}>{difference}</b>
+          <b className={cx('block text-[13px] tabular-nums', agreed ? 'text-success' : 'text-warning-ink dark:text-warning')}>{difference}</b>
         </span>
       </div>
       {txn.note ? <p className="m-0 text-[12.5px] text-ink-2">{txn.status === 'ignored' ? `Parked: ${txn.note}` : txn.note}</p> : null}
@@ -504,7 +504,7 @@ function TxnPanel({
                         </span>
                       </span>
                       <span className={cx('shrink-0 tabular-nums', c.exact ? 'font-semibold text-success' : 'text-ink-2')}>{money(c.amount)}</span>
-                      {!c.exact ? <span className="shrink-0 text-[11px] text-[#9A4A06] dark:text-warning">off by {money(c.gap)}</span> : null}
+                      {!c.exact ? <span className="shrink-0 text-[11px] text-warning-ink dark:text-warning">off by {money(c.gap)}</span> : null}
                       {may ? (
                         <button type="button" className={btnSmall} disabled={busy} onClick={() => void run(() => matchLine(company.id, txn.id, c.journal_line_id), 'Matched')}>
                           Match

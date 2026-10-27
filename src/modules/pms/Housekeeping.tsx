@@ -168,7 +168,7 @@ export default function Housekeeping({ room }: { room: number | null }) {
                         {t.status_label}
                         {t.assigned_name ? ` · ${t.assigned_name}` : ' · nobody yet'}
                       </div>
-                      {t.flags?.due_in ? <div className="text-[11.5px] text-[#0891b2]">Guest due in today</div> : null}
+                      {t.flags?.due_in ? <div className="text-[11.5px] text-teal">Guest due in today</div> : null}
                     </button>
                     {next && typeof t.version === 'number' ? (
                       <div>

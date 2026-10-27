@@ -108,7 +108,7 @@ export function ReportView({ campaign, options, onBack, onOpen }: { campaign: Ca
       />
 
       {campaign.status_note ? (
-        <p role="status" className="m-0 mb-4 rounded-[10px] border border-[#F5D9A8] bg-[#FFF9EE] px-3.5 py-2.5 text-[12.5px] text-[#9A4A06] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+        <p role="status" className="m-0 mb-4 rounded-[10px] border border-warning-line bg-rail px-3.5 py-2.5 text-[12.5px] text-warning-ink dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           {campaign.status_note}
         </p>
       ) : null}

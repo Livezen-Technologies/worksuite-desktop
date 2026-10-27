@@ -245,7 +245,7 @@ function AdvancesIn({ orgId, orgs, onGo, openAdvance }: ScreenProps & { orgId: n
 function Balance({ a, base }: { a: Advance; base: string }) {
   const b = settledBalance(a);
   if (b.side === 'open') return <span className="text-ink-3">—</span>;
-  if (b.side === 'due_back') return <span className="font-semibold text-[#9A4A06] dark:text-warning">{money(b.amount, base)} due back</span>;
+  if (b.side === 'due_back') return <span className="font-semibold text-warning-ink dark:text-warning">{money(b.amount, base)} due back</span>;
   if (b.side === 'owed') return <span className="font-semibold text-primary">{money(b.amount, base)} owed to them</span>;
   return <span className="font-semibold text-success">came out even</span>;
 }

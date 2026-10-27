@@ -446,7 +446,7 @@ function Photos({ recordId, photos, loading, onChanged }: { recordId: number | n
           onDragOver={(e) => e.preventDefault()}
           onDrop={drop('other')}
           onClick={() => setCamera('other')}
-          className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 rounded-[14px] border-2 border-dashed border-[#C9CEDD] text-[13px] font-bold text-ink-2 hover:bg-subtle disabled:opacity-50 dark:border-line"
+          className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 rounded-[14px] border-2 border-dashed border-slate-line text-[13px] font-bold text-ink-2 hover:bg-subtle disabled:opacity-50 dark:border-line"
         >
           <Icon name="camera" size={22} />
           Take with webcam or drop a file

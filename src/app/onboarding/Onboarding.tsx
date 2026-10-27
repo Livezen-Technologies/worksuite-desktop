@@ -217,7 +217,7 @@ function PasskeyStep({ auth }: { auth: AuthState }) {
         </Button>
       </div>
       {slow ? (
-        <p className="rounded-[10px] bg-warning-bg px-3.5 py-2.5 text-[12.5px] text-[#7A4308] dark:text-warning">
+        <p className="rounded-[10px] bg-warning-bg px-3.5 py-2.5 text-[12.5px] text-warning-strong dark:text-warning">
           Nothing yet? A passkey works only once it has been added to your WorkSuite account for {host} — in the web app, under My account › Security. If Windows Hello said it found no passkey, add one there, or use your password.
         </p>
       ) : null}

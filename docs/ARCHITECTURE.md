@@ -197,9 +197,17 @@ bar and sidebar, `bg-navy`) is the same navy in both themes; it is the frame, no
   `text-ink`/`-2`/`-3`, `border-line`, `bg-rail` for a module's narrow rail, `bg-warning-bg` with
   `text-warning-ink` for a warning banner, the `success`/`warning`/`danger` tones for status). Each token has its
   dark value, so a screen built from them is right in both themes with no `dark:` variant.
-- A hex colour (`bg-[#FBFBFD]`, `text-[#9A4A06]`) or `bg-white` in module content is a bug unless it has its
-  `dark:` partner — and a new one should be a token instead. Data that brings its colour (an app, a calendar, a
-  person) uses `DATA_TEXT` / `avatarTone` (`src/components/ui.tsx`).
+- **No raw hex colours** (audit D-G23). Lint refuses a hex in a class (`bg-[#FBFBFD]`, `shadow-[…_#cbd5e1]`) or a
+  JSX `style` (`colors/no-raw-hex`, `build-tools/eslint-colors.mjs`). Use a token: the semantic ones above; the
+  colour families, each light and dark — `{hue}-bg` (a tint), `{hue}-ink` (words on it), `{hue}-line` (its edge) and
+  the bare hue (solid) for success, danger, warning, info, violet, teal, sky, rose, orange, amber, yellow, green,
+  red, blue and slate; `ink-4`, `muted`, `primary-soft`. Surfaces dark in both themes — the call and meeting stage,
+  ring cards, media viewers, the image and code editors, the lock screen — use the **stage** tokens (`stage`,
+  `stage-2…4`, `stage-line`, `stage-ink…ink-4`, `stage-accent`, `stage-success`…), the same in both themes. In an
+  arbitrary value use `var(--ws-…)`. Data that brings its colour (an app, a calendar, a person) uses `DATA_TEXT` /
+  `avatarTone` (`src/components/ui.tsx`), and `x.color ?? '#…'` (the person's own colour, with a default) is allowed.
+  The reviewed allow-list in `eslint.config.mjs` names the rest: other companies' marks, the website widget preview,
+  email content, a QR code, text drawn onto a picture.
 - The exceptions are deliberate and few: a QR code is black on a white plate in both themes (a camera needs the
   contrast — `QrCode` in `src/modules/chat/channels/LinkPhone.tsx`), and so is content somebody else designed.
 
@@ -313,7 +321,10 @@ settings):
   offlineFiles in `desktop.files.offline` and `office:readOffline|writeOffline`.
 - **Startup.** After the tabs are restored, `core/startup.ts` opens `startup.screen` in front (`last` keeps the tab
   in front; an app turned off or not given opens Home and says so).
-- **Settings UI.** `src/modules/settings/kit.tsx` is the one look for every settings screen: `SectionHeader`,
+- **Settings UI.** `src/components/SettingsKit.tsx` (D-G09; `modules/settings/kit.tsx` re-exports it) is the one look
+  for every settings screen, in Settings and in each module's own settings: `SectionHeader` (`level={1}` on a module's
+  page), `SettingsGroup` cards (`list` for a card that is a list, `label` when it has no title), `SettingRowFrame` for
+  a row laid out its own way, `SettingsNavItem`/`SettingsNavGroup` for a settings rail,
   `SettingsGroup` cards, `SettingRow` (label, description, control; `LockBadge` "Managed by your organization" with the
   reason as tooltip; `ResetButton`), `RadioCards`, and the sidebar's search over `search-index.ts`. Rows written
   straight under a header are joined into cards by `styles.css` (`[data-setting-row][data-loose]`).
@@ -367,6 +378,14 @@ Vault-sealed, so the database file alone gives nothing to guess against.
 - READ_CACHE is declared in a module's manifest and served by the main
   process for the prefixes in `CACHE_PREFIXES` (`electron/main/index.ts`),
   per module, so an app taken away takes its saved answers with it.
+- Read-only offline (D-G14): Finance, Expenses, Marketing, Cheque Manager and
+  Recruitment keep their reads by the allow-lists in `shared/offline-reads.ts`
+  (never share links, exports, files, webhooks, credentials or one-time print
+  checks). `src/core/offline-read.ts` refuses their writes offline before they
+  are sent (`OFFLINE_READ_ONLY`), and `OfflineReadOnlyBanner`
+  (`src/components/OfflineReadOnly.tsx`) says "Offline · read-only" with the
+  "as of" time of the oldest copy shown. Board declares its vault
+  (`PARTIAL_WRITE`: packs read offline, comments and circular responses queued).
 - Garage (`modules/garage`) is a shell with a rail (`GarageShell.tsx`), the
   day's screens, the Job 360° (`JobCard.tsx`) whose heavier tabs are lazy
   chunks under `job/`, the check-in, vehicles, customers, reports and the

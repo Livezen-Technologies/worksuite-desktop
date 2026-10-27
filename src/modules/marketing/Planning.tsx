@@ -12,7 +12,7 @@ import { money, type Budget, type BudgetTotals, type CalendarItem } from './wsd'
 import { StatGrid } from '../../components/StatCard';
 
 const TONE: Record<CalendarItem['type'], string> = {
-  email: 'bg-primary/15 text-primary', channel: 'bg-success/15 text-success', call: 'bg-warning/20 text-ink', journey: 'bg-[#7C3AED]/15 text-[#6D28D9] dark:text-[#C4B5FD]', event: 'bg-ground text-ink',
+  email: 'bg-primary/15 text-primary', channel: 'bg-success/15 text-success', call: 'bg-warning/20 text-ink', journey: 'bg-violet/15 text-violet dark:text-violet-ink', event: 'bg-ground text-ink',
 };
 const WORD: Record<CalendarItem['type'], string> = { email: 'Email', channel: 'WhatsApp / SMS', call: 'Calls', journey: 'Journey', event: 'Event' };
 const iso = (d: Date) => d.toISOString().slice(0, 10);

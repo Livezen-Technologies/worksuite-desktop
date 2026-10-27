@@ -83,7 +83,7 @@ export default function Customers({ org, openId, onOpen, onOpenInvoice, onOpenPa
           </div>
           {rows.length ? (
             rows.map((c) => (
-              <button key={c.id} type="button" data-customer={c.id} onClick={() => onOpen(c.id)} className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === c.id && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+              <button key={c.id} type="button" data-customer={c.id} onClick={() => onOpen(c.id)} className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === c.id && 'bg-info-soft dark:bg-selection/40')}>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <b className="truncate text-ink">{c.name}</b>
                   {c.email ? <span className="truncate text-[11.5px] text-ink-3">{c.email}</span> : null}
@@ -92,7 +92,7 @@ export default function Customers({ org, openId, onOpen, onOpenInvoice, onOpenPa
                 <span className="w-[120px] shrink-0 text-right text-ink tabular-nums">{c.billed ? money(c.billed, c.currency) : '—'}</span>
                 <b className="w-[130px] shrink-0 text-right text-ink tabular-nums">{c.outstanding > 0 ? amount(c.outstanding, c.currency) : '—'}</b>
                 <span className={cx('w-[130px] shrink-0 text-right tabular-nums', c.overdue > 0 ? 'font-bold text-danger' : 'text-ink-3')}>{c.overdue > 0 ? amount(c.overdue, c.currency) : '—'}</span>
-                <span className={cx('w-[120px] shrink-0 text-right tabular-nums', c.on_account > 0 ? 'font-bold text-[#9A4A06] dark:text-warning' : 'text-ink-3')}>{c.on_account > 0 ? amount(c.on_account, c.currency) : '—'}</span>
+                <span className={cx('w-[120px] shrink-0 text-right tabular-nums', c.on_account > 0 ? 'font-bold text-warning-ink dark:text-warning' : 'text-ink-3')}>{c.on_account > 0 ? amount(c.on_account, c.currency) : '—'}</span>
               </button>
             ))
           ) : (

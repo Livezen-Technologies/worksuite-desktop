@@ -263,7 +263,7 @@ function BudgetLine({ b, mayEdit, onOpen, onEdit }: { b: Budget; mayEdit: boolea
       <span className="flex shrink-0 flex-col items-end text-right tabular-nums" style={{ width: W.remaining }}>
         {over ? <b className="text-danger">{money(unsigned(b.remaining), b.currency)} over</b> : <span className="text-ink">{money(b.remaining, b.currency)}</span>}
         {b.forecast?.over_by && !over ? (
-          <span className="text-[11px] text-[#9A4A06] dark:text-warning" title={`${b.forecast.basis}. Arithmetic, not a prediction.`}>
+          <span className="text-[11px] text-warning-ink dark:text-warning" title={`${b.forecast.basis}. Arithmetic, not a prediction.`}>
             at this rate {money(b.forecast.over_by, b.currency)} over
           </span>
         ) : null}

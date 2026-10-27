@@ -76,7 +76,7 @@ export function ProfileMenu() {
 
   return (
     <Popover label="Account" width={320} className="rounded-[18px] border border-line shadow-[0_24px_60px_rgb(var(--ws-shadow-rgb)/.22)]">
-      <div className="flex items-center gap-3 bg-[linear-gradient(180deg,#F3F5FE,var(--color-surface))] p-4 dark:bg-[linear-gradient(180deg,var(--color-selection),var(--color-surface))]">
+      <div className="flex items-center gap-3 bg-[linear-gradient(180deg,var(--ws-info-soft),var(--color-surface))] p-4 dark:bg-[linear-gradient(180deg,var(--color-selection),var(--color-surface))]">
         <span className="relative">
           <UserPicture name={me?.name} src={me?.avatar} size={52} className="!bg-primary text-[17px] !text-white" />
           {shown ? <span className="absolute right-0 bottom-0 h-3.5 w-3.5 rounded-full border-[2.5px] border-surface" style={{ background: shown.dot }} /> : null}
@@ -126,7 +126,7 @@ export function ProfileMenu() {
           icon="lock"
           label="Security"
           onClick={() => go('/account/security')}
-          extra={mfa.data ? <span className={cx('flex h-6 items-center rounded-full px-2.5 text-[12px] font-semibold', mfa.data.enabled ? 'bg-[#E6F6EE] text-[#1F7A4D] dark:bg-success-bg dark:text-success' : 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning')}>{mfa.data.enabled ? '2FA on' : '2FA off'}</span> : null}
+          extra={mfa.data ? <span className={cx('flex h-6 items-center rounded-full px-2.5 text-[12px] font-semibold', mfa.data.enabled ? 'bg-success-bg text-success dark:bg-success-bg dark:text-success' : 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning')}>{mfa.data.enabled ? '2FA on' : '2FA off'}</span> : null}
         />
         <MenuRow icon="image" label="Profile pictures" onClick={() => go('/account/pictures')} />
         <MenuRow icon="key" label="My access" onClick={() => go('/account/access')} />
@@ -153,7 +153,7 @@ export function ProfileMenu() {
             </div>
           </div>
         ) : (
-          <button type="button" onClick={() => (active ? (closeOverlay(), openSignOut(active.id)) : setConfirm(true))} className="flex h-9 w-full items-center gap-[11px] rounded-[9px] px-2.5 text-[13px] font-medium text-[#B42318] hover:bg-danger-bg dark:text-danger">
+          <button type="button" onClick={() => (active ? (closeOverlay(), openSignOut(active.id)) : setConfirm(true))} className="flex h-9 w-full items-center gap-[11px] rounded-[9px] px-2.5 text-[13px] font-medium text-danger hover:bg-danger-bg dark:text-danger">
             <Icon name="logout" size={17} /> Sign out
           </button>
         )}

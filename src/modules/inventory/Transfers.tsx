@@ -105,7 +105,7 @@ export default function Transfers({
                   type="button"
                   data-transfer={t.id}
                   onClick={() => onOpen(t.id)}
-                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === t.id && 'bg-[#F4F6FE] dark:bg-selection/40')}
+                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === t.id && 'bg-info-soft dark:bg-selection/40')}
                 >
                   <b className="min-w-0 flex-1 truncate text-ink">{t.reference}</b>
                   <span className="shrink-0 truncate text-ink-2" style={{ width: W.from }}>

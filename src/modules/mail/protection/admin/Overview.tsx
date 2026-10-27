@@ -74,11 +74,11 @@ function OverviewBody({ o }: { o: ProtectionOverview }) {
   const t = o.tiles;
   const tiles = [
     { k: text('Messages checked'), v: num(t.checked), d: text('incoming and outgoing'), tone: 'text-ink' },
-    { k: text('Delivered clean'), v: num(t.clean), d: pct(t.clean, t.checked), tone: 'text-[#1F7A4D] dark:text-[#5FD39A]' },
-    { k: text('Junk Email'), v: num(t.junk), d: text('{pct} · {n} marked Not junk', { pct: pct(t.junk, t.checked), n: num(t.junk_not_junk) }), tone: 'text-[#9A4A06] dark:text-[#F5B26B]' },
-    { k: text('Quarantined'), v: num(t.quarantined), d: text('{held} held now · {n} requests', { held: num(t.held_now), n: num(t.requests) }), tone: 'text-[#9A4A06] dark:text-[#F5B26B]' },
+    { k: text('Delivered clean'), v: num(t.clean), d: pct(t.clean, t.checked), tone: 'text-success dark:text-success-ink' },
+    { k: text('Junk Email'), v: num(t.junk), d: text('{pct} · {n} marked Not junk', { pct: pct(t.junk, t.checked), n: num(t.junk_not_junk) }), tone: 'text-warning-ink dark:text-orange-ink' },
+    { k: text('Quarantined'), v: num(t.quarantined), d: text('{held} held now · {n} requests', { held: num(t.held_now), n: num(t.requests) }), tone: 'text-warning-ink dark:text-orange-ink' },
     { k: text('Refused at gateway'), v: num(t.refused), d: text('never accepted'), tone: 'text-ink-2' },
-    { k: text('Malware stopped'), v: num(t.malware), d: text('{in} inbound · {out} outgoing', { in: num(t.malware_in), out: num(t.malware_out) }), tone: 'text-[#B42318] dark:text-[#FF8A7A]' },
+    { k: text('Malware stopped'), v: num(t.malware), d: text('{in} inbound · {out} outgoing', { in: num(t.malware_in), out: num(t.malware_out) }), tone: 'text-danger dark:text-danger-ink' },
   ];
   return (
     <>

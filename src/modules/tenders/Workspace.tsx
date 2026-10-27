@@ -184,7 +184,7 @@ export default function Workspace({
           </Fact>
           {r.outcome === 'won' ? (
             <Fact label="Awarded">
-              <b className="text-[#145C39] tabular-nums dark:text-success">{money(r.award_value, r.currency)}</b>
+              <b className="text-success-ink tabular-nums dark:text-success">{money(r.award_value, r.currency)}</b>
             </Fact>
           ) : r.outcome === 'lost' ? (
             <Fact label="Winning price">
@@ -208,7 +208,7 @@ export default function Workspace({
                 type="button"
                 disabled={busy !== null}
                 onClick={() => void move(s.key, s.label)}
-                className={cx(btnSmall, s.key === 'won' && '!border-[#9BD3B3] !text-[#145C39] dark:!text-success', (s.key === 'lost' || s.key === 'cancelled') && '!text-ink-2')}
+                className={cx(btnSmall, s.key === 'won' && '!border-success-line !text-success-ink dark:!text-success', (s.key === 'lost' || s.key === 'cancelled') && '!text-ink-2')}
               >
                 {busy === `move:${s.key}` ? 'Checking…' : s.key === 'won' ? 'Won…' : s.key === 'lost' ? 'Lost…' : s.key === 'cancelled' ? 'Cancelled…' : s.label}
               </button>
@@ -221,7 +221,7 @@ export default function Workspace({
             onClick={() => onTab('checklist')}
             className={cx(
               'flex items-start gap-2 rounded-[9px] px-3 py-2 text-left text-[12.5px] hover:underline',
-              req.missing === 0 ? 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success' : 'bg-[#FFF4E0] text-[#7A3B05] dark:bg-warning-bg dark:text-warning',
+              req.missing === 0 ? 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success' : 'bg-warning-bg text-warning-strong dark:bg-warning-bg dark:text-warning',
             )}
           >
             <Icon name={req.missing === 0 ? 'check-circle' : 'warning'} size={15} className="mt-px shrink-0" />
@@ -363,7 +363,7 @@ function Overview({ d, canManage, busy, onRescore, onApprovals, onExpenses }: { 
             <>
               {applied.map((x, i) => (
                 <div key={`a${i}`} className="flex items-start gap-2 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0">
-                  <b className={cx('w-9 shrink-0 text-right tabular-nums', x.points > 0 ? 'text-[#145C39] dark:text-success' : x.points < 0 ? 'text-danger' : 'text-ink-3')}>{x.points > 0 ? `+${x.points}` : x.points}</b>
+                  <b className={cx('w-9 shrink-0 text-right tabular-nums', x.points > 0 ? 'text-success-ink dark:text-success' : x.points < 0 ? 'text-danger' : 'text-ink-3')}>{x.points > 0 ? `+${x.points}` : x.points}</b>
                   <span className="flex min-w-0 flex-col">
                     <b className="text-ink">{x.rule}</b>
                     <span className="text-[11.5px] text-ink-3">{x.reason}</span>
@@ -592,7 +592,7 @@ function MoveSheet({ id, to, label, blockers, onClose, onDone }: { id: number; t
           <p className="m-0 text-[13px] text-ink-2">
             {blockers.length} {blockers.length === 1 ? 'thing is' : 'things are'} outstanding. Moving anyway is allowed, and the history will say what was missing.
           </p>
-          <ul className="m-0 flex max-h-[220px] flex-col gap-1 overflow-y-auto rounded-[9px] bg-[#FFF4E0] px-3 py-2 text-[12.5px] text-[#7A3B05] dark:bg-warning-bg dark:text-warning" aria-label="Outstanding">
+          <ul className="m-0 flex max-h-[220px] flex-col gap-1 overflow-y-auto rounded-[9px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-strong dark:bg-warning-bg dark:text-warning" aria-label="Outstanding">
             {blockers.map((b, i) => (
               <li key={i} className="ml-3 list-disc">
                 {b}
@@ -639,7 +639,7 @@ function useDecision<T>(send: (d: T, override: boolean) => Promise<unknown>, don
 function Refusal({ refused }: { refused: { message: string; override: boolean } | null }) {
   if (!refused) return null;
   return (
-    <p className="m-0 rounded-[9px] bg-[#FCE9E4] px-3 py-2 text-[12.5px] text-[#8C2A14] dark:bg-danger-bg dark:text-danger">
+    <p className="m-0 rounded-[9px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger-ink dark:bg-danger-bg dark:text-danger">
       {refused.message}
       {refused.override ? ' If the news came before the paperwork, record it anyway — the history will say it was out of order.' : ''}
     </p>

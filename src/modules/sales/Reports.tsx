@@ -88,7 +88,7 @@ export default function Reports({ org }: { org: string }) {
       <nav aria-label="Reports" className="sticky top-0 flex w-[190px] shrink-0 flex-col gap-0.5">
         <div className="mb-1 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">Reports</div>
         {REPORTS.map((r) => (
-          <button key={r.id} type="button" aria-current={r.id === report ? 'page' : undefined} onClick={() => setReport(r.id)} className={cx('flex h-8 items-center rounded-[8px] px-2.5 text-left text-[13px]', r.id === report ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}>
+          <button key={r.id} type="button" aria-current={r.id === report ? 'page' : undefined} onClick={() => setReport(r.id)} className={cx('flex h-8 items-center rounded-[8px] px-2.5 text-left text-[13px]', r.id === report ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}>
             {r.label}
           </button>
         ))}

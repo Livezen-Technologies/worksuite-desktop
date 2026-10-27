@@ -88,7 +88,7 @@ function Glyph({ state }: { state: 'done' | 'next' | 'todo' }) {
     <span
       className={cx(
         'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold',
-        state === 'done' ? 'bg-[#1F7A4D] text-white' : state === 'next' ? 'border-2 border-primary' : 'border-[1.5px] border-[#C9CFDD] dark:border-line',
+        state === 'done' ? 'bg-success text-white' : state === 'next' ? 'border-2 border-primary' : 'border-[1.5px] border-slate-line dark:border-line',
       )}
     >
       {state === 'done' ? '✓' : ''}
@@ -117,7 +117,7 @@ export function StepList({ state, actions }: { state: ObState; actions?: (s: ObS
         const chip = stepChip(s, state.next);
         const acts = actions?.(s) ?? [];
         return (
-          <div key={s.step} data-step={s.step} className={cx('flex items-start gap-2.5 border-b border-line/70 px-3.5 py-2.5 last:border-b-0', s.step === state.next && !done && 'bg-[#F6F7FE] dark:bg-selection/40')}>
+          <div key={s.step} data-step={s.step} className={cx('flex items-start gap-2.5 border-b border-line/70 px-3.5 py-2.5 last:border-b-0', s.step === state.next && !done && 'bg-info-soft dark:bg-selection/40')}>
             <span className="pt-px">
               <Glyph state={done ? 'done' : s.step === state.next ? 'next' : 'todo'} />
             </span>

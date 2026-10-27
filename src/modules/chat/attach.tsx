@@ -15,17 +15,17 @@ import { Select } from '../../components/Select';
 export type AttachChoice = 'document' | 'image' | 'video' | 'audio' | 'any' | 'drive' | 'camera' | 'voice' | 'upload' | 'paste';
 
 const ALL_CHOICES: Array<{ id: AttachChoice; icon: string; label: string; hint: string; tone: string }> = [
-  { id: 'document', icon: 'file-text', label: 'Document', hint: 'PDF, Word, Excel…', tone: 'bg-[#E6ECFF] text-[#23349E] dark:bg-selection dark:text-primary' },
-  { id: 'image', icon: 'file-image', label: 'Image', hint: 'PNG, JPG, GIF…', tone: 'bg-[#E3F4EC] text-[#1F7A4D] dark:bg-success-bg dark:text-success' },
-  { id: 'video', icon: 'film', label: 'Video', hint: 'MP4, MOV, WEBM', tone: 'bg-[#F1E8FB] text-[#6B3FB5] dark:bg-[#2A1F4A] dark:text-[#B69CF0]' },
-  { id: 'audio', icon: 'music', label: 'Audio', hint: 'MP3, WAV, OGG', tone: 'bg-[#FDEEDC] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' },
+  { id: 'document', icon: 'file-text', label: 'Document', hint: 'PDF, Word, Excel…', tone: 'bg-info-bg text-primary dark:bg-selection dark:text-primary' },
+  { id: 'image', icon: 'file-image', label: 'Image', hint: 'PNG, JPG, GIF…', tone: 'bg-success-bg text-success dark:bg-success-bg dark:text-success' },
+  { id: 'video', icon: 'film', label: 'Video', hint: 'MP4, MOV, WEBM', tone: 'bg-violet-bg text-violet-ink dark:text-violet' },
+  { id: 'audio', icon: 'music', label: 'Audio', hint: 'MP3, WAV, OGG', tone: 'bg-orange-bg text-warning-ink dark:bg-warning-bg dark:text-warning' },
   { id: 'any', icon: 'paperclip', label: 'Any file', hint: 'Browse everything', tone: 'bg-subtle text-ink-2' },
-  { id: 'drive', icon: 'disk', label: 'From Drive', hint: 'Share from Drive', tone: 'bg-[#E1F2F4] text-[#0E7C86] dark:bg-teal/15 dark:text-[#5CC6CF]' },
-  { id: 'camera', icon: 'camera', label: 'Camera / Photo', hint: 'Take a picture', tone: 'bg-[#FCE7EF] text-[#B83280] dark:bg-[#3A1830] dark:text-[#F08CC0]' },
+  { id: 'drive', icon: 'disk', label: 'From Drive', hint: 'Share from Drive', tone: 'bg-teal-bg text-teal dark:bg-teal/15 dark:text-teal-ink' },
+  { id: 'camera', icon: 'camera', label: 'Camera / Photo', hint: 'Take a picture', tone: 'bg-rose-bg text-rose' },
   { id: 'voice', icon: 'mic', label: 'Voice message', hint: 'Record and send', tone: 'bg-danger-bg text-danger' },
   // The website channel's picker (P-04 AttachmentPicker · website): any file the visitor can receive, and the clipboard.
-  { id: 'upload', icon: 'upload', label: 'Upload a file', hint: '', tone: 'bg-[#E6ECFF] text-[#23349E] dark:bg-selection dark:text-primary' },
-  { id: 'paste', icon: 'clipboard-paste', label: 'Paste a screenshot', hint: '', tone: 'bg-[#E3F4EC] text-[#1F7A4D] dark:bg-success-bg dark:text-success' },
+  { id: 'upload', icon: 'upload', label: 'Upload a file', hint: '', tone: 'bg-info-bg text-primary dark:bg-selection dark:text-primary' },
+  { id: 'paste', icon: 'clipboard-paste', label: 'Paste a screenshot', hint: '', tone: 'bg-success-bg text-success dark:bg-success-bg dark:text-success' },
 ];
 
 export function AttachMenu({ onPick, onClose, compact, align = 'left', only, copy }: {
@@ -131,7 +131,7 @@ export function Tray({ items, transfers, onRemove, onRetry, compact }: { items: 
         const look = lookOf(s, t);
         const size = s.kind === 'disk' ? s.file.size : s.blob.size;
         return (
-          <div key={s.key} role="listitem" className={cx('relative flex shrink-0 items-center gap-2 rounded-[10px] border bg-surface px-2.5 py-2', look.tone === 'failed' ? 'border-[#F1B8A8]' : 'border-line', compact ? 'w-[200px]' : 'w-[232px]')}>
+          <div key={s.key} role="listitem" className={cx('relative flex shrink-0 items-center gap-2 rounded-[10px] border bg-surface px-2.5 py-2', look.tone === 'failed' ? 'border-danger-line' : 'border-line', compact ? 'w-[200px]' : 'w-[232px]')}>
             <FileBadge name={stagedName(s)} size={compact ? 28 : 32} />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <b className="truncate text-[12px] text-ink" title={stagedName(s)}>{stagedName(s)}</b>
@@ -332,7 +332,7 @@ export function CameraCapture({ onTaken, onClose }: { onTaken: (blob: Blob, name
         )
       }
     >
-      <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-[10px] bg-[#0F1B3D]">
+      <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-[10px] bg-navy">
         <video ref={video} muted playsInline className={cx('h-full w-full -scale-x-100 object-cover', state === 'taken' && 'hidden')} aria-label="Camera preview" />
         {shot && state === 'taken' ? <img src={shot.url} alt="The picture taken" className="h-full w-full object-contain" /> : null}
         {state === 'starting' ? <span className="absolute text-[13px] text-white/80">Starting the camera…</span> : null}
@@ -350,7 +350,7 @@ export function RefusedNotes({ notes, onDismiss }: { notes: Array<{ key: string;
   return (
     <div className="flex flex-col gap-1 px-1 pt-1" role="alert">
       {notes.map((n) => (
-        <div key={n.key} data-refused className="flex items-center gap-2 rounded-[10px] border border-[#F3C1BB] bg-[#FDECEA] px-2.5 py-2 text-[12px] text-[#A63224] dark:border-danger/40 dark:bg-danger-bg dark:text-danger">
+        <div key={n.key} data-refused className="flex items-center gap-2 rounded-[10px] border border-danger-line bg-danger-bg px-2.5 py-2 text-[12px] text-orange-ink dark:border-danger/40 dark:bg-danger-bg dark:text-danger">
           <span className="min-w-0 flex-1">{n.text}</span>
           <button type="button" aria-label="Dismiss" title="Dismiss" onClick={() => onDismiss(n.key)} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full hover:bg-white/60 dark:hover:bg-transparent">
             <Icon name="x" size={12} />

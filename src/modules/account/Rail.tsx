@@ -40,7 +40,7 @@ export function AccountRail({ section, onPick }: { section: Section; onPick: (s:
   const personal = usePersonal();
 
   return (
-    <nav aria-label="My account" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="My account" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="flex items-center gap-2.5 px-3 pt-3.5 pb-2.5">
         <UserPicture name={me?.name} src={me?.avatar} size={36} className="!bg-primary !text-white" />
         <span className="flex min-w-0 flex-col">
@@ -65,13 +65,13 @@ export function AccountRail({ section, onPick }: { section: Section; onPick: (s:
               type="button"
               aria-current={active ? 'page' : undefined}
               onClick={() => onPick(it.id)}
-              className={cx('relative flex h-8 shrink-0 items-center gap-2.5 rounded-[9px] pr-2 pl-2.5 text-left', active ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+              className={cx('relative flex h-8 shrink-0 items-center gap-2.5 rounded-[9px] pr-2 pl-2.5 text-left', active ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
             >
               <span className={cx('absolute top-[7px] bottom-[7px] left-0 w-[3px] rounded-r-[3px]', active ? 'bg-primary' : 'bg-transparent')} />
               <Icon name={it.icon} size={16} className={cx('shrink-0', active ? 'text-primary' : 'text-ink-3')} />
               <span className="min-w-0 flex-1 truncate">{it.label}</span>
               {badge ? (
-                <span title={`${badge} failed sign-in${badge === 1 ? '' : 's'} this week`} className="flex h-[18px] min-w-[18px] items-center justify-center rounded-[9px] bg-[#FFF4E0] px-[5px] text-[10.5px] font-bold text-[#9A4A06] tabular-nums dark:bg-warning-bg dark:text-warning">
+                <span title={`${badge} failed sign-in${badge === 1 ? '' : 's'} this week`} className="flex h-[18px] min-w-[18px] items-center justify-center rounded-[9px] bg-warning-bg px-[5px] text-[10.5px] font-bold text-warning-ink tabular-nums dark:bg-warning-bg dark:text-warning">
                   {badge}
                 </span>
               ) : null}
@@ -81,7 +81,7 @@ export function AccountRail({ section, onPick }: { section: Section; onPick: (s:
       </div>
       {known ? (
         <button type="button" onClick={() => onPick('security')} className="m-2.5 flex flex-col gap-2 rounded-[12px] border border-line bg-surface p-3 text-left hover:border-primary/40">
-          <span className={cx('flex items-center gap-2 text-[12px] font-bold', protectedWell ? 'text-[#1F7A4D] dark:text-success' : 'text-[#9A4A06] dark:text-warning')}>
+          <span className={cx('flex items-center gap-2 text-[12px] font-bold', protectedWell ? 'text-success dark:text-success' : 'text-warning-ink dark:text-warning')}>
             <Icon name={protectedWell ? 'shield-check' : 'shield-alert'} size={15} />
             {protectedWell ? 'Account protected' : 'Only a password protects you'}
           </span>
@@ -107,7 +107,7 @@ export function AccountRail({ section, onPick }: { section: Section; onPick: (s:
           </div>
         </div>
       ) : (
-        <button type="button" onClick={() => setConfirm(true)} className="mx-2.5 mb-3 flex h-[34px] items-center gap-2.5 rounded-[10px] px-2.5 text-[12.5px] font-semibold text-[#B42318] hover:bg-danger-bg dark:text-danger">
+        <button type="button" onClick={() => setConfirm(true)} className="mx-2.5 mb-3 flex h-[34px] items-center gap-2.5 rounded-[10px] px-2.5 text-[12.5px] font-semibold text-danger hover:bg-danger-bg dark:text-danger">
           <Icon name="logout" size={16} /> Sign out
         </button>
       )}

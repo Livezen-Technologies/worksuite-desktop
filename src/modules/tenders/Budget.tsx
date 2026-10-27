@@ -128,7 +128,7 @@ export default function Budget({
               </span>
               <span className="flex justify-between border-t border-line/70 pt-2">
                 <span className="text-ink-3">Profit</span>
-                <b className={cx('tabular-nums', budget.margin.profit.startsWith('-') ? 'text-danger' : 'text-[#145C39] dark:text-success')}>
+                <b className={cx('tabular-nums', budget.margin.profit.startsWith('-') ? 'text-danger' : 'text-success-ink dark:text-success')}>
                   {money(budget.margin.profit, cur)} · {budget.margin.percent}%
                 </b>
               </span>

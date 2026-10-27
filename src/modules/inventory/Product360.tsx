@@ -65,7 +65,7 @@ import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
  * JPEG, large photos reduced, the files kept in WorkSuite Files), alt text, roles and order; specification values and
  * SEO fields (Save, ⌘/Ctrl+S); publishing to a channel; generating the variants that are missing.
  */
-const TONE_BAR = { green: 'bg-[#16a34a]', amber: 'bg-[#d97706]', red: 'bg-danger' } as const;
+const TONE_BAR = { green: 'bg-green', amber: 'bg-amber-strong', red: 'bg-danger' } as const;
 
 export default function Product360({
   id,
@@ -920,7 +920,7 @@ function SeoTab({ id, lang, onLang, typed, canEdit, onType, onUndo }: { id: numb
       )}
     </label>
   );
-  const counter = (r: { n: number; tone: 'green' | 'amber' | 'red'; words: string }) => <span className={cx('font-normal tabular-nums', r.tone === 'green' ? 'text-[#166534] dark:text-success' : r.tone === 'amber' ? 'text-warning-ink' : 'text-danger')}>{`${r.n} · ${r.words}`}</span>;
+  const counter = (r: { n: number; tone: 'green' | 'amber' | 'red'; words: string }) => <span className={cx('font-normal tabular-nums', r.tone === 'green' ? 'text-success-ink dark:text-success' : r.tone === 'amber' ? 'text-warning-ink' : 'text-danger')}>{`${r.n} · ${r.words}`}</span>;
   return (
     <div className="grid grid-cols-1 gap-3.5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <Card
@@ -949,8 +949,8 @@ function SeoTab({ id, lang, onLang, typed, canEdit, onType, onUndo }: { id: numb
           {box('robots', 'Robots', { placeholder: 'index, follow' })}
         </div>
         <div className="flex flex-col gap-0.5 rounded-[10px] border border-line px-3 py-2.5">
-          <span className="text-[12px] text-[#166534] dark:text-success">…/{val('slug') || d.defaults.slug || ''}</span>
-          <span className="truncate text-[15px] text-[#1a0dab] dark:text-primary">{val('meta_title') || d.defaults.meta_title || 'No title'}</span>
+          <span className="text-[12px] text-success-ink dark:text-success">…/{val('slug') || d.defaults.slug || ''}</span>
+          <span className="truncate text-[15px] text-primary dark:text-primary">{val('meta_title') || d.defaults.meta_title || 'No title'}</span>
           <span className="line-clamp-2 text-[12.5px] text-ink-2">{val('meta_description') || d.defaults.meta_description || 'No description'}</span>
         </div>
       </Card>

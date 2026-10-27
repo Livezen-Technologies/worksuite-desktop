@@ -111,7 +111,7 @@ export default function Reader({ meetingId, item, meeting }: { meetingId: number
         <div className="px-1.5 pb-2"><div className="text-[13px] font-bold">{title}</div><Muted>{fromVault ? `Pack v${vaultPack.data!.summary.version} · offline · expires ${fmtDate(vaultPack.data!.summary.expiresAt)}` : packVersion ? `Pack v${packVersion.version}${packVersion.pages ? ` · ${packVersion.pages} pages` : ''}` : ''}</Muted></div>
         <ol>
           {shownItems.map((i) => (
-            <li key={i.id} style={{ paddingInlineStart: `${(i.depth ?? 0) * 12}px` }}><button type="button" aria-current={sel?.id === i.id ? 'true' : undefined} onClick={() => setCur(i.id)} className={cx('flex w-full gap-2 rounded-[8px] px-2 py-2 text-left text-[12.5px]', sel?.id === i.id ? 'bg-[#EEF1FD] font-semibold text-primary dark:bg-selection' : 'text-ink-2 hover:bg-subtle')}><b className="w-[24px] shrink-0">{i.number}</b><span className="flex-1">{i.title} <FlagChip flag={flagOf(i.flags)} /></span></button></li>
+            <li key={i.id} style={{ paddingInlineStart: `${(i.depth ?? 0) * 12}px` }}><button type="button" aria-current={sel?.id === i.id ? 'true' : undefined} onClick={() => setCur(i.id)} className={cx('flex w-full gap-2 rounded-[8px] px-2 py-2 text-left text-[12.5px]', sel?.id === i.id ? 'bg-selection font-semibold text-primary dark:bg-selection' : 'text-ink-2 hover:bg-subtle')}><b className="w-[24px] shrink-0">{i.number}</b><span className="flex-1">{i.title} <FlagChip flag={flagOf(i.flags)} /></span></button></li>
           ))}
         </ol>
         <Button size="sm" className="mt-auto" loading={ack.isPending} disabled={!fromVault && !packVersion} onClick={() => ack.mutate()}>Acknowledge pack</Button>
@@ -126,7 +126,7 @@ export default function Reader({ meetingId, item, meeting }: { meetingId: number
         <div className="flex items-center justify-between text-[13px] font-bold">My notes {fromVault ? <Status tone="warning">Offline</Status> : null}</div>
         <ul className="space-y-1.5">
           {paperNotes.map((n) => (
-            <li key={n.id} className={cx('rounded-[8px] border-l-4 bg-subtle p-2 text-[12px]', n.visibility !== 'PRIVATE' ? 'border-primary' : 'border-[#EAB308]')}>
+            <li key={n.id} className={cx('rounded-[8px] border-l-4 bg-subtle p-2 text-[12px]', n.visibility !== 'PRIVATE' ? 'border-primary' : 'border-amber')}>
               <div className="font-semibold">p {n.page ?? '—'} · {titleCase(n.kind)} · {n.visibility === 'PRIVATE' ? 'Private' : titleCase(n.visibility)}</div>
               {n.anchor?.text ? <div className="font-serif">“{n.anchor.text}”</div> : null}
               {n.body ? <div>{n.body}</div> : null}

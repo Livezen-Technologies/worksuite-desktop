@@ -65,7 +65,7 @@ export default function MyAccess() {
               <ul className="mt-2 mb-0 flex list-none flex-col gap-2 pl-0">
                 {q.data.excluded.map((c) => (
                   <li key={c.id}>
-                    <b>{c.name}</b> <span className="ml-1 rounded-[6px] bg-[#FDEBC8] px-1.5 py-0.5 text-[11px] dark:bg-warning/20">{c.role}</span>
+                    <b>{c.name}</b> <span className="ml-1 rounded-[6px] bg-orange-bg px-1.5 py-0.5 text-[11px] dark:bg-warning/20">{c.role}</span>
                     <p className="mt-0.5 mb-0 opacity-90">{c.why}</p>
                   </li>
                 ))}
@@ -89,7 +89,7 @@ export default function MyAccess() {
               const yes = p.held || can(perms, p.slug);
               return (
                 <div key={p.slug} data-permission={p.slug} className="flex items-center gap-3 border-b border-line/60 px-4 py-2.5 text-[13px] last:border-b-0">
-                  <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full', yes ? 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-3')}>
+                  <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full', yes ? 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-3')}>
                     <Icon name={yes ? 'check' : 'minus'} size={13} />
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">

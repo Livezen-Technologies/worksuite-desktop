@@ -262,7 +262,7 @@ export function SignatureEditor({
             <span className="font-semibold">{text('Dark-mode logo')}</span>
             {darkLogo ? (
               <>
-                <img src={darkLogo} alt={text('Dark-mode logo')} className="h-8 rounded bg-[#1e1f22] p-1" />
+                <img src={darkLogo} alt={text('Dark-mode logo')} className="h-8 rounded bg-stage-gray p-1" />
                 <Button size="sm" variant="ghost" onClick={() => setDarkLogo(null)}>
                   {text('Remove')}
                 </Button>

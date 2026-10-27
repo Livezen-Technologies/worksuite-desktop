@@ -145,7 +145,7 @@ function SectionNav({ items, current, onPick }: { items: SectionItem[]; current:
               aria-current={on ? 'page' : undefined}
               title={n.native ? n.label : `${n.label} — opens in your browser`}
               onClick={() => (n.native ? onPick(n.key) : void call('app:openInBrowser', { path: browserPath(n.key) }))}
-              className={cx('flex h-8 items-center gap-2 rounded-[8px] px-2.5 text-left text-[13px]', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+              className={cx('flex h-8 items-center gap-2 rounded-[8px] px-2.5 text-left text-[13px]', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
             >
               <span className="min-w-0 flex-1 truncate">{n.label}</span>
               {n.native ? null : <Icon name="external" size={12} className="shrink-0 text-ink-3" />}
@@ -308,7 +308,7 @@ function CompanyRules({ orgId, mayAdmin }: { orgId: number; mayAdmin: boolean })
         </Field>
         <Check label="Every claim must name a cost centre" checked={v.requireCostCentre} disabled={off} onChange={(on) => set({ requireCostCentre: on })} />
         <Check label="Every claim must be charged to a project" checked={v.requireProject} disabled={off} onChange={(on) => set({ requireProject: on })} />
-        <label className="flex items-start gap-2 rounded-[10px] border border-[#F5D48A] bg-[#FFF8E6] px-3 py-2.5 text-[12.5px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+        <label className="flex items-start gap-2 rounded-[10px] border border-warning-line bg-warning-bg px-3 py-2.5 text-[12.5px] text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           <Checkbox aria-label="Let people approve their own claims" checked={v.allowSelfApproval} disabled={off} onChange={(e) => set({ allowSelfApproval: e.target.checked })} className="mt-0.5" />
           <span className="flex flex-col gap-0.5">
             <b>Let people approve their own claims</b>
@@ -1051,7 +1051,7 @@ function MyAccess({ orgId, orgs, onGo }: { orgId: number; orgs: Org[]; onGo: (v:
             <Panel title="Your expense permissions" bodyClassName="flex flex-col">
               {a.permissions.map((p) => (
                 <div key={p.slug} data-permission={p.slug} className="flex items-center gap-3 border-b border-line/60 px-3.5 py-2.5 text-[13px] last:border-b-0">
-                  <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full', p.held ? 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-3')}>
+                  <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full', p.held ? 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-3')}>
                     <Icon name={p.held ? 'check' : 'minus'} size={13} />
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">

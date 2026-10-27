@@ -115,7 +115,7 @@ function Editor({ id, active }: { id: number; active: boolean }) {
         <button type="button" className={btnPrimary} disabled={!dirty || save.isPending} onClick={() => save.mutate()}>Save draft ⌘S</button>
       </div>
       {t.data.validation?.length ? (
-        <ul className="m-0 list-none border-b border-line bg-[#FFF4DB] px-4 py-1.5 text-[12px] text-[#8A5200]">
+        <ul className="m-0 list-none border-b border-line bg-warning-bg px-4 py-1.5 text-[12px] text-yellow-ink">
           {t.data.validation.slice(0, 3).map((v, i) => <li key={i}>{`${v.severity === 'error' ? 'Error' : 'Warning'}: ${v.message}`}</li>)}
         </ul>
       ) : null}

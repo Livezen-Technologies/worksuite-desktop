@@ -101,9 +101,9 @@ function SpamSecurityForm({ s, offline }: { s: ProtectionSettings; offline: bool
               <Segmented label={text('Spam filter level')} value={s.junk_level} options={[['standard', text('Standard')], ['strict', text('Strict')]]} disabled={offline} onChange={(v) => set({ junk_level: v })} />
             </div>
             <div aria-hidden className="flex h-2 overflow-hidden rounded-[4px]">
-              <span className="w-[30%] bg-[#2E9E6A]" />
-              <span className={cx('bg-[#E0A030]', s.junk_level === 'strict' ? 'w-[25%]' : 'w-[20%]')} />
-              <span className="flex-1 bg-[#D25B4B]" />
+              <span className="w-[30%] bg-green" />
+              <span className={cx('bg-amber', s.junk_level === 'strict' ? 'w-[25%]' : 'w-[20%]')} />
+              <span className="flex-1 bg-red" />
             </div>
             <div className="flex text-[11.5px] text-ink-2">
               <span className="w-[30%]">{text('Inbox')}</span>
@@ -254,7 +254,7 @@ function SendersCard({ offline }: { offline: boolean }) {
           ))}
         </ul>
       )}
-      <p className="flex gap-2 rounded-[9px] bg-[#E6F0FF] px-[11px] py-[9px] text-[12px] leading-[1.45] text-[#0A4AB0] dark:bg-[#0F2A52] dark:text-[#7DB4FF]">
+      <p className="flex gap-2 rounded-[9px] bg-info-bg px-[11px] py-[9px] text-[12px] leading-[1.45] text-blue-ink dark:bg-blue-bg dark:text-indigo-bright">
         <Icon name="info" size={14} className="mt-px shrink-0" />
         <span>{text('Safe senders skip the spam filter only. Viruses, phishing and spoofed mail are still checked.')}</span>
       </p>

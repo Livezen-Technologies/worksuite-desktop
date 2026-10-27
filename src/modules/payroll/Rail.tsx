@@ -34,18 +34,18 @@ export function PayrollRail({ view, sub, counts, onPick, onMine }: {
         type="button"
         aria-current={on ? 'page' : undefined}
         onClick={(e: MouseEvent) => onPick(id, e.metaKey || e.ctrlKey)}
-        className={cx('flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left', on ? 'bg-[#EEF1FD] font-bold text-[#3B5BDB] dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
+        className={cx('flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left', on ? 'bg-selection font-bold text-brand-soft dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
       >
         <Icon name={icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {n ? <span className="shrink-0 rounded-[9px] bg-[#EAEDFB] px-1.5 text-[11px] font-bold text-[#23349E] tabular-nums dark:bg-primary/15 dark:text-primary">{n}</span> : null}
+        {n ? <span className="shrink-0 rounded-[9px] bg-info-bg px-1.5 text-[11px] font-bold text-primary tabular-nums dark:bg-primary/15 dark:text-primary">{n}</span> : null}
       </button>
     );
   };
   const head = (label: string) => <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>;
 
   return (
-    <nav aria-label="Payroll" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="Payroll" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="px-4 pt-3.5 pb-1">
         <div className="text-[15px] font-extrabold">Payroll</div>
         {sub ? <div className="truncate text-[11.5px] text-ink-3">{sub}</div> : null}

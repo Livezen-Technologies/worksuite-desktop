@@ -106,14 +106,14 @@ export default function Dashboard({
               return (
                 <div key={m.day} className="flex h-full flex-1 items-end justify-center gap-[3px]" title={`${dayWords(m.day)}: ${qty(r)} received, ${qty(i)} issued`}>
                   <span className="w-full max-w-[14px] rounded-t-[3px] bg-primary" style={{ height: `${Math.max(r ? 2 : 0, (r / top) * 100)}%` }} />
-                  <span className="w-full max-w-[14px] rounded-t-[3px] bg-[#f59e0b]" style={{ height: `${Math.max(i ? 2 : 0, (i / top) * 100)}%` }} />
+                  <span className="w-full max-w-[14px] rounded-t-[3px] bg-amber" style={{ height: `${Math.max(i ? 2 : 0, (i / top) * 100)}%` }} />
                 </div>
               );
             })}
             {!days.length ? <span className="m-auto text-[12.5px] text-ink-3">Nothing has moved in the last 14 days.</span> : null}
           </div>
           <div className="flex items-center gap-1.5 px-4 pt-2 pb-3 text-[11.5px] text-ink-3">
-            <span className="h-2 w-2 rounded-[2px] bg-primary" /> received <span className="ml-1.5 h-2 w-2 rounded-[2px] bg-[#f59e0b]" /> issued
+            <span className="h-2 w-2 rounded-[2px] bg-primary" /> received <span className="ml-1.5 h-2 w-2 rounded-[2px] bg-amber" /> issued
             {days.length ? <span className="ml-auto">{`${dayWords(days[0]!.day)} – ${dayWords(days[days.length - 1]!.day)}`}</span> : null}
           </div>
         </Panel>
@@ -137,7 +137,7 @@ export default function Dashboard({
                 onClick={() => (a.view === 'stock' ? onStock(a.key === 'out' ? 'out' : 'low') : a.view === 'so' && onSales ? onSales() : HERE[a.view] !== undefined ? onGo(a.view as InvView, HERE[a.view]) : openWeb(WEB_VIEW[a.view]))}
                 className={cx(
                   'inline-flex h-7 items-center gap-1 rounded-[14px] px-3 text-[12.5px] font-semibold',
-                  a.tone === 'red' ? 'bg-[#FCE9E4] text-[#8C2A14] hover:bg-[#F8DCD3] dark:bg-danger-bg dark:text-danger' : 'bg-[#FFF4E0] text-[#9A4A06] hover:bg-[#FCE8C4] dark:bg-warning-bg dark:text-warning',
+                  a.tone === 'red' ? 'bg-danger-bg text-danger-ink hover:bg-danger-soft dark:bg-danger-bg dark:text-danger' : 'bg-warning-bg text-warning-ink hover:bg-warning-soft dark:bg-warning-bg dark:text-warning',
                 )}
               >
                 {a.label}
@@ -160,9 +160,9 @@ export default function Dashboard({
         <ListPanel title="Stock health" empty="">
           {[
             <Line key="h" title="Products holding stock" right={t.stocked_products.toLocaleString()} onClick={() => onGo('stock')} />,
-            <Line key="l" title="Below minimum" right={t.low_stock} rightClass={t.low_stock ? 'text-[#9A4A06] dark:text-warning' : undefined} onClick={() => onStock('low')} />,
+            <Line key="l" title="Below minimum" right={t.low_stock} rightClass={t.low_stock ? 'text-warning-ink dark:text-warning' : undefined} onClick={() => onStock('low')} />,
             <Line key="o" title="Nothing available" right={t.out_of_stock} rightClass={t.out_of_stock ? 'text-danger' : undefined} onClick={() => onStock('out')} />,
-            <Line key="e" title="Batches expiring" right={t.expiring_batches} rightClass={t.expiring_batches ? 'text-[#9A4A06] dark:text-warning' : undefined} onClick={() => onGo('trk', HERE.trk)} />,
+            <Line key="e" title="Batches expiring" right={t.expiring_batches} rightClass={t.expiring_batches ? 'text-warning-ink dark:text-warning' : undefined} onClick={() => onGo('trk', HERE.trk)} />,
           ]}
         </ListPanel>
         <ListPanel title="Warehouses" empty="No warehouse holds stock yet.">
@@ -188,7 +188,7 @@ export default function Dashboard({
                 title={`${m.code ?? m.name} · ${moveLabel(m.ref_type)}`}
                 sub={[m.ref_no, m.warehouse, stampWords(m.moved_at)].filter(Boolean).join(' · ')}
                 right={signed(q)}
-                rightClass={q > 0 ? 'text-[#166534] dark:text-success' : 'text-danger'}
+                rightClass={q > 0 ? 'text-success-ink dark:text-success' : 'text-danger'}
               />
             );
           })}
@@ -200,7 +200,7 @@ export default function Dashboard({
               title={r.name}
               sub={`${qty(r.available)} left${r.per_day ? ` · ${qty(Math.round(r.per_day * 10) / 10)}/day` : ''}`}
               right={r.available <= 0 ? 'gone' : `${qty(Math.floor(r.days))} ${Math.floor(r.days) === 1 ? 'day' : 'days'}`}
-              rightClass={r.available <= 0 || r.days < 7 ? 'text-danger' : 'text-[#9A4A06] dark:text-warning'}
+              rightClass={r.available <= 0 || r.days < 7 ? 'text-danger' : 'text-warning-ink dark:text-warning'}
               onClick={() => onOpenProduct(r.id)}
             />
           ))}
@@ -214,7 +214,7 @@ export default function Dashboard({
                 title={r.name}
                 sub={`${qty(r.available)} / ${qty(r.minimum)}${r.incoming ? ` · ${qty(r.incoming)} coming` : ''}`}
                 right={covered ? 'covered' : `order ${qty(r.suggest)}`}
-                rightClass={covered ? 'text-[#166534] dark:text-success' : 'text-[#9A4A06] dark:text-warning'}
+                rightClass={covered ? 'text-success-ink dark:text-success' : 'text-warning-ink dark:text-warning'}
                 onClick={() => onOpenProduct(r.id)}
               />
             );

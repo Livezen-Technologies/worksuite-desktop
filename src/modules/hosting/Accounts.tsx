@@ -68,15 +68,15 @@ export default function Accounts({ history }: { history: boolean }) {
           {accounts.isPending ? <Spinner /> : accounts.isError ? <ErrorNote error={accounts.error} onRetry={() => void accounts.refetch()} /> : null}
           <div className="flex flex-col gap-2">
             {(accounts.data ?? []).map((a) => (
-              <div key={a.id} className={cx('flex flex-wrap items-center gap-3 rounded-[10px] border bg-surface px-3.5 py-3', a.last_error ? 'border-[#F5C2BD]' : 'border-line')}>
-                <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[9px] bg-[#0891B2] text-[12px] font-bold text-white">{a.provider.slice(0, 2).toUpperCase()}</span>
+              <div key={a.id} className={cx('flex flex-wrap items-center gap-3 rounded-[10px] border bg-surface px-3.5 py-3', a.last_error ? 'border-danger-line' : 'border-line')}>
+                <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[9px] bg-teal text-[12px] font-bold text-white">{a.provider.slice(0, 2).toUpperCase()}</span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-semibold text-ink">{a.name}</div>
                   <div className="text-[11.5px] text-ink-3">{[a.label ?? a.provider, a.environment && a.environment !== 'live' ? a.environment : null, a.connectable === false ? text('no integration yet') : null, a.supports?.length ? a.supports.join(', ') : null].filter(Boolean).join(' · ')}</div>
                   <div className="text-[11.5px]">
-                    <span className={a.last_error ? 'text-[#B42318]' : 'text-[#1F7A4D]'}>{a.last_error ? text('{why} · {time}', { why: a.last_error, time: when(a.last_error_at) }) : a.last_ok_at ? text('OK at {time}', { time: when(a.last_ok_at) }) : ''}</span>
+                    <span className={a.last_error ? 'text-danger' : 'text-success'}>{a.last_error ? text('{why} · {time}', { why: a.last_error, time: when(a.last_error_at) }) : a.last_ok_at ? text('OK at {time}', { time: when(a.last_ok_at) }) : ''}</span>
                     {a.last_sync_at ? <span className="text-ink-3">{` · ${text('last synced {time}', { time: when(a.last_sync_at) })}`}</span> : null}
-                    {a.paused ? <span className="text-[#9A4A06]">{` · ${text('paused')}`}</span> : null}
+                    {a.paused ? <span className="text-warning-ink">{` · ${text('paused')}`}</span> : null}
                   </div>
                 </div>
                 <span className="font-mono text-[11.5px] text-ink-3">{a.key || '••••'}</span>

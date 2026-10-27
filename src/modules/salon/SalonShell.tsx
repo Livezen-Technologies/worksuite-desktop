@@ -301,7 +301,7 @@ function Rail({ view, desk }: { view: DeskView; desk: Desk }) {
 
   return (
     <nav aria-label="SalonMate" className="flex h-full w-[88px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-surface px-[7px] py-2.5 scroll-thin">
-      <div className="pt-1 pb-2 text-center text-[10px] font-extrabold tracking-[.08em] text-[#6D28D9] dark:text-[#C4B5FD]">SALONMATE</div>
+      <div className="pt-1 pb-2 text-center text-[10px] font-extrabold tracking-[.08em] text-violet dark:text-violet-ink">SALONMATE</div>
       {RAIL.map((r) => {
         const on = r.covers.includes(view);
         return (
@@ -321,7 +321,7 @@ function Rail({ view, desk }: { view: DeskView; desk: Desk }) {
               {r.view === 'outbox' && unsent > 0 ? (
                 <span
                   aria-label={`${unsent} waiting`}
-                  className={cx('absolute -top-1.5 -right-2.5 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold text-white', s && s.refused > 0 ? 'bg-danger' : 'bg-[#F59E0B]')}
+                  className={cx('absolute -top-1.5 -right-2.5 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold text-white', s && s.refused > 0 ? 'bg-danger' : 'bg-amber')}
                 >
                   {unsent > 99 ? '99+' : unsent}
                 </span>

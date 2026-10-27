@@ -144,7 +144,7 @@ export function InvRail({
         title={web ? `${label} — opens in your browser` : inSales ? `${label} — opens in Sales & Orders` : inPurchasing ? `${label} — opens in Purchasing` : label}
         aria-current={on ? 'page' : undefined}
         onClick={() => (inSales ? onSales!() : inPurchasing ? onPurchasing!(id) : web ? openWeb(WEB_VIEW[id as WebView]) : onPick(id as InvView))}
-        className={cx('relative flex h-8 shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+        className={cx('relative flex h-8 shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
       >
         <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
         <Icon name={icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
@@ -153,7 +153,7 @@ export function InvRail({
           <span
             className={cx(
               'flex h-[18px] min-w-5 shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold tabular-nums',
-              tone === 'amber' ? 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' : 'bg-[#FCE9E4] text-[#B91C1C] dark:bg-danger-bg dark:text-danger',
+              tone === 'amber' ? 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning' : 'bg-danger-bg text-danger dark:bg-danger-bg dark:text-danger',
             )}
           >
             {badge}
@@ -169,7 +169,7 @@ export function InvRail({
   const exact = hits.data?.exact ?? null;
 
   return (
-    <nav aria-label="Inventory" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="Inventory" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         {companies.length > 1 ? (
           <OrgSwitcher variant="field" orgs={companies.map((c) => ({ id: String(c.id), name: c.name }))} value={org ? [org] : []} onChange={(ids) => onOrg(ids[0] ?? '')} />

@@ -80,7 +80,7 @@ export function Assist({
         />
         {text.length > WRITER_MAX - 1000 ? <span className="text-[11px] text-ink-3">{text.length.toLocaleString()} of {WRITER_MAX.toLocaleString()} characters</span> : null}
       </label>
-      {unavailable ? <p className="rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#7A4308] dark:text-warning">{unavailable}</p> : null}
+      {unavailable ? <p className="rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-strong dark:text-warning">{unavailable}</p> : null}
       <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="What to do with the text">
         {actions.map((a) =>
           a.key === 'translate' ? (

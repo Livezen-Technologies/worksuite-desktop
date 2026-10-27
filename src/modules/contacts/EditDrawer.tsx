@@ -45,7 +45,7 @@ export function EditDrawer({ contact, defaults, groups, onClose, onSaved }: { co
 
   return (
     <>
-      <div className="no-drag absolute inset-0 z-20 bg-[#0F1B3D]/[.18]" onMouseDown={onClose} />
+      <div className="no-drag absolute inset-0 z-20 bg-navy/[.18]" onMouseDown={onClose} />
       <aside
         role="dialog"
         aria-label={contact ? 'Edit contact' : 'New contact'}

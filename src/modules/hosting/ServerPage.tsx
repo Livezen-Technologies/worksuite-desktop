@@ -143,7 +143,7 @@ export function Bars({ values, label, unit = '' }: { values: number[]; label: st
       </span>
       <div role="img" aria-label={label} className="flex h-10 items-end gap-px">
         {values.map((v, i) => (
-          <span key={i} className="flex-1 rounded-t-[1px] bg-[#0891B2]/70" style={{ height: `${Math.max(2, (v / max) * 100)}%` }} />
+          <span key={i} className="flex-1 rounded-t-[1px] bg-teal/70" style={{ height: `${Math.max(2, (v / max) * 100)}%` }} />
         ))}
       </div>
     </div>

@@ -68,7 +68,7 @@ export default function Reports({ report, onReport }: { report: string | null; o
       <div className="grid grid-cols-[200px_1fr] gap-4">
         <nav aria-label="Reports" className="flex flex-col gap-0.5">
           {(idx.data?.reports ?? []).map((x) => (
-            <button key={x.key} type="button" aria-current={x.key === key ? 'page' : undefined} onClick={() => onReport(x.key)} className={cx('rounded-[8px] px-2.5 py-1.5 text-left text-[13px]', x.key === key ? 'bg-[#EEF1FD] font-bold text-[#23349E] dark:bg-selection dark:text-primary' : 'text-ink-2 hover:bg-subtle')}>
+            <button key={x.key} type="button" aria-current={x.key === key ? 'page' : undefined} onClick={() => onReport(x.key)} className={cx('rounded-[8px] px-2.5 py-1.5 text-left text-[13px]', x.key === key ? 'bg-selection font-bold text-primary dark:bg-selection dark:text-primary' : 'text-ink-2 hover:bg-subtle')}>
               {x.label}
             </button>
           ))}
@@ -97,7 +97,7 @@ export default function Reports({ report, onReport }: { report: string | null; o
                       return (
                         <div key={i} className="flex items-center gap-2 py-1 text-[12.5px]">
                           <span className="w-[140px] truncate text-ink">{name}</span>
-                          <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-subtle"><span className="block h-full rounded-full bg-[#3B5BDB]" style={{ width: `${Math.min(100, Math.max(0, p))}%` }} /></span>
+                          <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-subtle"><span className="block h-full rounded-full bg-brand-soft" style={{ width: `${Math.min(100, Math.max(0, p))}%` }} /></span>
                           <span className="w-12 text-right tabular-nums">{`${p.toFixed(0)}%`}</span>
                         </div>
                       );

@@ -57,7 +57,7 @@ export function Blocks({ items }: { items: Hit[] | null | undefined }) {
   return (
     <div className="flex flex-col gap-1.5">
       {items.map((h, i) => (
-        <div key={`${h.rule}-${i}`} className="flex items-start gap-2 rounded-[9px] border border-[#F1B8A8] bg-[#FDF1EE] px-3 py-2 text-[12.5px] text-[#8C2A14] dark:border-danger/40 dark:bg-danger-bg dark:text-danger">
+        <div key={`${h.rule}-${i}`} className="flex items-start gap-2 rounded-[9px] border border-danger-line bg-danger-bg px-3 py-2 text-[12.5px] text-danger-ink dark:border-danger/40 dark:bg-danger-bg dark:text-danger">
           <Icon name="x" size={14} className="mt-0.5 shrink-0" />
           <span>
             {h.message}
@@ -75,7 +75,7 @@ export function Warnings({ items }: { items: Hit[] | null | undefined }) {
   return (
     <div className="flex flex-col gap-1.5">
       {items.map((h, i) => (
-        <div key={`${h.rule}-${i}`} className="flex items-start gap-2 rounded-[9px] border border-[#F5D48A] bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+        <div key={`${h.rule}-${i}`} className="flex items-start gap-2 rounded-[9px] border border-warning-line bg-warning-bg px-3 py-2 text-[12.5px] text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           <Icon name="warning" size={14} className="mt-0.5 shrink-0" />
           <span>
             {h.message}
@@ -138,9 +138,9 @@ export function QuickBar({ counts, onGo, canApprove, canFinance }: { counts: Qui
           key={c.key}
           type="button"
           onClick={() => onGo(c.key)}
-          className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold', c.warn ? 'bg-[#FFF4E0] text-[#9A4A06] hover:bg-[#FDEBC8] dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2 hover:bg-line')}
+          className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold', c.warn ? 'bg-warning-bg text-warning-ink hover:bg-orange-bg dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2 hover:bg-line')}
         >
-          <span aria-hidden className={cx('h-1.5 w-1.5 rounded-full', c.warn ? 'bg-[#E59A2F]' : 'bg-ink-3')} />
+          <span aria-hidden className={cx('h-1.5 w-1.5 rounded-full', c.warn ? 'bg-amber' : 'bg-ink-3')} />
           {c.label}
         </button>
       ))}

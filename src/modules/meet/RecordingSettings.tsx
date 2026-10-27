@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { Button, cx } from '../../components/ui';
 import type { MeetRecordingPrefs } from '@shared/types';
+import { RadioCards } from '../../components/SettingsKit';
 
 /**
  * Settings › Meet › Recording (worksuite-desktop#68), also offered inside a meeting: how this computer records —
@@ -30,26 +31,16 @@ export function RecordingSettings({ compact }: { compact?: boolean }) {
   const driveFolder = folder ?? prefs.folder;
   return (
     <div className={cx('flex flex-col gap-3.5', compact ? 'text-[12.5px]' : 'text-[13px]')}>
-      <div role="radiogroup" aria-label="How meetings are recorded" className="grid grid-cols-2 gap-2">
-        {(
-          [
-            ['cloud', 'On the WorkSuite server', 'The server records the meeting. Nothing runs on this computer.'],
-            ['local', 'On this computer', 'Recorded here, then uploaded to your Drive in the background — you can keep working or leave the meeting.'],
-          ] as const
-        ).map(([value, title, hint]) => (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={prefs.method === value}
-            onClick={() => save({ method: value })}
-            className={cx('flex flex-col gap-1 rounded-[10px] border p-3 text-left', prefs.method === value ? 'border-primary bg-selection' : 'border-line bg-surface hover:bg-subtle')}
-          >
-            <b className="text-ink">{title}</b>
-            <span className="text-[12px] text-ink-2">{hint}</span>
-          </button>
-        ))}
-      </div>
+      <RadioCards<MeetRecordingPrefs['method']>
+        label="How meetings are recorded"
+        columns={2}
+        value={prefs.method}
+        onChange={(method) => save({ method })}
+        options={[
+          { value: 'cloud', label: 'On the WorkSuite server', description: 'The server records the meeting. Nothing runs on this computer.', icon: 'cloud' },
+          { value: 'local', label: 'On this computer', description: 'Recorded here, then uploaded to your Drive in the background — you can keep working or leave the meeting.', icon: 'monitor' },
+        ]}
+      />
       <div className="grid grid-cols-2 gap-2.5">
         <label className={label}>
           Quality

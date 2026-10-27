@@ -226,17 +226,17 @@ function TestPreview({ s }: { s: SalonPrintSettings }) {
   const tz = desk.location.timezone;
   const day = todayAt(tz, new Date(now)).split('-').reverse().join('/');
   return (
-    <div className="bg-white px-[18px] py-5 font-mono text-[12px] leading-[1.6] text-[#151A2D] shadow-[0_10px_30px_rgba(15,27,61,.15)]">
+    <div className="bg-white px-[18px] py-5 font-mono text-[12px] leading-[1.6] text-ink shadow-[0_10px_30px_rgba(15,27,61,.15)]">
       <div className="text-center font-bold">TEST RECEIPT</div>
       <div className="text-center">
         {desk.company || 'SalonMate'} · {desk.desk.name}
       </div>
-      <div className="my-2 border-t border-dashed border-[#151A2D]" />
+      <div className="my-2 border-t border-dashed border-primary" />
       <Line>{`Printer ${s.receipt_printer ?? 'asks each time'}`}</Line>
       <Line>{`Paper ${PAPERS.find((p) => p.value === s.paper)?.label.replace(' roll', '') ?? s.paper} · ${COLUMNS[s.paper]}`}</Line>
       <Line>{`Silent ${s.silent ? 'yes' : 'no'} · copies ${s.copies}`}</Line>
       <Line>{`Time ${day} ${clockAt(new Date(now).toISOString(), tz)}`}</Line>
-      <div className="my-2 border-t border-dashed border-[#151A2D]" />
+      <div className="my-2 border-t border-dashed border-primary" />
       <div>සිංහල · தமிழ் · English</div>
       <div className="truncate">|....|....|....|....|....|....|....|....|</div>
       <div className="mt-2 text-center">If you can read all three lines, you are ready.</div>

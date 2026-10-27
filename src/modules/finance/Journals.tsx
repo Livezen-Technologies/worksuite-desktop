@@ -238,7 +238,7 @@ function JournalPanel({ company, id, base, onOpen }: { company: Company; id: num
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate">
                     <b className="font-mono text-[12px] text-ink">{l.account_code}</b> <span className="text-ink-2">{l.account_name}</span>
-                    {l.account_status && l.account_status !== 'active' ? <span className="ml-1 text-[11.5px] text-[#9A4A06] dark:text-warning">({l.account_status})</span> : null}
+                    {l.account_status && l.account_status !== 'active' ? <span className="ml-1 text-[11.5px] text-warning-ink dark:text-warning">({l.account_status})</span> : null}
                   </span>
                   {l.description ? <span className="truncate text-[12px] text-ink-3">{l.description}</span> : null}
                 </span>

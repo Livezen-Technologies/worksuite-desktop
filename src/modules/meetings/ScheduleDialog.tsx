@@ -328,7 +328,7 @@ export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose
           ) : null}
         </div>
         {busyPeople.length ? (
-          <p role="status" className="m-0 rounded-[8px] border border-[#F1D9B5] bg-[#FFF9EC] px-2.5 py-2 text-[12.5px] text-[#78350F] dark:bg-warning-bg dark:text-warning">
+          <p role="status" className="m-0 rounded-[8px] border border-warning-line bg-warning-bg px-2.5 py-2 text-[12.5px] text-warning-strong dark:bg-warning-bg dark:text-warning">
             {busyPeople.length === 1 ? `${busyPeople[0]!.name} is busy then.` : `${busyPeople.length} people are busy then.`} What they have is not shown unless you could open it.
           </p>
         ) : null}

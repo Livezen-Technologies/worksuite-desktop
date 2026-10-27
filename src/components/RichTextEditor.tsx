@@ -187,7 +187,7 @@ const DEFAULT_BLOCKS = () => [
 ];
 
 export const RICH_CONTENT_CLASS =
-  'break-words leading-[1.6] text-ink [&_a]:text-primary [&_a]:underline [&_blockquote]:my-1 [&_blockquote]:border-l-[3px] [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-ink-2 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:text-[18px] [&_h2]:font-bold [&_h3]:text-[15px] [&_h3]:font-bold [&_h4]:font-bold [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6 [&_li]:my-0.5 [&_pre]:whitespace-pre-wrap [&_pre]:rounded-[6px] [&_pre]:bg-subtle [&_pre]:p-2 [&_pre]:font-mono [&_table]:my-1 [&_table]:border-collapse [&_td]:min-w-[48px] [&_td]:border [&_td]:border-line [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_th]:py-1 [&_[style*=background-color]]:text-[#151A2D]';
+  'break-words leading-[1.6] text-ink [&_a]:text-primary [&_a]:underline [&_blockquote]:my-1 [&_blockquote]:border-l-[3px] [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-ink-2 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:text-[18px] [&_h2]:font-bold [&_h3]:text-[15px] [&_h3]:font-bold [&_h4]:font-bold [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6 [&_li]:my-0.5 [&_pre]:whitespace-pre-wrap [&_pre]:rounded-[6px] [&_pre]:bg-subtle [&_pre]:p-2 [&_pre]:font-mono [&_table]:my-1 [&_table]:border-collapse [&_td]:min-w-[48px] [&_td]:border [&_td]:border-line [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_th]:py-1 [&_[style*=background-color]]:text-ink';
 
 export function RichTextEditor({
   value,

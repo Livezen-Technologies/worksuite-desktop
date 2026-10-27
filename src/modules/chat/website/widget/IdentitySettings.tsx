@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useId, useState, type ChangeEvent } from 'react';
+import { useState, type ChangeEvent } from 'react';
 import { ApiError } from '../../../../core/api';
 import { errorMessage } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
@@ -7,6 +7,7 @@ import { toast } from '../../../../core/toasts';
 import { Button, TextField, cx } from '../../../../components/ui';
 import { IDENTIFY_SNIPPET, SIGNING_SNIPPETS, saveIdentitySettings, useIdentitySettings, type IdentitySettings as Settings } from '../identity';
 import { Choice, Toggle } from './parts';
+import { SettingsGroup } from '../../../../components/SettingsKit';
 
 type Form = Omit<Settings, 'has_secret'>;
 
@@ -26,7 +27,7 @@ export function identityProblem(f: Form): string | null {
   return null;
 }
 
-const code = 'block rounded-[8px] bg-[#0b1430] px-3 py-2.5 font-mono text-[11.5px] leading-[1.6] break-all whitespace-pre-wrap text-[#dfe3f0]';
+const code = 'block rounded-[8px] bg-stage px-3 py-2.5 font-mono text-[11.5px] leading-[1.6] break-all whitespace-pre-wrap text-stage-ink';
 
 /**
  * Returning visitors (worksuite-desktop#222), beside the embed code: the settings — the reopen window, "Continue on
@@ -41,7 +42,6 @@ export function IdentitySection({ widgetId }: { widgetId: number }) {
   const [edit, setForm] = useState<Form | null>(null);
   const [busy, setBusy] = useState(false);
   const [lang, setLang] = useState('php');
-  const fid = useId();
 
   if (q.error instanceof ApiError && (q.error.status === 404 || q.error.forbidden)) return null;
   // No settings in the answer (a server before returning visitors, or another shape): nothing to show.
@@ -69,14 +69,13 @@ export function IdentitySection({ widgetId }: { widgetId: number }) {
   const num = (k: keyof Pick<Form, 'reopen_window_days' | 'cookie_days' | 'retention_days'>) => (e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value === '' ? Number.NaN : Number(e.target.value) });
 
   return (
-    <section aria-labelledby={`${fid}-t`} className="flex flex-col gap-3 rounded-[12px] border border-line bg-surface px-4 py-3.5 text-[12.5px]">
-      <div>
-        <h2 id={`${fid}-t`} className="text-[14px] font-bold text-ink">{text('Returning visitors')}</h2>
-        <p className="mt-0.5 text-ink-3">{text('One person, one conversation: reloads, new tabs and later visits continue it. Signed-in users and verified emails are recognised on any device; an email somebody only typed suggests a merge to your team.')}</p>
-      </div>
-
+    <SettingsGroup
+      title={text('Returning visitors')}
+      className="!mb-0 text-[12.5px]"
+      description={text('One person, one conversation: reloads, new tabs and later visits continue it. Signed-in users and verified emails are recognised on any device; an email somebody only typed suggests a merge to your team.')}
+    >
       <form
-        className="flex flex-col gap-3"
+        className="flex flex-col gap-3 px-[18px] py-3.5"
         onSubmit={(e) => {
           e.preventDefault();
           if (problem || !dirty) return;
@@ -110,7 +109,7 @@ export function IdentitySection({ widgetId }: { widgetId: number }) {
         )}
       </form>
 
-      <div className="flex flex-col gap-2 border-t border-line pt-3">
+      <div className="flex flex-col gap-2 px-[18px] py-3.5">
         <h3 className="text-[13px] font-bold text-ink">{text('For your developers: recognise signed-in users')}</h3>
         <ol className="ml-4 list-decimal text-ink-2">
           <li>{text('Keep the secret below in your server’s settings, never in a page.')}</li>
@@ -141,6 +140,6 @@ export function IdentitySection({ widgetId }: { widgetId: number }) {
           {text('Without a valid signature the id is kept as an unverified detail and recognises nobody. If your site asks for cookie consent, add data-cookie-consent="required" to the embed code and call WorkSuiteChat.consent(true) once it is given: until then the chat lasts the visit only.')}
         </p>
       </div>
-    </section>
+    </SettingsGroup>
   );
 }

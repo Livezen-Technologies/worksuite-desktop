@@ -48,7 +48,7 @@ export default function Waitlist() {
       {offers.map((o, i) => {
         const first = o.matches.map((m) => byId.get(m)).find(Boolean);
         return (
-          <div key={i} className="mb-3 flex flex-wrap items-center gap-3 rounded-[12px] border border-[#BFD7C9] bg-[#E7F4ED] px-4 py-2.5 text-[13px] text-[#14532D] dark:border-success/40 dark:bg-success/15 dark:text-success">
+          <div key={i} className="mb-3 flex flex-wrap items-center gap-3 rounded-[12px] border border-success-line bg-success-bg px-4 py-2.5 text-[13px] text-success-ink dark:border-success/40 dark:bg-success/15 dark:text-success">
             <b>{`Freed · ${dateIn(o.starts_at, tz) === today(tz) ? 'Today' : dateIn(o.starts_at, tz)} ${hhmm(minutesIn(o.starts_at, tz))}${o.provider ? ` · ${o.provider.name}` : ''}`}</b>
             <span className="min-w-0 flex-1">{`${o.why ? `${o.why} ` : ''}${o.matches.length} waitlist match${o.matches.length === 1 ? '' : 'es'}.`}</span>
             {first ? (

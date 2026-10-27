@@ -90,6 +90,18 @@ export interface TextSpan {
   text: string;
 }
 
+/**
+ * A new PDF made by an engine with no document open (D-G12): other PDFs' pages in order (each part a bookmark when
+ * asked), pictures one per page (BGRA pixels; the main process decodes the files), or blank pages.
+ */
+export interface EngineCompose {
+  parts?: Array<{ source: EngineFile; pages?: number[]; title?: string }>;
+  bookmarks?: boolean;
+  /** `page`: the paper the picture is fitted on, centred; null for a page the picture's own size (at 96 dpi). */
+  images?: Array<{ width: number; height: number; bgra: Uint8Array; page: [number, number] | null }>;
+  blank?: { count: number; size: [number, number] };
+}
+
 /** Cancelled when `cancelled` turns true; the engine checks between pages. */
 export interface CancelToken {
   cancelled: boolean;
@@ -116,6 +128,15 @@ export interface PDFEngine {
   save(): Promise<Uint8Array>;
   /** These pages, in this order, as a new PDF file (the document itself is unchanged). */
   extract(pages: number[]): Promise<Uint8Array>;
+  // ── tools on this computer (D-G12) ──
+  /** A copy with AES-256 passwords and these permission bits (/P); the document is unchanged. */
+  protect(userPassword: string, ownerPassword: string, permissions: number): Promise<Uint8Array>;
+  /** A copy with no security (the document was opened with its password). */
+  unprotect(): Promise<Uint8Array>;
+  /** Each page's text, in reading order as the file has it. */
+  pageText(pages: number[]): Promise<string[]>;
+  /** A new PDF from parts, pictures or blank pages, in an engine with no document open. */
+  compose(req: EngineCompose): Promise<Uint8Array>;
   /** Closes the document but keeps the engine, to open it again (undo replays onto the opened version). */
   unload(): Promise<void>;
   close(): Promise<void>;

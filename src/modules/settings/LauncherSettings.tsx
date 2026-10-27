@@ -34,6 +34,7 @@ import { AppTile } from '../../components/AppTile';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Button, Switch, cx } from '../../components/ui';
+import { SectionHeader, SettingRow, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Settings › App launcher (worksuite-desktop#201): how the launcher looks, which apps it pins and shows, how it groups
@@ -71,15 +72,12 @@ const TOGGLES: Array<[keyof LauncherToggles, string, string]> = [
 
 const DRAG_TYPE = 'application/x-worksuite-app';
 
+/** A card of the Settings kit with a free-form body (lists, groups, buttons). */
 function Card({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex min-w-0 flex-col gap-3 rounded-[14px] border border-line bg-surface p-[18px] shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/0.04)]" aria-label={title}>
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[16px] font-bold text-ink">{title}</h3>
-        {aside ? <span className="text-[12px] text-ink-3">{aside}</span> : null}
-      </div>
-      {children}
-    </section>
+    <SettingsGroup title={title} actions={aside ? <span className="text-[12px] text-ink-3">{aside}</span> : undefined} className="!mb-0 min-w-0">
+      <div className="flex min-w-0 flex-col gap-3 px-[18px] py-3.5">{children}</div>
+    </SettingsGroup>
   );
 }
 
@@ -104,13 +102,9 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
 
 function Line({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3 first:border-t-0 first:pt-0">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <div className="text-[14px] font-semibold text-ink">{label}</div>
-        {hint ? <div className="text-[13px] text-ink-3">{hint}</div> : null}
-      </div>
+    <SettingRow label={label} hint={hint}>
       {children}
-    </div>
+    </SettingRow>
   );
 }
 
@@ -128,12 +122,11 @@ export function LauncherSettings() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-[20px] leading-tight font-bold text-ink">App launcher</h2>
-          <p className="text-[13.5px] text-ink-3">Choose which apps you see, their order and how the launcher looks. Synced to all your devices.</p>
-        </div>
-        <div className="flex gap-2">
+      <SectionHeader
+        title="App launcher"
+        hint="Choose which apps you see, their order and how the launcher looks. Synced to all your devices."
+        actions={
+          <>
           <Button
             onClick={() => {
               resetLauncherPrefs();
@@ -145,10 +138,11 @@ export function LauncherSettings() {
           <Button variant="primary" onClick={() => openOverlay('launcher')}>
             Preview launcher
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      <Card title="Layout">
+      <SettingsGroup title="Layout" className="!mb-0">
         <Line label="Size" hint="Compact fits more apps on small screens.">
           <Segmented<LauncherSize> label="Size" value={prefs.size} options={[{ value: 'compact', label: 'Compact' }, { value: 'comfortable', label: 'Comfortable' }, { value: 'large', label: 'Large' }]} onChange={(v) => set((p) => ({ ...p, size: v }))} />
         </Line>
@@ -165,14 +159,15 @@ export function LauncherSettings() {
             <Switch label={label} checked={prefs.toggles[k]} onChange={(v) => set((p) => ({ ...p, toggles: { ...p.toggles, [k]: v } }))} />
           </Line>
         ))}
-      </Card>
+      </SettingsGroup>
 
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
         <PinnedApps prefs={prefs} pinned={pinned} all={ordered} set={set} />
         <ShowHide prefs={prefs} all={ordered} shown={shownCount} set={set} />
       </div>
 
-      <section aria-label="Order and behaviour" className="grid gap-4 rounded-[14px] border border-line bg-surface p-[18px] shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/0.04)] [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+      <SettingsGroup label="Order and behaviour" className="!mb-0">
+      <div className="grid gap-4 px-[18px] py-3.5 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
         <Field label="Group apps by">
           <Select<LauncherGroupBy>
             label="Group apps by"
@@ -195,7 +190,8 @@ export function LauncherSettings() {
         <Field label="Keyboard shortcut">
           <ShortcutRecorder value={prefs.shortcut} onChange={(acc) => set((p) => ({ ...p, shortcut: acc }))} />
         </Field>
-      </section>
+      </div>
+      </SettingsGroup>
 
       {prefs.groupBy === 'mine' || prefs.groups.length ? <MyGroups prefs={prefs} all={ordered} set={set} /> : null}
       <OrganizationDefaults prefs={prefs} all={all} />

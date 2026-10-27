@@ -208,7 +208,7 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
           {campaign.local_time && campaign.local_at ? `Scheduled to arrive at ${wallWords(campaign.local_at)} in each person’s own time zone.` : `Scheduled to go ${stamp(campaign.scheduled_at)}.`} Changing it takes it back to draft, to be checked and scheduled again.
         </p>
       ) : campaign.status_note ? (
-        <p role="status" className="m-0 rounded-[10px] border border-[#F5D9A8] bg-[#FFF9EE] px-3.5 py-2.5 text-[12.5px] text-[#9A4A06] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+        <p role="status" className="m-0 rounded-[10px] border border-warning-line bg-rail px-3.5 py-2.5 text-[12.5px] text-warning-ink dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           {campaign.status_note}
         </p>
       ) : null}

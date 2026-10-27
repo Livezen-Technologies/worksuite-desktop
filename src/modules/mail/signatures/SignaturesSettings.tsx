@@ -13,6 +13,7 @@ import { FIELD_LABELS, fillSignature, type Field, type SignatureValues } from '.
 import { SIGNATURE_IMAGE_BYTES, SignatureEditor, type SignatureDraft, type SignaturePayload } from './SignatureEditor';
 import { SignatureFrame, SignaturePreview } from './SignaturePreview';
 import { TemplateGallery } from './TemplateGallery';
+import { SectionHeader, SettingsGroup } from '../../../components/SettingsKit';
 
 /**
  * Settings › Mail › Signatures (worksuite-desktop#166): the person's
@@ -89,12 +90,16 @@ export function Signatures() {
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[20px] font-bold text-ink">{text('Signatures')}</h2>
-        <Button variant="primary" icon="plus" onClick={() => setGallery('personal')}>
+      <SectionHeader
+        title={text('Signatures')}
+        actions={
+          <>
+            <Button variant="primary" icon="plus" onClick={() => setGallery('personal')}>
           {text('New signature')}
         </Button>
-      </div>
+          </>
+        }
+      />
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.isSuccess && rows.length === 0 ? <Empty icon="signature" title={text('No signature yet')} hint={text('A signature goes under every new message and reply you write. Start from a template or a blank one.')} /> : null}
       {rows.length ? (
@@ -181,7 +186,8 @@ export function Signatures() {
 
 function LockedView({ signature, values, onClose }: { signature: Signature; values: SignatureValues; onClose: () => void }) {
   return (
-    <section aria-label={signature.name} className="mt-4 rounded-[12px] border border-line bg-surface p-4">
+    <SettingsGroup label={signature.name}>
+      <div className="px-[18px] py-3.5">
       <div className="mb-2 flex items-center gap-2">
         <h3 className="flex-1 text-[15px] font-bold text-ink">{signature.name}</h3>
         <Button size="sm" onClick={onClose}>
@@ -190,7 +196,8 @@ function LockedView({ signature, values, onClose }: { signature: Signature; valu
       </div>
       <p className="mb-3 text-[12.5px] text-ink-3">{text('Your organisation’s signature: its layout and logo are set by an administrator. Your own details in it come from your profile and from Your details below.')}</p>
       <SignaturePreview html={signature.html} values={values} darkLogo={signature.dark_logo} />
-    </section>
+      </div>
+    </SettingsGroup>
   );
 }
 
@@ -257,8 +264,7 @@ function AccountChoices({ signatures, settings, boxes, onSaved, legacy }: { sign
     );
   };
   return (
-    <section aria-label={text('Signature for each account')} className="mt-4 rounded-[12px] border border-line bg-surface">
-      <h3 className="border-b border-line px-4 py-3 text-[15px] font-bold text-ink">{text('Signature for each account')}</h3>
+    <SettingsGroup title={text('Signature for each account')}>
       {legacy ? <p className="px-4 py-3 text-[12.5px] text-warning">{text('Choosing per account needs the latest WorkSuite server.')}</p> : null}
       <div className="overflow-x-auto">
         {/*
@@ -284,7 +290,7 @@ function AccountChoices({ signatures, settings, boxes, onSaved, legacy }: { sign
           <tbody>{[row(text('Every account'), null), ...boxes.map((b) => row(b.email, b.id))]}</tbody>
         </table>
       </div>
-    </section>
+    </SettingsGroup>
   );
 }
 
@@ -306,8 +312,8 @@ function YourDetails({ values, details, onSaved }: { values: SignatureValues; de
     }
   };
   return (
-    <section aria-label={text('Your details')} className="mt-4 rounded-[12px] border border-line bg-surface p-4">
-      <h3 className="text-[15px] font-bold text-ink">{text('Your details')}</h3>
+    <SettingsGroup title={text('Your details')}>
+      <div className="px-[18px] py-3.5">
       <p className="mb-3 text-[12.5px] text-ink-3">{text('Signatures fill {name}, {job_title} and the other fields from your WorkSuite profile. Fill in anything it does not have, or what you would rather show; leave a box empty to use the profile.')}</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {DETAIL_FIELDS.map((f) => (
@@ -341,7 +347,8 @@ function YourDetails({ values, details, onSaved }: { values: SignatureValues; de
           {text('Save my details')}
         </Button>
       </div>
-    </section>
+      </div>
+    </SettingsGroup>
   );
 }
 
@@ -368,7 +375,7 @@ function OrganisationSignatures({ values, onNew, onEdit }: { values: SignatureVa
     }
   };
   return (
-    <section aria-label={text('Organisation signatures')} className="mt-4 rounded-[12px] border border-line bg-surface">
+    <SettingsGroup label={text('Organisation signatures')}>
       <div className="flex items-center gap-2 border-b border-line px-4 py-3">
         <h3 className="flex-1 text-[15px] font-bold text-ink">{text('Organisation signatures')}</h3>
         <Button size="sm" icon="plus" onClick={onNew}>
@@ -394,6 +401,6 @@ function OrganisationSignatures({ values, onNew, onEdit }: { values: SignatureVa
           </li>
         ))}
       </ul>
-    </section>
+    </SettingsGroup>
   );
 }

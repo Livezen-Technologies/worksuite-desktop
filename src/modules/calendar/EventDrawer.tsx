@@ -35,7 +35,7 @@ const RSVP: Array<[string, string]> = [
 const STATUS: Record<string, [string, string]> = {
   organizer: ['Organiser', 'text-ink-2'],
   accepted: ['Going', 'text-success'],
-  tentative: ['Maybe', 'text-[#9A4A06] dark:text-warning'],
+  tentative: ['Maybe', 'text-warning-ink dark:text-warning'],
   declined: ['Not going', 'text-danger'],
   needs_action: ['No response', 'text-ink-3'],
 };
@@ -331,7 +331,7 @@ function Editor({ event, draft, onClose }: { event: CalendarEvent | null; draft:
       footer={
         <>
           {id && owner ? (
-            <button type="button" onClick={() => setDeleting(true)} className="h-9 rounded-[8px] border border-[#F1B8A8] bg-surface px-3 font-bold text-danger hover:bg-danger-bg">
+            <button type="button" onClick={() => setDeleting(true)} className="h-9 rounded-[8px] border border-danger-line bg-surface px-3 font-bold text-danger hover:bg-danger-bg">
               Delete event
             </button>
           ) : null}

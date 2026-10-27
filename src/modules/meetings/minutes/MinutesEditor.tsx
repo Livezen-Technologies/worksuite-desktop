@@ -223,8 +223,8 @@ export function MinutesEditor({ meetingId, compact, material }: { meetingId: num
           {ed ? <span className="text-[11px] text-ink-3">Last changed by {ed.name || 'someone'} · {timeLabel(ed.at)}</span> : null}
         </div>
         {c ? (
-          <div role="alert" className="flex flex-col gap-1.5 rounded-[9px] border border-[#F1D9B5] bg-[#FFF9EC] p-2.5 text-[12.5px] dark:bg-warning-bg">
-            <span className="font-semibold text-[#78350F] dark:text-warning">
+          <div role="alert" className="flex flex-col gap-1.5 rounded-[9px] border border-warning-line bg-warning-bg p-2.5 text-[12.5px] dark:bg-warning-bg">
+            <span className="font-semibold text-warning-strong dark:text-warning">
               {c.edited?.name ?? 'Somebody'} changed {SECTION_LABEL[s]} meanwhile. Nothing has been overwritten.
             </span>
             <div className="flex flex-wrap gap-1.5">

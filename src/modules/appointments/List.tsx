@@ -122,7 +122,7 @@ export default function List({ active }: { active: boolean }) {
           </thead>
           <tbody>
             {shown.map((a, i) => (
-              <tr tabIndex={0} onKeyDown={clickOnKey} key={a.id} aria-selected={i === cursor} onClick={() => (setCursor(i), desk.open(a.id))} className={cx('cursor-pointer', i === cursor ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={a.id} aria-selected={i === cursor} onClick={() => (setCursor(i), desk.open(a.id))} className={cx('cursor-pointer', i === cursor ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
                 <td className={td}>
                   <Checkbox aria-label={`Select ${a.number}`} checked={picked.has(a.id)} onClick={(e) => e.stopPropagation()} onChange={() => setPicked((p) => { const n = new Set(p); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; })} />
                 </td>

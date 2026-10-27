@@ -37,7 +37,7 @@ export default function Printers() {
   return (
     <Panel title="Printers on this computer" sub="Kept on this computer for this server. Labels and delivery notes print here without the browser." bodyClassName="flex flex-col gap-3 px-3.5 py-3">
       {studio ? (
-        <p className="m-0 rounded-[8px] bg-[#EAEDFB] px-3 py-2 text-[12.5px] text-[#23349E] dark:bg-primary/15 dark:text-primary">
+        <p className="m-0 rounded-[8px] bg-info-bg px-3 py-2 text-[12.5px] text-primary dark:bg-primary/15 dark:text-primary">
           Label printers are set up in Label Studio on this computer now.{' '}
           <button type="button" className="font-bold underline" onClick={() => go('/label?tab=printers')}>
             Open Label Studio printers

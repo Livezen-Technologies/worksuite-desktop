@@ -70,7 +70,7 @@ export function DeskTiles({ d, last }: { d: Dashboard; last: 'chats' | 'reply' }
 /** "NEEDS YOU · 2", "YOURS · 1": a group's name and count, red for those who need you. */
 export function DeskHeading({ title, n, tone }: { title: string; n: number; tone?: 'red' }) {
   return (
-    <p className={cx('px-3 pt-2 pb-0.5 text-[10px] font-bold tracking-[0.9px] uppercase', tone === 'red' ? 'text-[#c2392d] dark:text-danger' : 'text-ink-3')}>
+    <p className={cx('px-3 pt-2 pb-0.5 text-[10px] font-bold tracking-[0.9px] uppercase', tone === 'red' ? 'text-orange dark:text-danger' : 'text-ink-3')}>
       {text(title)} · {n}
     </p>
   );
@@ -162,7 +162,7 @@ function NeedsRow({ v, open, ring, said, now, skew, autoFocus, onReply }: { v: O
       </div>
       {open ? (
         <div ref={box} className="flex flex-col gap-1.5 pr-3 pb-2 pl-[49px]">
-          {quote ? <p className="line-clamp-2 text-[11.5px] text-[#6b4a4a] italic dark:text-ink-2">{`"${quote}"`}</p> : null}
+          {quote ? <p className="line-clamp-2 text-[11.5px] text-ink-2 italic dark:text-ink-2">{`"${quote}"`}</p> : null}
           <ReplyBox id={`desk-reply-${cid}`} label={text('Reply to {name}', { name: who })} placeholder={text('Type a reply…')} sendLabel="Send & join" sendAria="Send and join" draft={draft} setDraft={setDraft} onSend={() => void send()} busy={busy} visitorSaid={quote} look="menu" />
         </div>
       ) : null}
@@ -187,7 +187,7 @@ export function Yours({ rows, said, now, skew = 0, limit = 3 }: { rows: OnlineVi
               </span>
               <span className="block truncate text-[11px] text-ink-2">
                 {call_ !== null ? (
-                  <span className="font-semibold text-[#2b7a4b] dark:text-success">{text('On a call {time}', { time: callClock(call_) })}</span>
+                  <span className="font-semibold text-success dark:text-success">{text('On a call {time}', { time: callClock(call_) })}</span>
                 ) : v.chat?.agent_typing ? (
                   text('typing…')
                 ) : last ? (

@@ -117,7 +117,7 @@ export function Whiteboard({ stage }: { stage?: boolean }) {
   );
 
   return (
-    <div className={cx('flex h-full flex-col gap-2', stage ? 'relative bg-[#E9ECF4] p-3 pb-[88px]' : 'p-3')}>
+    <div className={cx('flex h-full flex-col gap-2', stage ? 'relative bg-info-bg p-3 pb-[88px]' : 'p-3')}>
       {stage ? <div className="absolute top-5 left-5 z-[15]">{toolbar}</div> : null}
       <canvas
         ref={canvas}

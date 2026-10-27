@@ -107,7 +107,7 @@ export default function Bills({ org, currency, openId, initialStatus, onOpen, on
             const out = b.outstanding ?? (b.total !== null ? Number(b.total) - Number(b.paid_total ?? 0) : null);
             const overdue = !!b.due_date && b.due_date < today && (out ?? 0) > 0;
             return (
-              <button key={b.id} type="button" data-bill={b.id} onClick={() => onOpen(b.id)} className={cx(rowCls, openId === b.id && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+              <button key={b.id} type="button" data-bill={b.id} onClick={() => onOpen(b.id)} className={cx(rowCls, openId === b.id && 'bg-info-soft dark:bg-selection/40')}>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <b className="truncate text-ink">{b.bill_number}</b>
                   <span className="truncate text-[11.5px] text-ink-3">{[b.vendor_invoice_no, b.po_number].filter(Boolean).join(' · ') || 'No order'}</span>

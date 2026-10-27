@@ -83,7 +83,7 @@ export function CallScreen() {
   const outgoing = (s.phase === 'calling' || s.phase === 'ringing') && !!s.conn?.i_started;
 
   const problem = s.problem ? (
-    <div className="no-drag self-stretch rounded-[12px] border border-[rgba(229,72,77,.35)] bg-[rgba(229,72,77,.16)] px-3 py-2.5 text-[12px] leading-normal text-[#FFD2C4]" role="alert">
+    <div className="no-drag self-stretch rounded-[12px] border border-[rgba(229,72,77,.35)] bg-[rgba(229,72,77,.16)] px-3 py-2.5 text-[12px] leading-normal text-stage-gray-ink" role="alert">
       {s.problem.message}
       {s.problem.pane ? (
         <>
@@ -98,7 +98,7 @@ export function CallScreen() {
 
   const unreachable =
     s.phase === 'unreachable' ? (
-      <div className="no-drag flex flex-col items-center gap-2 self-stretch text-center text-[12.5px] text-[#C3CEEA]">
+      <div className="no-drag flex flex-col items-center gap-2 self-stretch text-center text-[12.5px] text-stage-ink-2">
         {!locked && s.unreachable?.voicemail && !sent ? (
           recording ? (
             <div className="self-stretch rounded-[10px] bg-surface px-2 py-1.5 text-ink">
@@ -216,22 +216,22 @@ export function CallScreen() {
         {unreachable}
         {s.phase === 'ended' || s.phase === 'unreachable' ? (
           <div className="flex gap-2" onMouseMove={() => s.stay()}>
-            <button type="button" onClick={() => void s.again()} className="no-drag h-10 rounded-full bg-[#22A861] px-5 font-bold text-white hover:bg-[#1E9656]">
+            <button type="button" onClick={() => void s.again()} className="no-drag h-10 rounded-full bg-green px-5 font-bold text-white hover:bg-green">
               Call again
             </button>
-            <button type="button" onClick={() => void call('windows:close')} className="no-drag h-10 rounded-full bg-[#2A3A66] px-6 font-bold text-white hover:bg-[#344777]">
+            <button type="button" onClick={() => void call('windows:close')} className="no-drag h-10 rounded-full bg-stage-4 px-6 font-bold text-white hover:bg-stage-4">
               Close
             </button>
           </div>
         ) : s.phase === 'error' ? (
           <div className="flex gap-2">
-            <button type="button" onClick={() => s.params && void s.start(s.params)} className="no-drag h-10 rounded-full bg-white px-5 font-bold text-[#0F1B3D]">Retry</button>
-            <button type="button" onClick={() => void s.hangUp(false).then(() => call('windows:close'))} className="no-drag h-10 rounded-full bg-[#C4321C] px-5 font-bold text-white">End the call</button>
+            <button type="button" onClick={() => s.params && void s.start(s.params)} className="no-drag h-10 rounded-full bg-white px-5 font-bold text-ink">Retry</button>
+            <button type="button" onClick={() => void s.hangUp(false).then(() => call('windows:close'))} className="no-drag h-10 rounded-full bg-orange px-5 font-bold text-white">End the call</button>
           </div>
         ) : null}
       </div>
     ) : s.reconnecting || s.remoteLost ? (
-      <div role="status" className="rounded-full bg-[rgba(15,27,61,.85)] px-4 py-2 text-[12.5px] font-semibold text-[#FDE68A]">
+      <div role="status" className="rounded-full bg-[rgba(15,27,61,.85)] px-4 py-2 text-[12.5px] font-semibold text-stage-warning">
         {s.reconnecting ? 'Reconnecting… Your connection dropped.' : 'Reconnecting… waiting for the other side.'}
       </div>
     ) : s.problem ? (
@@ -243,7 +243,7 @@ export function CallScreen() {
       <CallWorkspace
         title={s.phase === 'connected' ? `Call in progress · ${name}` : video ? 'Video call' : 'Voice call'}
         clock={clock}
-        badges={s.phase === 'connected' && s.noise ? <span className="hidden rounded-full bg-[rgba(18,61,51,.85)] px-2 py-0.5 text-[11.5px] font-semibold text-[#9EE6C3] md:inline">Noise suppression on</span> : null}
+        badges={s.phase === 'connected' && s.noise ? <span className="hidden rounded-full bg-[rgba(18,61,51,.85)] px-2 py-0.5 text-[11.5px] font-semibold text-stage-success md:inline">Noise suppression on</span> : null}
         people={people}
         lastSpeaker={s.lastSpeaker}
         overlay={overlay}

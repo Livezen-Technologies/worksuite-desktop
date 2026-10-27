@@ -211,7 +211,7 @@ export function AttachmentViewer({ items, start, link, onClose }: { items: Attac
     return () => window.removeEventListener('keydown', onKey, true);
   });
 
-  const tool = 'flex h-[34px] min-w-[34px] items-center justify-center rounded-[8px] border border-[#2A3A66] px-2 text-[13px] hover:bg-white/10 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-[#7C93F2]';
+  const tool = 'flex h-[34px] min-w-[34px] items-center justify-center rounded-[8px] border border-stage-4 px-2 text-[13px] hover:bg-white/10 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-stage-primary-2';
   const type = (extOf(f.filename) || f.mime.split('/')[1] || 'file').toUpperCase();
 
   return (
@@ -221,10 +221,10 @@ export function AttachmentViewer({ items, start, link, onClose }: { items: Attac
       role="dialog"
       aria-modal="true"
       aria-label={`Preview ${f.filename}`}
-      className="no-drag fixed inset-0 z-[60] flex flex-col bg-[#0D1424] text-[#E6ECFA] outline-none"
+      className="no-drag fixed inset-0 z-[60] flex flex-col bg-stage text-stage-ink outline-none"
     >
       {/* Clear of the window's own buttons, which Windows draws over the top right (not in full screen, where it hides them). */}
-      <div className="flex min-h-[52px] shrink-0 flex-wrap items-center gap-2 border-b border-[#1E2C57] bg-[#0F1B3D] py-2 pl-3" style={{ paddingRight: topBarPaddingRight(12, full) }}>
+      <div className="flex min-h-[52px] shrink-0 flex-wrap items-center gap-2 border-b border-stage-3 bg-navy py-2 pl-3" style={{ paddingRight: topBarPaddingRight(12, full) }}>
         <button type="button" aria-label="Back to the conversation" title="Back to the conversation" onClick={onClose} className={tool}>
           <Icon name="chevron-left" size={18} />
         </button>
@@ -233,7 +233,7 @@ export function AttachmentViewer({ items, start, link, onClose }: { items: Attac
           <b className="truncate text-[14px]" title={f.filename}>
             {f.filename}
           </b>
-          <span className="text-[12px] text-[#AFC0E8]">
+          <span className="text-[12px] text-stage-accent">
             {f.mime || 'File'} · {bytes(f.size)}
             {items.length > 1 ? ` · ${i + 1} of ${items.length}` : ''}
           </span>
@@ -289,19 +289,19 @@ export function AttachmentViewer({ items, start, link, onClose }: { items: Attac
 function Problem({ text, onRetry, f, link }: { text: string; onRetry?: () => void; f: Attachment; link: (url: string) => void }) {
   return (
     <div role="alert" className="flex max-w-[420px] flex-col items-center gap-3 text-center">
-      <Icon name="alert" size={28} className="text-[#F7A39C]" />
+      <Icon name="alert" size={28} className="text-stage-danger" />
       <p className="text-[14px]">{text}</p>
       <div className="flex flex-wrap justify-center gap-2">
         {onRetry ? (
-          <button type="button" onClick={onRetry} className="flex h-9 items-center gap-1.5 rounded-[8px] bg-[#3B5BDB] px-3 text-[13px] font-bold text-white hover:brightness-110">
+          <button type="button" onClick={onRetry} className="flex h-9 items-center gap-1.5 rounded-[8px] bg-brand px-3 text-[13px] font-bold text-white hover:brightness-110">
             <Icon name="rotate-cw" size={14} /> Try again
           </button>
         ) : null}
-        <button type="button" onClick={() => download(f, link)} className="flex h-9 items-center gap-1.5 rounded-[8px] border border-[#2A3A66] px-3 text-[13px] font-semibold hover:bg-white/10">
+        <button type="button" onClick={() => download(f, link)} className="flex h-9 items-center gap-1.5 rounded-[8px] border border-stage-4 px-3 text-[13px] font-semibold hover:bg-white/10">
           <Icon name="download" size={14} /> Download
         </button>
         {canOpenElsewhere(f) ? (
-          <button type="button" onClick={() => openElsewhere(f)} className="flex h-9 items-center gap-1.5 rounded-[8px] border border-[#2A3A66] px-3 text-[13px] font-semibold hover:bg-white/10">
+          <button type="button" onClick={() => openElsewhere(f)} className="flex h-9 items-center gap-1.5 rounded-[8px] border border-stage-4 px-3 text-[13px] font-semibold hover:bg-white/10">
             <Icon name="external" size={14} /> Open in app
           </button>
         ) : null}
@@ -342,7 +342,7 @@ function Body({ f, kind, zoom, turn, link }: { f: Attachment; kind: PreviewKind;
           <video key={attempt} src={src} poster={mediaUrl(f.poster_url) ?? undefined} controls preload="metadata" onLoadedMetadata={done} onError={failed} className={cx('max-h-full max-w-full rounded-[8px] bg-black', state !== 'ready' && 'invisible')} />
         ) : (
           <div className={cx('flex w-full max-w-[520px] flex-col items-center gap-4', state !== 'ready' && 'invisible')}>
-            <Icon name="audio-lines" size={48} className="text-[#AFC0E8]" />
+            <Icon name="audio-lines" size={48} className="text-stage-accent" />
             <audio key={attempt} src={src} controls preload="metadata" onLoadedMetadata={done} onError={failed} className="w-full" />
           </div>
         )}
@@ -379,20 +379,20 @@ function TextBody({ f, kind, link, onRetry }: { f: Attachment; kind: 'csv' | 'te
   if (problem) return <Problem text={problem} onRetry={onRetry} f={f} link={link} />;
   if (text === null) return <Spinner label="Loading…" />;
   if (kind === 'text') {
-    return <pre className="h-full w-full max-w-[1100px] self-stretch overflow-auto rounded-[10px] border border-[#1E2C57] bg-[#0F1B3D] p-4 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap break-words selectable">{text}</pre>;
+    return <pre className="h-full w-full max-w-[1100px] self-stretch overflow-auto rounded-[10px] border border-stage-3 bg-navy p-4 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap break-words selectable">{text}</pre>;
   }
   const rows = parseCsv(text, /\.tsv$/i.test(f.filename) || f.mime === 'text/tab-separated-values' ? '\t' : ',');
   const [head, ...body] = rows;
   const shown = body.slice(0, CSV_ROWS);
   return (
     <div className="flex h-full w-full flex-col self-stretch">
-      <div className="min-h-0 flex-1 overflow-auto rounded-[10px] border border-[#1E2C57] bg-[#F7F9FD] text-[#1B2338] dark:bg-[#0F1B3D] dark:text-[#E6ECFA]">
+      <div className="min-h-0 flex-1 overflow-auto rounded-[10px] border border-primary bg-rail text-ink">
         <table className="min-w-full border-collapse text-[12.5px] selectable">
           {head ? (
-            <thead className="sticky top-0 bg-[#E8ECFA] dark:bg-[#1A2A55]">
+            <thead className="sticky top-0 bg-info-bg dark:bg-blue-bg">
               <tr>
                 {head.map((h, c) => (
-                  <th key={c} scope="col" className="border-b border-[#C9D2EE] px-3 py-2 text-left font-bold whitespace-nowrap dark:border-[#2A3A66]">
+                  <th key={c} scope="col" className="border-b border-info-line px-3 py-2 text-left font-bold whitespace-nowrap dark:border-primary-soft">
                     {h}
                   </th>
                 ))}
@@ -403,7 +403,7 @@ function TextBody({ f, kind, link, onRetry }: { f: Attachment; kind: 'csv' | 'te
             {shown.map((r, n) => (
               <tr key={n} className="odd:bg-black/[.025] dark:odd:bg-white/[.03]">
                 {r.map((v, c) => (
-                  <td key={c} className="border-b border-[#E1E6F3] px-3 py-1.5 align-top whitespace-pre-wrap dark:border-[#1E2C57]">
+                  <td key={c} className="border-b border-line px-3 py-1.5 align-top whitespace-pre-wrap">
                     {v}
                   </td>
                 ))}
@@ -412,7 +412,7 @@ function TextBody({ f, kind, link, onRetry }: { f: Attachment; kind: 'csv' | 'te
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-[12px] text-[#AFC0E8]">
+      <p className="mt-2 text-[12px] text-stage-accent">
         {body.length > CSV_ROWS ? `The first ${CSV_ROWS.toLocaleString()} of ${body.length.toLocaleString()} rows. Download the file for all of them.` : `${body.length.toLocaleString()} row${body.length === 1 ? '' : 's'}`}
       </p>
     </div>

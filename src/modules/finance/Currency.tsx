@@ -92,7 +92,7 @@ export function FxNotice({ fx, positionFx, onBase, over }: { fx: FxBlock | undef
       {fx.caveat ? (
         <>
           {' '}
-          <b className="font-semibold text-[#9A4A06] dark:text-warning">{fx.caveat}</b>
+          <b className="font-semibold text-warning-ink dark:text-warning">{fx.caveat}</b>
         </>
       ) : null}
     </p>

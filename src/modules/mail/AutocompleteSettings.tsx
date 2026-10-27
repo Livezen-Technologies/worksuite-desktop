@@ -7,6 +7,7 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, TextField } from '../../components/ui';
+import { SectionHeader, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * The addresses Mail suggests while you write (ENH-MAIL-03 DMO-PPL-03): kept
@@ -48,8 +49,10 @@ export function AutocompleteSettings() {
   if (list.data === null) return null;
   return (
     <section aria-label={text('Suggested addresses')} className="mt-8">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-[20px] font-bold text-ink">{text('Suggested addresses')}</h2>
+      <SectionHeader
+        title={text('Suggested addresses')}
+        hint={text('The people you write to are suggested as you type, on every computer. To bring your Outlook list, export it as CSV with a header row (Name, E-mail Address).')}
+        actions={
         <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[8px] border border-line px-2.5 text-[12.5px] font-semibold text-ink hover:bg-subtle">
           <Icon name="upload" size={14} />
           {text('Import from CSV')}
@@ -64,17 +67,17 @@ export function AutocompleteSettings() {
             }}
           />
         </label>
-      </div>
-      <p className="mb-3 text-[13px] text-ink-3">{text('The people you write to are suggested as you type, on every computer. To bring your Outlook list, export it as CSV with a header row (Name, E-mail Address).')}</p>
+        }
+      />
       <div className="mb-2 w-[320px] max-w-full">
         <TextField label={text('Find')} value={q} onChange={(e) => setQ(e.target.value)} placeholder={text('Name or address')} />
       </div>
       {list.isLoading ? <Spinner /> : null}
       {list.data && list.data.length === 0 ? <p className="text-[13px] text-ink-3">{text('No suggestions yet. They are added as you send mail.')}</p> : null}
       {list.data?.length ? (
-        <ul role="list" className="overflow-hidden rounded-[12px] border border-line bg-surface">
+        <SettingsGroup list={text('Suggested addresses')}>
           {list.data.map((s) => (
-            <li key={s.email} className="flex items-center gap-3 border-b border-line px-4 py-2 text-[13px] last:border-b-0">
+            <li key={s.email} className="flex items-center gap-3 px-[18px] py-2 text-[13px]">
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-semibold text-ink">{s.name || s.email}</span>
                 <span className="block truncate text-[12px] text-ink-3">{[s.name ? s.email : null, s.uses ? text('{n} sent', { n: s.uses }) : text('Imported'), s.last_used_at ? dateLabel(s.last_used_at) : null].filter(Boolean).join(' · ')}</span>
@@ -84,7 +87,7 @@ export function AutocompleteSettings() {
               </button>
             </li>
           ))}
-        </ul>
+        </SettingsGroup>
       ) : null}
     </section>
   );

@@ -368,7 +368,7 @@ function Overview({ s, canEdit, orgId, onMove }: { s: Sub; canEdit: boolean; org
   };
 
   const days = s.overdue ? (
-    <span className="ml-1.5 inline-flex h-[18px] items-center rounded-[9px] bg-[#FCE9E4] px-2 text-[11px] font-bold text-[#8C2A14] dark:bg-danger-bg dark:text-danger">overdue</span>
+    <span className="ml-1.5 inline-flex h-[18px] items-center rounded-[9px] bg-danger-bg px-2 text-[11px] font-bold text-danger-ink dark:bg-danger-bg dark:text-danger">overdue</span>
   ) : s.days_until !== null ? (
     <span className="ml-1.5 text-ink-3">{inDays(s.days_until)}</span>
   ) : null;
@@ -698,7 +698,7 @@ function Expenses({ s, org, orgId, orgs, onGo, onFile }: { s: Sub; org: string; 
   // Filing happens in one company, and only one this subscription can be linked to from there.
   const blocked = onFile ? fileBlocked({ subOrgId: s.org_id, subOrg: s.org, orgId, several: orgId === null && orgs.length > 1, acting: orgs.find((o) => o.id === orgId) ?? null }) : null;
   const add = !onFile ? null : blocked ? (
-    <span className="text-[12.5px] text-[#9A4A06] dark:text-warning">{blocked}</span>
+    <span className="text-[12.5px] text-warning-ink dark:text-warning">{blocked}</span>
   ) : orgId !== null ? (
     <button type="button" className={btnPrimary} onClick={() => onFile(claimPreset(s), orgId)}>
       <Icon name="plus" size={14} /> Add expense

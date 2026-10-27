@@ -4,6 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.45.0 — 2026-10-27
+
+**Added**
+
+- the colour families and stage tokens in styles.css, and the colors/no-raw-hex lint rule (D-G23)
+
+**Changed**
+
+- the Settings kit moved to src/components/SettingsKit.tsx (kit.tsx re-exports it) and gained SettingRowFrame, SettingsNavItem, SettingsNavGroup, list and label groups, row icons and a level-1 header; Accounts & Servers, Admin Center, Ringing, Connection health, the custom timeout, the launcher, License, Links, the ring check, the sidebar and Updates use it (D-G09)
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+
 ## 1.44.1 — 2026-10-26
 
 **Changed**

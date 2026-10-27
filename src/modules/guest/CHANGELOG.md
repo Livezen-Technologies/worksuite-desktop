@@ -1,5 +1,12 @@
 # Guest workspace
 
+## 2.0.1 — 2026-10-27
+
+**Changed**
+
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+- its settings screen uses the shared Settings kit (src/components/SettingsKit.tsx): the same headers, cards and rows as Settings (D-G09)
+
 ## 2.0.0 — 2026-10-03
 
 - Guest mode runs inside the main window (#149): Continue as Guest sets up the Local Profile and PIN in the main window, then the normal sidebar, top bar, theme and screens; the separate guest window, its routes and duplicated screens are removed; Notes, Tasks, Contacts (new for guests) and Calendar use the normal screens on data kept on this computer (local store v3: contacts, record numbers, move tracking; v1/v2 backups still restore, never the PIN); account-only apps stay in the sidebar with a lock and open a Sign in panel, also from links and ⌘K; signing in asks Move data / Keep on this device only — moving backs up first, uploads each item once, confirms it on the account and only then removes the local copy, listing anything that failed for retry; signing out never shows guest data to another account.

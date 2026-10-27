@@ -53,7 +53,7 @@ export default function Annotations({ meetingId, packVersion }: { meetingId: num
           {(scope === 'mine' ? mine : shared).isPending ? <Spinner /> : null}
           <ul className="space-y-2.5" aria-label="Annotations">
             {list.map((a) => (
-              <li key={a.id} className={cx('rounded-[8px] border-l-4 p-2.5', a.detached ? 'border-warning bg-warning/5' : a.visibility !== 'PRIVATE' ? 'border-primary bg-subtle' : 'border-[#EAB308] bg-subtle')}>
+              <li key={a.id} className={cx('rounded-[8px] border-l-4 p-2.5', a.detached ? 'border-warning bg-warning/5' : a.visibility !== 'PRIVATE' ? 'border-primary bg-subtle' : 'border-amber bg-subtle')}>
                 <div className="flex items-center justify-between text-[12.5px] font-bold">
                   <span className="flex items-center gap-1.5">{titleCase(a.kind)} · p {a.page ?? '—'}
                     {a.detached ? <Status tone="warning">Detached — page changed</Status> : a.visibility !== 'PRIVATE' ? <Status tone="indigo">{scope === 'shared' ? (a.author ?? 'Shared') : SHARED[a.visibility]}</Status> : <Status>Private</Status>}

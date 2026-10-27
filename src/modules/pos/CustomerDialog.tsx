@@ -203,7 +203,7 @@ export default function CustomerDialog({ payable, currency, onClose, newPhone }:
                   inputMode="numeric"
                   onChange={(e) => setRedeem(e.target.value.replace(/\D+/g, '').slice(0, 9))}
                   aria-label={t('pos.cust.redeem')}
-                  className="h-touch w-28 rounded-[10px] bg-pos-panel px-3 text-right font-mono text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none"
+                  className="h-touch w-28 rounded-[10px] bg-pos-panel px-3 text-right font-mono text-[15px] shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none"
                 />
                 <PosButton className="h-touch px-3 text-[13px]" onClick={() => setRedeem(String(most))}>
                   {t('pos.cust.redeemAll')}

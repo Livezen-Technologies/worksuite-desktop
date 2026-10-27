@@ -677,25 +677,25 @@ export default function Editor(props: EditorProps) {
   const busy = phase.state === 'rendering' || phase.state === 'uploading';
 
   return (
-    <div role="region" aria-label={`Photo editor — ${name}`} className="no-drag absolute inset-0 z-30 flex flex-col bg-[#0B1120] text-[13px] text-[#E6ECFA]">
+    <div role="region" aria-label={`Photo editor — ${name}`} className="no-drag absolute inset-0 z-30 flex flex-col bg-stage text-[13px] text-stage-ink">
       {/* ── top bar (EDT-E-02) ── */}
-      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[#1E2A4A] bg-[#0F1629] px-3.5">
-        <button type="button" aria-label="Back" onClick={close} className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-[#2A3A66] hover:bg-white/10">
+      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-stage-line-soft bg-stage px-3.5">
+        <button type="button" aria-label="Back" onClick={close} className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-stage-4 hover:bg-white/10">
           <Icon name="chevron-left" size={17} />
         </button>
-        <span className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-[#E8E4FF] text-[9.5px] font-extrabold text-[#5B3FD9]">{(ext || 'img').slice(0, 4).toUpperCase()}</span>
+        <span className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-violet-bg text-[9.5px] font-extrabold text-violet">{(ext || 'img').slice(0, 4).toUpperCase()}</span>
         <div className="flex min-w-0 flex-col leading-tight">
           <b className="truncate text-[14px] text-white">{name}</b>
-          <span className="truncate text-[11.5px] text-[#AFC0E8]">{folderLabel}</span>
+          <span className="truncate text-[11.5px] text-stage-accent">{folderLabel}</span>
         </div>
         {!isNew ? (
-          <button type="button" title="Compare versions" aria-label={`Version ${head} · compare versions`} onClick={() => void openVersions()} disabled={!data || data.versions.length < 2} className="rounded-[8px] bg-[#1E2A4A] px-2 py-0.5 text-[12px] font-bold text-white disabled:cursor-default">
+          <button type="button" title="Compare versions" aria-label={`Version ${head} · compare versions`} onClick={() => void openVersions()} disabled={!data || data.versions.length < 2} className="rounded-[8px] bg-stage-line-soft px-2 py-0.5 text-[12px] font-bold text-white disabled:cursor-default">
             {`v${head}`}
           </button>
         ) : null}
         {statusText ? (
-          <span role="status" className={cx('flex min-w-0 items-center gap-1.5 truncate text-[12.5px]', phase.state === 'failed' ? 'text-[#FFB4A3]' : 'text-[#C9D4FF]')}>
-            <span className={cx('h-2 w-2 shrink-0 rounded-full', phase.state === 'failed' ? 'bg-[#FF6B6B]' : phase.state === 'saved' && !dirty ? 'bg-[#3DD68C]' : 'bg-[#F59E0B]')} />
+          <span role="status" className={cx('flex min-w-0 items-center gap-1.5 truncate text-[12.5px]', phase.state === 'failed' ? 'text-stage-danger' : 'text-navy-ink')}>
+            <span className={cx('h-2 w-2 shrink-0 rounded-full', phase.state === 'failed' ? 'bg-stage-red' : phase.state === 'saved' && !dirty ? 'bg-stage-green-bright' : 'bg-stage-amber')} />
             <span className="truncate">{statusText}</span>
             {phase.state === 'failed' ? (
               <button type="button" onClick={() => void save(phase.retry)} className="font-bold text-white underline">
@@ -710,8 +710,8 @@ export default function Editor(props: EditorProps) {
           </span>
         ) : null}
         {busy ? (
-          <span aria-hidden className="h-1.5 w-28 overflow-hidden rounded-full bg-[#1E2A4A]">
-            <span className="block h-full bg-[#5B7BFF]" style={{ width: `${Math.round((phase.state === 'rendering' || phase.state === 'uploading' ? phase.progress : 0) * 100)}%` }} />
+          <span aria-hidden className="h-1.5 w-28 overflow-hidden rounded-full bg-stage-line-soft">
+            <span className="block h-full bg-stage-primary-2" style={{ width: `${Math.round((phase.state === 'rendering' || phase.state === 'uploading' ? phase.progress : 0) * 100)}%` }} />
           </span>
         ) : null}
         <span className="flex-1" />
@@ -730,27 +730,27 @@ export default function Editor(props: EditorProps) {
           onPointerUp={() => setCompare((c) => (c === 'peek' ? 'split' : 'off'))}
           onPointerLeave={() => setCompare((c) => (c === 'peek' ? 'off' : c))}
           onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setCompare((c) => (c === 'off' ? 'split' : 'off')))}
-          className={cx('inline-flex h-[34px] items-center gap-1.5 rounded-[9px] border px-3 font-semibold disabled:opacity-40', compare !== 'off' ? 'border-[#5B7BFF] bg-[#1A2650] text-white' : 'border-[#2A3A66] hover:bg-white/10')}
+          className={cx('inline-flex h-[34px] items-center gap-1.5 rounded-[9px] border px-3 font-semibold disabled:opacity-40', compare !== 'off' ? 'border-stage-primary-2 bg-navy-2 text-white' : 'border-stage-4 hover:bg-white/10')}
         >
           <Icon name="split-square" size={15} />
           Compare
         </button>
         <DarkButton onClick={close}>Cancel</DarkButton>
         <div className="flex">
-          <button type="button" disabled={!pic || busy} onClick={() => setDialog({ initial: canEditFile && !isNew ? 'version' : 'copy', stale: null })} className="h-[34px] rounded-l-[9px] bg-[#3B5BDB] px-3.5 font-bold text-white hover:bg-[#4C6EF5] disabled:opacity-40">
+          <button type="button" disabled={!pic || busy} onClick={() => setDialog({ initial: canEditFile && !isNew ? 'version' : 'copy', stale: null })} className="h-[34px] rounded-l-[9px] bg-brand px-3.5 font-bold text-white hover:bg-stage-primary-2 disabled:opacity-40">
             Save to Drive
           </button>
-          <button ref={saveBtn} type="button" aria-label="More ways to save" aria-haspopup="menu" aria-expanded={saveMenu} disabled={!pic || busy} onClick={() => setSaveMenu(true)} className="h-[34px] rounded-r-[9px] border-l border-[#2F4AC0] bg-[#3B5BDB] px-2 text-white hover:bg-[#4C6EF5] disabled:opacity-40">
+          <button ref={saveBtn} type="button" aria-label="More ways to save" aria-haspopup="menu" aria-expanded={saveMenu} disabled={!pic || busy} onClick={() => setSaveMenu(true)} className="h-[34px] rounded-r-[9px] border-l border-brand bg-brand px-2 text-white hover:bg-stage-primary-2 disabled:opacity-40">
             <Icon name="chevron-down" size={15} />
           </button>
         </div>
         {saveMenu ? <Menu sections={saveSections} label="Save" anchor={saveBtn} prefer="bottom" align="end" onClose={() => setSaveMenu(false)} width={260} /> : null}
       </div>
       {notice ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-[#1E2A4A] bg-[#121B33] px-4 py-2 text-[12.5px] text-[#C9D4FF]">
+        <div className="flex shrink-0 items-center gap-2 border-b border-stage-line-soft bg-stage-2 px-4 py-2 text-[12.5px] text-navy-ink">
           <Icon name="info" size={14} />
           <span className="flex-1">{notice}</span>
-          <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)} className="text-[#8C9BC0] hover:text-white">
+          <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)} className="text-stage-ink-3 hover:text-white">
             <Icon name="x" size={14} />
           </button>
         </div>
@@ -774,16 +774,16 @@ export default function Editor(props: EditorProps) {
       ) : (
         <div className="flex min-h-0 flex-1">
           {/* ── the rail (EDT-E-03) ── */}
-          <nav aria-label="Tools" className="flex w-[68px] shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-[#1E2A4A] bg-[#0F1629] py-2.5 scroll-thin">
+          <nav aria-label="Tools" className="flex w-[68px] shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-stage-line-soft bg-stage py-2.5 scroll-thin">
             {rail.map((r) => (
-              <button key={r.id} type="button" aria-pressed={tool === r.id} aria-keyshortcuts={r.key} title={r.id === 'redact' ? 'Redact — destroys the pixels underneath; it cannot be removed after saving' : r.key ? `${r.label} (${r.key})` : r.label} onClick={() => chooseTool(r.id)} className={cx('flex h-[50px] w-[54px] shrink-0 flex-col items-center justify-center gap-1 rounded-[10px] text-[10.5px] font-bold', tool === r.id ? 'border border-[#5B7BFF] bg-[#1A2650] text-white' : 'text-[#AFC0E8] hover:bg-white/5 hover:text-white')}>
+              <button key={r.id} type="button" aria-pressed={tool === r.id} aria-keyshortcuts={r.key} title={r.id === 'redact' ? 'Redact — destroys the pixels underneath; it cannot be removed after saving' : r.key ? `${r.label} (${r.key})` : r.label} onClick={() => chooseTool(r.id)} className={cx('flex h-[50px] w-[54px] shrink-0 flex-col items-center justify-center gap-1 rounded-[10px] text-[10.5px] font-bold', tool === r.id ? 'border border-stage-primary-2 bg-navy-2 text-white' : 'text-stage-accent hover:bg-white/5 hover:text-white')}>
                 <Icon name={r.icon} size={17} />
                 {r.label}
               </button>
             ))}
             <span className="flex-1" />
             {aiOn ? (
-              <button type="button" aria-pressed={tool === 'ai'} onClick={() => chooseTool('ai')} className={cx('flex h-[50px] w-[54px] shrink-0 flex-col items-center justify-center gap-1 rounded-[10px] text-[10.5px] font-bold', tool === 'ai' ? 'border border-[#5B7BFF] bg-[#1A2650] text-white' : 'text-[#AFC6FF] hover:bg-white/5')}>
+              <button type="button" aria-pressed={tool === 'ai'} onClick={() => chooseTool('ai')} className={cx('flex h-[50px] w-[54px] shrink-0 flex-col items-center justify-center gap-1 rounded-[10px] text-[10.5px] font-bold', tool === 'ai' ? 'border border-stage-primary-2 bg-navy-2 text-white' : 'text-stage-accent hover:bg-white/5')}>
                 <Icon name="sparkles" size={17} />
                 AI
               </button>
@@ -793,8 +793,8 @@ export default function Editor(props: EditorProps) {
           <div className="flex min-w-0 flex-1 flex-col">
             {loadError ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-                <Icon name="image-off" size={36} className="text-[#5E6B8C]" />
-                <span className="text-[#FFB4A3]">{loadError}</span>
+                <Icon name="image-off" size={36} className="text-stage-ink-4" />
+                <span className="text-stage-danger">{loadError}</span>
                 <DarkButton onClick={() => (setAttempt((n) => n + 1), void q.refetch())}>Try again</DarkButton>
               </div>
             ) : !pic ? (
@@ -845,16 +845,16 @@ export default function Editor(props: EditorProps) {
                 }}
               />
             )}
-            <div className="flex h-[64px] shrink-0 items-center gap-2 border-t border-[#1E2A4A] bg-[#0F1629] px-3">
+            <div className="flex h-[64px] shrink-0 items-center gap-2 border-t border-stage-line-soft bg-stage px-3">
               <div role="list" aria-label="Pictures in this folder" className="flex min-w-0 max-w-[45%] items-center gap-1.5 overflow-x-auto scroll-thin">
                 {strip.map((s) => (
-                  <button key={s.id} type="button" role="listitem" aria-current={s.id === fileId ? 'true' : undefined} title={s.name} onClick={() => s.id !== fileId && guard(() => (discardDraft(), props.onSwitch({ id: s.id, name: s.name })))} className={cx('relative h-[44px] w-[56px] shrink-0 overflow-hidden rounded-[6px] bg-[#1A2440]', s.id === fileId ? 'outline-2 outline-offset-1 outline-[#7FA2FF]' : 'opacity-70 hover:opacity-100')}>
-                    {s.url ? <img src={s.url} alt={s.name} loading="lazy" className="h-full w-full object-cover" /> : <Icon name="image" size={16} className="m-auto text-[#5E6B8C]" />}
+                  <button key={s.id} type="button" role="listitem" aria-current={s.id === fileId ? 'true' : undefined} title={s.name} onClick={() => s.id !== fileId && guard(() => (discardDraft(), props.onSwitch({ id: s.id, name: s.name })))} className={cx('relative h-[44px] w-[56px] shrink-0 overflow-hidden rounded-[6px] bg-stage-line-soft', s.id === fileId ? 'outline-2 outline-offset-1 outline-stage-ink-3' : 'opacity-70 hover:opacity-100')}>
+                    {s.url ? <img src={s.url} alt={s.name} loading="lazy" className="h-full w-full object-cover" /> : <Icon name="image" size={16} className="m-auto text-stage-ink-4" />}
                     {s.edited ? <span className="absolute right-0.5 bottom-0.5 rounded-[3px] bg-black/70 px-1 text-[8.5px] font-bold text-white">{`v${s.edited}`}</span> : null}
                   </button>
                 ))}
               </div>
-              {strip.length && position >= 0 ? <span className="shrink-0 text-[12px] text-[#AFC0E8]">{`${position + 1} of ${strip.length} in folder`}</span> : null}
+              {strip.length && position >= 0 ? <span className="shrink-0 text-[12px] text-stage-accent">{`${position + 1} of ${strip.length} in folder`}</span> : null}
               <span className="flex-1" />
               <button
                 type="button"
@@ -866,12 +866,12 @@ export default function Editor(props: EditorProps) {
                   if (dragToken.current) void startDrag(dragToken.current).catch(() => undefined);
                   else toast('info', 'Getting the picture ready — drag again in a moment.');
                 }}
-                className="flex h-8 shrink-0 cursor-grab items-center gap-1.5 rounded-[8px] border border-[#2A3A66] px-2.5 text-[12px] font-semibold text-[#C9D4FF] hover:bg-white/5"
+                className="flex h-8 shrink-0 cursor-grab items-center gap-1.5 rounded-[8px] border border-stage-4 px-2.5 text-[12px] font-semibold text-navy-ink hover:bg-white/5"
               >
                 <Icon name="grip-horizontal" size={14} />
                 Drag out
               </button>
-              <span className="shrink-0 text-[12px] text-[#AFC0E8]">{pic ? `${out.w} × ${out.h} px${file ? ` · ${bytes(data?.file.size ?? file.size)}` : ''}` : ''}</span>
+              <span className="shrink-0 text-[12px] text-stage-accent">{pic ? `${out.w} × ${out.h} px${file ? ` · ${bytes(data?.file.size ?? file.size)}` : ''}` : ''}</span>
               <DarkButton aria-label="Zoom out" onClick={() => setZoom(Math.max(0.05, (zoom === 'fit' ? fitScale : zoom) / 1.25))} icon={<Icon name="zoom-out" size={15} />} className="h-8 w-8 px-0">
                 {''}
               </DarkButton>
@@ -885,9 +885,9 @@ export default function Editor(props: EditorProps) {
             </div>
           </div>
           {/* ── the panel (EDT-E-04: 320 px) ── */}
-          <aside aria-label={`${toolLabel} options`} className="flex w-[320px] shrink-0 flex-col border-l border-[#1E2A4A] bg-[#0F1629]">
+          <aside aria-label={`${toolLabel} options`} className="flex w-[320px] shrink-0 flex-col border-l border-stage-line-soft bg-stage">
             {tool !== 'ai' ? (
-              <div role="tablist" aria-label="Panel" className="flex shrink-0 border-b border-[#1E2A4A] px-2">
+              <div role="tablist" aria-label="Panel" className="flex shrink-0 border-b border-stage-line-soft px-2">
                 {(
                   [
                     ['tool', toolLabel],
@@ -895,7 +895,7 @@ export default function Editor(props: EditorProps) {
                     ['export', 'Export'],
                   ] as const
                 ).map(([id, label]) => (
-                  <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cx('h-10 px-3 text-[12.5px] font-bold', tab === id ? 'border-b-2 border-[#7FA2FF] text-white' : 'text-[#8C9BC0] hover:text-white')}>
+                  <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cx('h-10 px-3 text-[12.5px] font-bold', tab === id ? 'border-b-2 border-stage-ink-3 text-white' : 'text-stage-ink-3 hover:text-white')}>
                     {label}
                   </button>
                 ))}
@@ -939,14 +939,14 @@ export default function Editor(props: EditorProps) {
                 </>
               ) : null}
             </div>
-            {!canEditFile && data && !isNew ? <p className="m-3 rounded-[10px] border border-[#6B4E12] bg-[#2A2210] p-2.5 text-[12px] text-[#FDE68A]">{editReason ?? 'You can save a copy of this picture, not a new version of it.'}</p> : null}
+            {!canEditFile && data && !isNew ? <p className="m-3 rounded-[10px] border border-stage-danger-ink bg-stage-gray p-2.5 text-[12px] text-stage-warning">{editReason ?? 'You can save a copy of this picture, not a new version of it.'}</p> : null}
             {local?.synced ? (
-              <div className="m-3 mt-0 flex flex-col gap-1 rounded-[10px] border border-[#1E4D3D] bg-[#10261F] p-3 text-[12px]">
-                <span className="flex items-center gap-1.5 font-semibold text-[#9EE6C3]">
+              <div className="m-3 mt-0 flex flex-col gap-1 rounded-[10px] border border-stage-gray-2 bg-stage-gray p-3 text-[12px]">
+                <span className="flex items-center gap-1.5 font-semibold text-stage-success">
                   <Icon name="check" size={13} />
                   Available offline · synced copy on this computer
                 </span>
-                <span className="text-[#AFC0E8]">Edits made offline save to the copy here first, with their layers, and upload as a new version when you are back online.</span>
+                <span className="text-stage-accent">Edits made offline save to the copy here first, with their layers, and upload as a new version when you are back online.</span>
               </div>
             ) : null}
           </aside>
@@ -1008,12 +1008,12 @@ function SelectHelp({ count, selected, onLayers }: { count: number; selected: nu
   return (
     <div className="flex flex-col gap-3">
       <h2 className="text-[15px] font-bold text-white">Select</h2>
-      <span className="text-[12.5px] text-[#AFC0E8]">Click a layer to select it; Shift-click adds more. Drag to move, use the corners to resize and the round handle to turn. Arrow keys nudge; Delete removes.</span>
-      <span className="text-[12px] text-[#8C9BC0]">{`${count} ${count === 1 ? 'layer' : 'layers'}${selected ? ` · ${selected} selected` : ''}`}</span>
+      <span className="text-[12.5px] text-stage-accent">Click a layer to select it; Shift-click adds more. Drag to move, use the corners to resize and the round handle to turn. Arrow keys nudge; Delete removes.</span>
+      <span className="text-[12px] text-stage-ink-3">{`${count} ${count === 1 ? 'layer' : 'layers'}${selected ? ` · ${selected} selected` : ''}`}</span>
       <DarkButton onClick={onLayers} icon={<Icon name="layers" size={14} />}>
         Layers, align and order
       </DarkButton>
-      <span className="text-[12px] text-[#8C9BC0]">Drop a picture from Finder or Explorer onto the canvas to place it as a layer.</span>
+      <span className="text-[12px] text-stage-ink-3">Drop a picture from Finder or Explorer onto the canvas to place it as a layer.</span>
     </div>
   );
 }

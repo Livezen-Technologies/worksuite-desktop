@@ -171,8 +171,8 @@ function RoomTile({ room: r, online, onOpen }: { room: RackRoom; online: boolean
       <StatusBadge badge={r.badge} size="sm" />
       <span className="truncate text-[12px] text-ink-2">{guest?.guest.name ?? (r.ready && r.occupancy === 'vacant' ? 'Ready' : r.hk_status_label)}</span>
       <span className="flex items-center gap-1.5 text-[10.5px] font-semibold text-ink-3">
-        {r.due_out ? <span className="text-[#ea580c]">Out today</span> : null}
-        {r.due_in ? <span className="text-[#0891b2]">In today</span> : null}
+        {r.due_out ? <span className="text-red">Out today</span> : null}
+        {r.due_in ? <span className="text-teal">In today</span> : null}
         {r.open_issues > 0 ? (
           <span className="flex items-center gap-0.5 text-danger">
             <Icon name="wrench" size={11} /> {r.open_issues}

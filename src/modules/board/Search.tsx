@@ -10,7 +10,7 @@ const LABEL: Record<string, string> = { meeting: 'Meeting', agenda_item: 'Agenda
 
 /** The server marks its matches `[[term]]` in titles and previews. */
 export function marked(text: string): ReactNode[] {
-  return text.split(/\[\[(.+?)\]\]/g).map((part, i) => (i % 2 ? <mark key={i} className="bg-[#FDE68A] text-ink">{part}</mark> : part));
+  return text.split(/\[\[(.+?)\]\]/g).map((part, i) => (i % 2 ? <mark key={i} className="bg-warning-soft text-ink">{part}</mark> : part));
 }
 
 /** Marks each word of the query in the text. */
@@ -18,7 +18,7 @@ export function highlight(text: string, q: string): ReactNode[] {
   const words = q.trim().split(/\s+/).filter((w) => w.length > 1).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   if (!words.length) return [text];
   const re = new RegExp(`(${words.join('|')})`, 'gi');
-  return text.split(re).map((part, i) => (i % 2 ? <mark key={i} className="bg-[#FDE68A] text-ink">{part}</mark> : part));
+  return text.split(re).map((part, i) => (i % 2 ? <mark key={i} className="bg-warning-soft text-ink">{part}</mark> : part));
 }
 
 /** Server search, or the offline vault's when the server cannot be reached (FR-OFF-01). */

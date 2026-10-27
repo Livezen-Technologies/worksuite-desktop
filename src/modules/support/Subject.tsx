@@ -135,7 +135,7 @@ export function EditableSubject({ show, className, level = 'h2' }: { show: Ticke
           className="h-9 min-w-0 flex-1 rounded-[8px] border border-primary bg-surface px-2 text-[16px] font-bold text-ink outline-none"
         />
         <button type="button" data-subject-suggest="1" disabled={busy === 'suggest'} onClick={() => void suggest()} title={text('Suggest a subject from the conversation')} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[8px] border border-line px-2 text-[12px] font-semibold text-ink-2 hover:bg-subtle disabled:opacity-50">
-          <Icon name={busy === 'suggest' ? 'spinner' : 'sparkles'} size={13} className={busy === 'suggest' ? 'animate-spin-slow' : 'text-[#7C3AED]'} />
+          <Icon name={busy === 'suggest' ? 'spinner' : 'sparkles'} size={13} className={busy === 'suggest' ? 'animate-spin-slow' : 'text-violet'} />
           {text('Suggest')}
         </button>
       </div>

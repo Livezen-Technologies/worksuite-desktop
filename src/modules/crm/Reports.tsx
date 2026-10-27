@@ -26,8 +26,8 @@ import { StatGrid } from '../../components/StatCard';
  */
 type Range = '90' | '180' | '365';
 
-const WON = 'bg-[#3346B8] dark:bg-[#6F86F5]';
-const FORECAST = 'bg-[#00939F] dark:bg-[#21A3AE]';
+const WON = 'bg-primary dark:bg-brand-soft';
+const FORECAST = 'bg-teal';
 
 export default function Reports() {
   const scope = useCrmScope();

@@ -157,7 +157,7 @@ export default function List({ view, org, stages, bands, canManage, onOpen }: { 
         </div>
       ) : null}
       {chosen.length ? (
-        <div className="flex flex-wrap items-center gap-2 self-start rounded-[9px] border border-[#C7D0F5] bg-[#EEF1FC] px-2.5 py-1.5 dark:border-primary/40 dark:bg-selection">
+        <div className="flex flex-wrap items-center gap-2 self-start rounded-[9px] border border-info-line bg-selection px-2.5 py-1.5 dark:border-primary/40 dark:bg-selection">
           <b className="text-[12.5px] text-primary">{chosen.length} selected</b>
           <button type="button" className={btnSmall + ' !h-7'} disabled={busy} onClick={() => void run({}, { action: 'follow', ids: chosen })}>
             Follow
@@ -290,7 +290,7 @@ export default function List({ view, org, stages, bands, canManage, onOpen }: { 
 function Row({ r, bands, chosen, onChoose, onOpen }: { r: TenderRow; bands: Band[] | undefined; chosen: boolean; onChoose: () => void; onOpen: () => void }) {
   const decided = r.outcome !== 'open';
   return (
-    <div data-tender={r.id} className={cx('flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', chosen && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+    <div data-tender={r.id} className={cx('flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', chosen && 'bg-info-soft dark:bg-selection/40')}>
       <Checkbox aria-label={`Choose ${r.title}`} checked={chosen} onChange={onChoose} />
       <button type="button" aria-label={`Open ${r.title}`} onClick={onOpen} className="flex min-w-0 flex-1 flex-col text-left">
         <span className="flex min-w-0 items-center gap-1.5">

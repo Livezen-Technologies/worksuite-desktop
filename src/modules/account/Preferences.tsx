@@ -9,8 +9,9 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, Switch } from '../../components/ui';
 import { K, useHasApp } from './api';
-import { Card, Head, Note, SettingRow } from './parts';
+import { Note } from './parts';
 import { computerZone, FROM, useRegional, useSaveRegional, useZones } from './regional';
+import { SectionHeader, SettingRow, SettingRowFrame, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Preferences: how WorkSuite looks on this computer, how it writes dates and
@@ -23,24 +24,26 @@ export default function Preferences() {
   const hasChat = useHasApp('chat');
   return (
     <div className="flex max-w-[1080px] flex-col gap-4">
-      <Head title="Preferences" sub="How WorkSuite looks, and how it writes dates and times for you." />
+      <SectionHeader level={1} title="Preferences" hint="How WorkSuite looks, and how it writes dates and times for you." />
       <div className="grid items-start gap-4 xl:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-4">
           <Regional />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           {prefs ? (
-            <Card title="Appearance" action={<span className="text-[12px] text-ink-3">On this computer</span>}>
+            <SettingsGroup title="Appearance" className="!mb-0" actions={<span className="text-[12px] text-ink-3">On this computer</span>}>
               <SettingRow label="Theme">
                 <Select label="Theme" value={prefs.theme} options={[{ value: 'system', label: 'Match the system' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} onValueChange={(v) => void updatePrefs({ theme: v })} />
               </SettingRow>
               <SettingRow label="Density" hint="Compact fits more rows in lists.">
                 <Select label="Density" value={prefs.density} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} onValueChange={(v) => void updatePrefs({ density: v })} />
               </SettingRow>
-              <button type="button" onClick={() => navigate('/settings/preferences')} className="mt-2 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-primary hover:underline">
-                More settings for this computer <Icon name="chevron-right" size={13} />
-              </button>
-            </Card>
+              <SettingRowFrame>
+                <button type="button" onClick={() => navigate('/settings/preferences')} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-primary hover:underline">
+                  More settings for this computer <Icon name="chevron-right" size={13} />
+                </button>
+              </SettingRowFrame>
+            </SettingsGroup>
           ) : null}
           {hasChat ? <ChatPrivacy /> : null}
         </div>
@@ -65,11 +68,13 @@ function Regional() {
   const example = (list: Array<{ value: string; example: string }>, v: string | null | undefined) => list.find((l) => l.value === v)?.example ?? v ?? null;
 
   return (
-    <Card title="Date and time" action={<span className="text-[12px] text-ink-3">Everywhere you sign in</span>}>
-      <Note className="mb-2">
-        Times are shown in <b>{e.label}</b> — {FROM[e.timezone_source]}.
-      </Note>
-      {locked ? <Note tone="amber" className="mb-2">{org?.name ?? 'Your company'} sets these for everyone, so they are shown here and cannot be changed.</Note> : null}
+    <SettingsGroup title="Date and time" className="!mb-0" actions={<span className="text-[12px] text-ink-3">Everywhere you sign in</span>}>
+      <SettingRowFrame className="flex flex-col gap-2">
+        <Note>
+          Times are shown in <b>{e.label}</b> — {FROM[e.timezone_source]}.
+        </Note>
+        {locked ? <Note tone="amber">{org?.name ?? 'Your company'} sets these for everyone, so they are shown here and cannot be changed.</Note> : null}
+      </SettingRowFrame>
       <SettingRow
         label="Detect my time zone"
         hint={mine.timezone_auto ? `This computer is in ${here ?? 'an unknown zone'}. Your company's zone (${inherited}) is used while this is on, and this computer's only when your company has none.` : 'Off: the zone below is used wherever you sign in.'}
@@ -115,8 +120,8 @@ function Regional() {
           onValueChange={(v) => void save({ week_start: v === '' ? null : Number(v) })}
         />
       </SettingRow>
-      <p className="m-0 mt-2 text-[11.5px] text-ink-3">Times are stored in UTC. Changing these changes how they are shown, never what was recorded.</p>
-    </Card>
+      <p className="m-0 px-[18px] py-3 text-[11.5px] text-ink-3">Times are stored in UTC. Changing these changes how they are shown, never what was recorded.</p>
+    </SettingsGroup>
   );
 }
 
@@ -140,10 +145,10 @@ function ChatPrivacy() {
   };
   const locked = q.data ? q.data.policy !== 'choice' : false;
   return (
-    <Card title="Chat">
+    <SettingsGroup title="Chat" className="!mb-0">
       <SettingRow label="Send read receipts" hint={locked ? `Set by your organisation: read receipts are ${q.data?.policy === 'always' ? 'always shown' : 'never shown'} for everyone.` : 'People you message see when you have read it. Off, they see Delivered instead.'}>
         <Switch label="Send read receipts" checked={!!q.data?.read_receipts} disabled={!q.data || locked} onChange={(v) => void save(v)} />
       </SettingRow>
-    </Card>
+    </SettingsGroup>
   );
 }

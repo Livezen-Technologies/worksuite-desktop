@@ -122,7 +122,7 @@ export default function Unposted({ company, onGo }: ScreenProps) {
                   <span className="text-ink-3">Nothing — it can post now. It was refused when it was issued.</span>
                 ) : (
                   (d.problems.length ? d.problems : ['The ledger gave no reason.']).map((p, i) => (
-                    <span key={i} className="text-[#9A4A06] dark:text-warning">
+                    <span key={i} className="text-warning-ink dark:text-warning">
                       {p}
                     </span>
                   ))

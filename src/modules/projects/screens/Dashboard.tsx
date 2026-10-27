@@ -21,7 +21,7 @@ import { StatGrid } from '../../../components/StatCard';
 const STATUS_ORDER: ProjectStatus[] = ['planning', 'pending_approval', 'active', 'on_hold', 'completed', 'cancelled'];
 const STATUS_BAR: Record<string, string> = {
   planning: 'bg-ink-3',
-  pending_approval: 'bg-[#8B5CF6]',
+  pending_approval: 'bg-violet',
   active: 'bg-primary',
   on_hold: 'bg-warning',
   completed: 'bg-success',
@@ -74,7 +74,7 @@ function Content({ d, onGo }: { d: FullDashboard; onGo: (route: string) => void 
         <Kpi icon="briefcase"  tone="blue" label="Active projects" value={k.active ?? 0} sub={`${k.total ?? 0} in total`} onClick={() => onGo('/projects/all?status=active')} />
         <Kpi icon="shield-alert" label="At risk" value={k.at_risk ?? 0} sub={`${k.watch ?? 0} on watch`} tone={k.at_risk ? 'text-danger' : 'text-ink'} onClick={() => onGo('/projects/all?health=at_risk')} />
         <Kpi icon="list-todo" label="Overdue tasks" value={k.tasks_overdue ?? 0} sub={`of ${num(k.tasks_open)} open`} tone={k.tasks_overdue ? 'text-danger' : 'text-ink'} onClick={() => onGo('/projects/my-work')} />
-        <Kpi icon="flag" label="Milestones · 30 days" value={k.milestones_30d ?? 0} sub={`${k.milestones_overdue ?? 0} overdue`} tone="text-[#6D28D9] dark:text-[#C4B5FD]" onClick={() => onGo('/projects/milestones')} />
+        <Kpi icon="flag" label="Milestones · 30 days" value={k.milestones_30d ?? 0} sub={`${k.milestones_overdue ?? 0} overdue`} tone="text-violet dark:text-violet-ink" onClick={() => onGo('/projects/milestones')} />
         <Kpi icon="timer" tone="cyan" label="Hours this week" value={hm(k.minutes_week)} sub={`${k.billable_percent_week ?? 0}% billable`} onClick={() => onGo('/projects/time')} />
         <Kpi
           icon="wallet"
@@ -261,7 +261,7 @@ function Milestones({ rows, onGo }: { rows: NonNullable<FullDashboard['upcoming_
             const left = daysLeftText(m.days_left);
             return (
               <li key={m.id} className="flex items-center gap-2.5 text-[12.5px]">
-                <span className="w-[46px] shrink-0 rounded-[6px] bg-[#EDE9FE] py-0.5 text-center text-[11px] font-bold text-[#5B21B6] dark:bg-[#5B21B6]/25 dark:text-[#C4B5FD]">{fmtDay(m.due_date)}</span>
+                <span className="w-[46px] shrink-0 rounded-[6px] bg-violet-bg py-0.5 text-center text-[11px] font-bold text-violet-ink dark:bg-violet/25">{fmtDay(m.due_date)}</span>
                 <span className="min-w-0 flex-1">
                   <b className="block truncate font-semibold text-ink">{m.name}</b>
                   <button type="button" onClick={() => onGo(projectPath(m.project_id))} className="block truncate text-start text-[11px] text-ink-3 hover:underline">

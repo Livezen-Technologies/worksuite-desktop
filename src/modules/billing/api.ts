@@ -36,15 +36,15 @@ export const K = {
 export type InvoiceStatus = 'draft' | 'pending_approval' | 'sent' | 'viewed' | 'partial' | 'paid' | 'overdue' | 'cancelled' | 'refunded';
 
 export const STATUS: Record<InvoiceStatus, { label: string; chip: string }> = {
-  draft: { label: 'Draft', chip: 'bg-[#F1F2F6] text-[#4A5168] dark:bg-[#1B2542] dark:text-[#C9CFE6]' },
-  pending_approval: { label: 'Awaiting approval', chip: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' },
-  sent: { label: 'Sent', chip: 'bg-[#DBEAFE] text-[#1E40AF] dark:bg-[#16203E] dark:text-[#93B4FF]' },
-  viewed: { label: 'Viewed', chip: 'bg-[#E0E7FF] text-[#3730A3] dark:bg-[#1E1B4B] dark:text-[#A5B4FC]' },
-  partial: { label: 'Part paid', chip: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' },
-  paid: { label: 'Paid', chip: 'bg-[#DCFCE7] text-[#166534] dark:bg-success-bg dark:text-success' },
-  overdue: { label: 'Overdue', chip: 'bg-[#FFE4E6] text-[#9F1239] dark:bg-danger-bg dark:text-danger' },
-  cancelled: { label: 'Cancelled', chip: 'bg-[#F1F2F6] text-[#8A91A6] dark:bg-[#1B2542] dark:text-[#8A91A6]' },
-  refunded: { label: 'Refunded', chip: 'bg-[#EDE9FE] text-[#5B21B6] dark:bg-[#2A1F4A] dark:text-[#C4B5FD]' },
+  draft: { label: 'Draft', chip: 'bg-subtle text-ink-2 dark:text-slate-ink' },
+  pending_approval: { label: 'Awaiting approval', chip: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning' },
+  sent: { label: 'Sent', chip: 'bg-blue-bg text-blue-ink dark:bg-info-soft' },
+  viewed: { label: 'Viewed', chip: 'bg-blue-bg text-primary dark:bg-info-soft dark:text-info-ink' },
+  partial: { label: 'Part paid', chip: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning' },
+  paid: { label: 'Paid', chip: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success' },
+  overdue: { label: 'Overdue', chip: 'bg-rose-bg text-rose-ink dark:bg-danger-bg dark:text-danger' },
+  cancelled: { label: 'Cancelled', chip: 'bg-subtle text-ink-4 dark:text-slate' },
+  refunded: { label: 'Refunded', chip: 'bg-violet-bg text-violet-ink' },
 };
 export const statusOf = (s: string | null | undefined) => STATUS[(s ?? 'draft') as InvoiceStatus] ?? { label: s ?? '—', chip: STATUS.draft.chip };
 export const STATUSES = Object.keys(STATUS) as InvoiceStatus[];

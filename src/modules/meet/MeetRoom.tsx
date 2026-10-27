@@ -91,7 +91,7 @@ function CallFactBadges() {
     <>
       <span
         title="Encrypted on every hop (DTLS-SRTP). The meeting server decrypts it to mix and forward, so this is not end-to-end encryption."
-        className="flex items-center gap-1 rounded-full bg-[#1F3A2E] px-2 py-0.5 text-[11.5px] font-semibold text-[#A7E3C4]"
+        className="flex items-center gap-1 rounded-full bg-stage-gray-2 px-2 py-0.5 text-[11.5px] font-semibold text-stage-success"
       >
         <Icon name="shield" size={12} />
         Encrypted in transit
@@ -102,13 +102,13 @@ function CallFactBadges() {
         * Settings sees what they actually pressed, and somebody who turned the
         * global keys off is not told about keys that are not held.
         */}
-      <span className="hidden items-center gap-1.5 font-mono text-[11px] text-[#8FA3C8] lg:flex" aria-hidden>
+      <span className="hidden items-center gap-1.5 font-mono text-[11px] text-stage-ink-3 lg:flex" aria-hidden>
         <span>{prettyAccelerator(keys['meet-mute'] ?? '')} mute</span>
         <span>·</span>
         <span>{prettyAccelerator(keys['meet-camera'] ?? '')} camera</span>
       </span>
       {info && info.hardwareAcceleration === false ? (
-        <span title="This run of WorkSuite is not using the GPU, so video costs more processor. Settings › General › Hardware acceleration, then restart." className="rounded-full bg-[#3A2A10] px-2 py-0.5 text-[11.5px] font-semibold text-[#F6C77A]">
+        <span title="This run of WorkSuite is not using the GPU, so video costs more processor. Settings › General › Hardware acceleration, then restart." className="rounded-full bg-stage-gray-2 px-2 py-0.5 text-[11.5px] font-semibold text-stage-warning">
           Hardware acceleration off
         </span>
       ) : null}
@@ -342,25 +342,25 @@ export function MeetRoom() {
           </div>
         ) : null}
         {meet.error ? (
-          <div className="flex items-center gap-2 rounded-[10px] bg-[#3A1A14] px-3 py-2 text-[12.5px] text-[#FFD2C4]" role="alert">
+          <div className="flex items-center gap-2 rounded-[10px] bg-stage-gray px-3 py-2 text-[12.5px] text-stage-gray-ink" role="alert">
             <span className="flex-1">{meet.error}</span>
             <button type="button" onClick={() => meet.note(null)} className="font-bold" aria-label="Dismiss">×</button>
           </div>
         ) : null}
         {meet.liveTx?.error ? (
-          <div className="flex items-center gap-2 rounded-[10px] bg-[#3A2A10] px-3 py-2 text-[12.5px] text-[#F6C77A]" role="status">
+          <div className="flex items-center gap-2 rounded-[10px] bg-stage-gray-2 px-3 py-2 text-[12.5px] text-stage-warning" role="status">
             <span className="flex-1">{meet.liveTx.error} Transcription carries on with what is said next.</span>
           </div>
         ) : null}
         {meet.can('admit') && waiting.length ? (
-          <div className="flex items-center gap-2 rounded-[10px] bg-[#16254F]/95 px-3 py-2 text-[12.5px] shadow-lg">
+          <div className="flex items-center gap-2 rounded-[10px] bg-navy-2/95 px-3 py-2 text-[12.5px] shadow-lg">
             <span className="flex-1">
               <b>{waiting.length === 1 ? waiting[0]!.name || 'Someone' : `${waiting.length} people`}</b> {waiting.length === 1 ? 'is' : 'are'} waiting to join
             </span>
-            <button type="button" onClick={() => void Promise.all(waiting.map((p) => meet.admit(p)))} className="h-7 rounded-[7px] bg-white px-2.5 text-[12px] font-bold text-[#151A2D]">
+            <button type="button" onClick={() => void Promise.all(waiting.map((p) => meet.admit(p)))} className="h-7 rounded-[7px] bg-white px-2.5 text-[12px] font-bold text-stage-on-light">
               Admit{waiting.length > 1 ? ' all' : ''}
             </button>
-            <button type="button" onClick={() => callUi.set({ panelOpen: true, panelTab: 'People' })} className="h-7 rounded-[7px] bg-[#2A3A66] px-2.5 text-[12px] font-semibold">
+            <button type="button" onClick={() => callUi.set({ panelOpen: true, panelTab: 'People' })} className="h-7 rounded-[7px] bg-stage-4 px-2.5 text-[12px] font-semibold">
               See who
             </button>
           </div>
@@ -381,12 +381,12 @@ export function MeetRoom() {
               retry={() => void (meet.recordingRetry === 'start' ? meet.startRecording() : meet.stopRecording())}
               stopPending={meet.rec?.pending?.some((r) => r.phase === 'starting') ? () => void meet.stopRecording() : undefined} />
             {meet.transcribing ? (
-              <span role="status" title={meet.transcribing.by ? `Transcribed by ${meet.transcribing.by}` : 'What is said is being transcribed'} className="flex items-center gap-1.5 rounded-full bg-[#1E3A5F] px-2 py-0.5 text-[11.5px] font-bold text-[#BFD7FF]">
-                <span className="h-2 w-2 rounded-full bg-[#5B9BFF]" />
+              <span role="status" title={meet.transcribing.by ? `Transcribed by ${meet.transcribing.by}` : 'What is said is being transcribed'} className="flex items-center gap-1.5 rounded-full bg-stage-4 px-2 py-0.5 text-[11.5px] font-bold text-navy-ink">
+                <span className="h-2 w-2 rounded-full bg-stage-blue" />
                 Transcribing{meet.liveTx?.pending ? ` · ${meet.liveTx.pending} in progress` : ''}
               </span>
             ) : null}
-            {meet.locked ? <span className="rounded-full bg-[#2A3A66] px-2 py-0.5 text-[11.5px] font-semibold">Locked</span> : null}
+            {meet.locked ? <span className="rounded-full bg-stage-4 px-2 py-0.5 text-[11.5px] font-semibold">Locked</span> : null}
             <CallFactBadges />
             {/* Poor or Offline connection strength (#254): said in the call bar too. */}
             <ConnectionWarning tone="dark" />
@@ -394,8 +394,8 @@ export function MeetRoom() {
         }
         headerExtra={
           <>
-            {info.meeting_id ? <span className="hidden text-[12px] text-[#AFC0E8] lg:inline">Meeting ID {formatCode(info.meeting_id)}</span> : null}
-            <button type="button" onClick={copyLink} className="no-drag h-7 rounded-[7px] bg-[#2A3A66] px-2.5 text-[12px] font-semibold hover:bg-[#344777]">
+            {info.meeting_id ? <span className="hidden text-[12px] text-stage-accent lg:inline">Meeting ID {formatCode(info.meeting_id)}</span> : null}
+            <button type="button" onClick={copyLink} className="no-drag h-7 rounded-[7px] bg-stage-4 px-2.5 text-[12px] font-semibold hover:bg-stage-4">
               Copy join link
             </button>
           </>

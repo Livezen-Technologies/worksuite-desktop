@@ -174,7 +174,7 @@ export function SlidesViewer({ name, load, onDownload, onOpenInOffice, active = 
             ))}
           </div>
         ) : null}
-        <div ref={stage} data-slides-stage className="relative min-h-0 min-w-0 flex-1 overflow-auto bg-[#E6E8EC] scroll-thin dark:bg-[#26282C]">
+        <div ref={stage} data-slides-stage className="relative min-h-0 min-w-0 flex-1 overflow-auto bg-info-bg scroll-thin dark:bg-slate-bg">
           {error ? (
             <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
               <Icon name="alert" size={30} className="text-ink-3" />

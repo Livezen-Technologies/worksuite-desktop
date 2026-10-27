@@ -42,7 +42,7 @@ export function ClientPick({ value, onChange, autoFocus, phoneFirst }: { value: 
 
   if (value) {
     return (
-      <div className="flex items-center gap-2 rounded-[10px] border border-primary bg-[#EEF1FD] px-3 py-2 dark:bg-selection">
+      <div className="flex items-center gap-2 rounded-[10px] border border-primary bg-selection px-3 py-2 dark:bg-selection">
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13.5px] font-bold text-ink">{value.name}</div>
           <div className="truncate text-[12px] text-ink-2">{[value.phone, value.email].filter(Boolean).join(' · ') || 'No phone or email'}</div>

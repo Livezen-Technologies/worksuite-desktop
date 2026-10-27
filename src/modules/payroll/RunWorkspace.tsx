@@ -99,7 +99,7 @@ export default function RunWorkspace({ id, figures, tab, active, onTab, onBack, 
           ) : null}
           {run.status === 'submitted' && d.can.approve ? (
             <>
-              <button type="button" disabled={!!noReject} title={noReject ?? undefined} onClick={() => setRejecting(true)} className="inline-flex h-8 items-center rounded-[7px] border border-[#F1B8A8] bg-surface px-3 text-[12.5px] font-semibold text-danger disabled:opacity-50 dark:border-danger/40">
+              <button type="button" disabled={!!noReject} title={noReject ?? undefined} onClick={() => setRejecting(true)} className="inline-flex h-8 items-center rounded-[7px] border border-danger-line bg-surface px-3 text-[12.5px] font-semibold text-danger disabled:opacity-50 dark:border-danger/40">
                 Reject…
               </button>
               <button type="button" disabled={ro} onClick={onApprove} className="inline-flex h-8 items-center rounded-[7px] bg-primary px-3 text-[12.5px] font-bold text-white disabled:opacity-50">
@@ -108,7 +108,7 @@ export default function RunWorkspace({ id, figures, tab, active, onTab, onBack, 
             </>
           ) : null}
           {reversible(run) && d.can.approve ? (
-            <button type="button" disabled={ro} onClick={() => setReversing(true)} className="inline-flex h-8 items-center rounded-[7px] border border-[#F1B8A8] bg-surface px-3 text-[12.5px] font-semibold text-danger disabled:opacity-50 dark:border-danger/40">
+            <button type="button" disabled={ro} onClick={() => setReversing(true)} className="inline-flex h-8 items-center rounded-[7px] border border-danger-line bg-surface px-3 text-[12.5px] font-semibold text-danger disabled:opacity-50 dark:border-danger/40">
               Reverse run…
             </button>
           ) : null}
@@ -180,7 +180,7 @@ function Fig({ label, value, sub, strong }: { label: string; value: string; sub?
   return (
     <div className="rounded-[8px] border border-line px-2.5 py-2">
       <div className="text-[11px] font-semibold text-ink-2">{label}</div>
-      <div className={cx('text-[15px] font-extrabold tabular-nums', strong ? 'text-[#1B2A85] dark:text-primary' : 'text-ink')}>{value}</div>
+      <div className={cx('text-[15px] font-extrabold tabular-nums', strong ? 'text-info-ink dark:text-primary' : 'text-ink')}>{value}</div>
       {sub ? <div className="text-[10.5px] text-ink-2">{sub}</div> : null}
     </div>
   );
@@ -246,14 +246,14 @@ function Employees({ d, show, onEmployee }: { d: RunDetail; show: boolean; onEmp
         <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2.5 py-2 text-[11.5px]">
           <input aria-label="Filter employees" placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} className="h-7 w-[150px] rounded-[7px] border border-line bg-surface px-2 text-[12px] text-ink outline-none focus:border-primary" />
           {(['all', 'flagged', 'held'] as const).map((k) => (
-            <button key={k} type="button" aria-pressed={only === k} onClick={() => setOnly(k)} className={cx('h-[26px] rounded-[13px] border px-2.5 font-semibold', only === k ? 'border-primary bg-[#EAEDFB] text-[#23349E] dark:bg-selection dark:text-primary' : 'border-line bg-surface text-ink-2')}>
+            <button key={k} type="button" aria-pressed={only === k} onClick={() => setOnly(k)} className={cx('h-[26px] rounded-[13px] border px-2.5 font-semibold', only === k ? 'border-primary bg-info-bg text-primary dark:bg-selection dark:text-primary' : 'border-line bg-surface text-ink-2')}>
               {k === 'all' ? `All ${d.payslips.length}` : k === 'flagged' ? `Flagged ${d.payslips.filter((p) => flagged.has(p.employee_id)).length}` : `Held ${d.payslips.filter((p) => p.status === 'held').length}`}
             </button>
           ))}
         </div>
         <Table head={['Employee', ['Days', 'r'], ['Gross', 'r'], ['Net', 'r'], 'Flag']}>
           {rows.map((p) => (
-            <tr tabIndex={0} onKeyDown={clickOnKey} key={p.id} onClick={() => setSel(p.id)} aria-selected={p.id === sel} className={cx('cursor-default', p.id === sel ? 'bg-[#EEF1FD] shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : 'hover:bg-subtle', p.status === 'held' && 'text-ink-2')}>
+            <tr tabIndex={0} onKeyDown={clickOnKey} key={p.id} onClick={() => setSel(p.id)} aria-selected={p.id === sel} className={cx('cursor-default', p.id === sel ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)] dark:bg-selection' : 'hover:bg-subtle', p.status === 'held' && 'text-ink-2')}>
               <td className={td}><b>{p.employee_name ?? '—'}</b> <span className="text-ink-2">{p.department ? `· ${p.department}` : ''}</span></td>
               <td className={tdr}>{p.paid_days ?? '—'}</td>
               <td className={tdr}>{show ? amt(p.gross) : '—'}</td>
@@ -310,7 +310,7 @@ function VarianceTab({ id, show }: { id: number; show: boolean }) {
   if (q.error) return <ErrorNote error={q.error} onRetry={() => void q.refetch()} />;
   const v = q.data;
   if (v === null || !v) return <Card><NotYet what="The run variance" /></Card>;
-  const tone = (p: string | number | null, flagged: boolean) => cx(tdr, flagged ? 'font-bold text-[#8A5200] dark:text-warning' : Number(p) > 0 ? 'text-[#23349E] dark:text-primary' : Number(p) < 0 ? 'text-[#C2410C]' : '');
+  const tone = (p: string | number | null, flagged: boolean) => cx(tdr, flagged ? 'font-bold text-yellow-ink dark:text-warning' : Number(p) > 0 ? 'text-primary dark:text-primary' : Number(p) < 0 ? 'text-orange' : '');
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center gap-2 text-[12px] text-ink-2">
@@ -369,7 +369,7 @@ function Validation({ d, ro, onChanged }: { d: RunDetail; ro: boolean; onChanged
       {!list.length ? <p className="m-0 px-3.5 pb-3 text-[12.5px] text-ink-3">None.</p> : null}
       {list.map((x) => (
         <div key={x.id} className="flex items-center gap-3 border-t border-line px-3.5 py-2.5 text-[12.5px]">
-          <span aria-hidden className={cx('flex size-7 shrink-0 items-center justify-center rounded-[7px] text-[11px] font-bold', red ? 'bg-[#FDECEA] text-[#B42318]' : 'bg-[#FFF4DB] text-[#8A5200]')}>{x.code.slice(0, 2).toUpperCase()}</span>
+          <span aria-hidden className={cx('flex size-7 shrink-0 items-center justify-center rounded-[7px] text-[11px] font-bold', red ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-yellow-ink')}>{x.code.slice(0, 2).toUpperCase()}</span>
           <span className="min-w-0 flex-1">
             <b>{x.employee_name ? `${x.employee_name} — ` : ''}{x.message ?? humanise(x.code)}</b>
             <div className="text-[11.5px] text-ink-2">{humanise(x.status ?? 'open')}</div>

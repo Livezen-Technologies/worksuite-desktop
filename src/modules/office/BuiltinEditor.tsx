@@ -235,7 +235,7 @@ export function BuiltinEditor({ tabKey, source, routeName, active, notice }: { t
         ) : null}
       </header>
       {notice ? <div role="status" className="shrink-0 border-b border-line bg-warning-bg px-3.5 py-1.5 text-[12px] text-ink-2">{notice}</div> : null}
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-white text-[#111]">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-white text-ink">
         <Suspense fallback={<Spinner label="Starting the editor…" />}>
           <BetterEditor
             key={revision}

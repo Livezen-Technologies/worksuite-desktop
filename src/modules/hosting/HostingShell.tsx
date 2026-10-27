@@ -196,7 +196,7 @@ export default function HostingShell({ active }: ModuleProps) {
         </SidePanel>
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-ground" aria-label={text('Hosting · {view}', { view: TITLES[view] })}>
           {!online ? (
-            <div role="status" className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[#F5D48A] bg-[#FFF8E6] px-5 py-2 text-[12.5px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+            <div role="status" className="flex shrink-0 flex-wrap items-center gap-3 border-b border-warning-line bg-warning-bg px-5 py-2 text-[12.5px] text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
               <span className="min-w-0 flex-1">
                 {cachedAt
                   ? text('You are offline. This is the register as of {time}. Adding, editing, DNS changes, sync and checks come back when you reconnect.', { time: when(cachedAt) })

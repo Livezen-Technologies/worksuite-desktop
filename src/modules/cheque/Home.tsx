@@ -67,7 +67,7 @@ export default function Home({ data, access, onGo }: { data: UseQueryResult<Stat
               return (
                 <div key={p.name}>
                   <div className="flex items-center gap-2 text-[13px]">
-                    <span aria-hidden className={`size-2 rounded-full ${ps.length ? 'bg-[#16A34A]' : 'bg-[#94A3B8]'}`} />
+                    <span aria-hidden className={`size-2 rounded-full ${ps.length ? 'bg-green' : 'bg-muted'}`} />
                     <b className="min-w-0 flex-1 truncate">{p.displayName}</b>
                     {ps.length ? <Badge tone="ok">Cheque profile</Badge> : <Badge>Not for cheques</Badge>}
                   </div>

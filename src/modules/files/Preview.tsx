@@ -72,26 +72,26 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
   ];
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Preview ${f.name}`} className="no-drag fixed inset-0 z-50 flex flex-col bg-[#0D1424] text-[#E6ECFA]">
-      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[#1E2C57] bg-[#0F1B3D] pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
+    <div role="dialog" aria-modal="true" aria-label={`Preview ${f.name}`} className="no-drag fixed inset-0 z-50 flex flex-col bg-stage text-stage-ink">
+      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-stage-3 bg-navy pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
         <button type="button" aria-label="Back to the folder" onClick={onClose} className="flex h-[34px] w-[34px] items-center justify-center rounded-[8px] hover:bg-white/10"><Icon name="chevron-left" size={18} /></button>
         <span className="rounded-[6px] bg-white/10 px-2 py-0.5 text-[10.5px] font-bold">{tagOf(f.name, f.extension)}</span>
         <div className="flex min-w-0 flex-col">
           <b className="truncate text-[14px]">{f.name}</b>
-          <span className="text-[12px] text-[#AFC0E8]">{f.folder_name || 'My Drive'} · {i + 1} of {files.length}</span>
+          <span className="text-[12px] text-stage-accent">{f.folder_name || 'My Drive'} · {i + 1} of {files.length}</span>
         </div>
         <span className="flex-1" />
-        <button type="button" aria-label="Previous file" disabled={i === 0} onClick={() => setI(i - 1)} className="h-[34px] w-[34px] rounded-[8px] border border-[#2A3A66] text-[18px] hover:bg-white/10 disabled:opacity-30">‹</button>
-        <button type="button" aria-label="Next file" disabled={i >= files.length - 1} onClick={() => setI(i + 1)} className="h-[34px] w-[34px] rounded-[8px] border border-[#2A3A66] text-[18px] hover:bg-white/10 disabled:opacity-30">›</button>
+        <button type="button" aria-label="Previous file" disabled={i === 0} onClick={() => setI(i - 1)} className="h-[34px] w-[34px] rounded-[8px] border border-stage-4 text-[18px] hover:bg-white/10 disabled:opacity-30">‹</button>
+        <button type="button" aria-label="Next file" disabled={i >= files.length - 1} onClick={() => setI(i + 1)} className="h-[34px] w-[34px] rounded-[8px] border border-stage-4 text-[18px] hover:bg-white/10 disabled:opacity-30">›</button>
         {how === 'image' && IMAGE_EDIT_EXTS.includes(extOf(f.name, f.extension)) && (can(f.access, 'upload_version') || can(f.access, 'download')) ? (
-          <button type="button" onClick={() => (onClose(), d.editImage(f))} className="h-[34px] rounded-[8px] bg-[#3B5BDB] px-3 font-bold text-white hover:brightness-110">Edit photo</button>
+          <button type="button" onClick={() => (onClose(), d.editImage(f))} className="h-[34px] rounded-[8px] bg-brand px-3 font-bold text-white hover:brightness-110">Edit photo</button>
         ) : null}
-        {how === 'text' ? <button type="button" onClick={() => (onClose(), d.editText(f))} className="h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10">{can(f.access, 'edit') ? 'Edit' : 'Open in the editor'}</button> : null}
-        {can(f.access, 'share') ? <button type="button" onClick={() => d.share({ type: 'file', f })} className="h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10">Share…</button> : null}
+        {how === 'text' ? <button type="button" onClick={() => (onClose(), d.editText(f))} className="h-[34px] rounded-[8px] border border-stage-4 px-3 font-semibold hover:bg-white/10">{can(f.access, 'edit') ? 'Edit' : 'Open in the editor'}</button> : null}
+        {can(f.access, 'share') ? <button type="button" onClick={() => d.share({ type: 'file', f })} className="h-[34px] rounded-[8px] border border-stage-4 px-3 font-semibold hover:bg-white/10">Share…</button> : null}
         {can(f.access, 'download') ? (
           <>
-            <button type="button" onClick={() => d.download([f], true)} className="h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10">Open locally</button>
-            <button type="button" onClick={() => d.download([f])} className="h-[34px] rounded-[8px] bg-[#3B5BDB] px-3.5 font-bold text-white hover:brightness-110">Download</button>
+            <button type="button" onClick={() => d.download([f], true)} className="h-[34px] rounded-[8px] border border-stage-4 px-3 font-semibold hover:bg-white/10">Open locally</button>
+            <button type="button" onClick={() => d.download([f])} className="h-[34px] rounded-[8px] bg-brand px-3.5 font-bold text-white hover:brightness-110">Download</button>
           </>
         ) : null}
         <button type="button" aria-label="Close viewer" onClick={onClose} className="ml-1 flex h-[34px] w-[34px] items-center justify-center rounded-[8px] text-[18px] hover:bg-white/10">×</button>
@@ -126,7 +126,7 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
             ) : null}
             {p?.status === 'ready' && how === 'text' ? (
               text.data ? (
-                <pre className="h-full w-full max-w-[1000px] overflow-auto rounded-[10px] bg-[#111A31] p-4 font-mono text-[12.5px] leading-[1.6] whitespace-pre-wrap text-[#D6DEF2] scroll-thin">{text.data.content}</pre>
+                <pre className="h-full w-full max-w-[1000px] overflow-auto rounded-[10px] bg-stage-2 p-4 font-mono text-[12.5px] leading-[1.6] whitespace-pre-wrap text-stage-gray-ink scroll-thin">{text.data.content}</pre>
               ) : text.error ? (
                 <Unavailable f={f} why="This text can’t be shown here." />
               ) : (
@@ -136,7 +136,7 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
             {p?.status === 'ready' && (!how || (how !== 'text' && !src)) ? <Unavailable f={f} why={how && !src ? 'You can open it, but not download it, so it can’t be shown here.' : 'There is no preview for this kind of file.'} /> : null}
           </div>
           {how === 'image' ? (
-            <div className="flex h-9 shrink-0 items-center justify-end gap-2 px-4 text-[12px] text-[#AFC0E8]">
+            <div className="flex h-9 shrink-0 items-center justify-end gap-2 px-4 text-[12px] text-stage-accent">
               {p?.width && p.height ? <span className="mr-auto">{p.width} × {p.height}</span> : null}
               <span>Zoom</span>
               <button type="button" aria-pressed={zoom === 'fit'} onClick={() => setZoom('fit')} className={cx('rounded-[6px] px-2 py-0.5', zoom === 'fit' ? 'bg-white/15 text-white' : 'hover:bg-white/10')}>Fit</button>
@@ -144,25 +144,25 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
             </div>
           ) : null}
           {files.length > 1 ? (
-            <div role="list" aria-label="Files here" className="flex h-[82px] shrink-0 items-center gap-2.5 overflow-x-auto border-t border-[#1E2C57] px-4 scroll-thin">
+            <div role="list" aria-label="Files here" className="flex h-[82px] shrink-0 items-center gap-2.5 overflow-x-auto border-t border-stage-3 px-4 scroll-thin">
               {files.map((x, n) => (
-                <button key={x.id} type="button" role="listitem" aria-current={n === i ? 'true' : undefined} title={x.name} onClick={() => setI(n)} className={cx('flex h-[58px] w-[86px] shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-white/5', n === i ? 'outline-3 outline-offset-2 outline-[#7FA2FF]' : 'opacity-55 hover:opacity-90')}>
+                <button key={x.id} type="button" role="listitem" aria-current={n === i ? 'true' : undefined} title={x.name} onClick={() => setI(n)} className={cx('flex h-[58px] w-[86px] shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-white/5', n === i ? 'outline-3 outline-offset-2 outline-stage-ink-3' : 'opacity-55 hover:opacity-90')}>
                   <FileIcon f={x} size={48} />
                 </button>
               ))}
             </div>
           ) : null}
         </div>
-        <aside aria-label="Details" className={cx(slides && 'hidden', 'flex w-[300px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-[#1E2C57] bg-[#0F1B3D] p-4 text-[12.5px]')}>
+        <aside aria-label="Details" className={cx(slides && 'hidden', 'flex w-[300px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-stage-3 bg-navy p-4 text-[12.5px]')}>
           <h2 className="text-[13px] font-bold">Details</h2>
           {facts.map(([k, v]) => (
             <div key={k} className="flex gap-2.5">
-              <span className="w-[76px] shrink-0 text-[#AFC0E8]">{k}</span>
+              <span className="w-[76px] shrink-0 text-stage-accent">{k}</span>
               <span className="min-w-0 break-words">{v}</span>
             </div>
           ))}
           {f.description ? <p className="mt-1 rounded-[8px] bg-white/5 p-2.5 leading-[1.5]">{f.description}</p> : null}
-          <button type="button" onClick={() => (onClose(), d.details({ type: 'file', f }, 'comments'))} className="mt-2 self-start font-semibold text-[#AFC6FF] hover:underline">Comments and versions…</button>
+          <button type="button" onClick={() => (onClose(), d.details({ type: 'file', f }, 'comments'))} className="mt-2 self-start font-semibold text-stage-accent hover:underline">Comments and versions…</button>
         </aside>
       </div>
     </div>
@@ -175,7 +175,7 @@ function Unavailable({ f, why }: { f: DriveFile; why: string }) {
     <div className="flex flex-col items-center gap-3 text-center">
       <FileIcon f={f} size={72} />
       <b className="text-[15px]">{f.name}</b>
-      <span className="text-[#AFC0E8]">{why}</span>
+      <span className="text-stage-accent">{why}</span>
       {can(f.access, 'download') ? <Button variant="primary" onClick={() => d.download([f], true)}>Open locally</Button> : null}
     </div>
   );

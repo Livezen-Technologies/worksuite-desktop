@@ -96,7 +96,7 @@ export default function Overview({ data, org, nav, syncing, onSyncAll }: { data:
             <ul className="m-0 flex list-none flex-col gap-2.5 px-3.5 pb-3">
               {attention.map((a) => (
                 <li key={`${a.kind}-${a.id}`} className="flex gap-2.5">
-                  <span className={cx('mt-[5px] size-2 shrink-0 rounded-full', a.severity === 'error' ? 'bg-[#B42318]' : 'bg-[#B45309]')} />
+                  <span className={cx('mt-[5px] size-2 shrink-0 rounded-full', a.severity === 'error' ? 'bg-danger' : 'bg-warning')} />
                   <button type="button" onClick={(e) => openAttention(a, nav, e.metaKey || e.ctrlKey)} className="min-w-0 text-left hover:underline">
                     <div className="text-[12.5px] font-semibold text-ink">{a.title}</div>
                     {a.detail ? <div className="text-[11.5px] text-ink-3">{a.detail}</div> : null}

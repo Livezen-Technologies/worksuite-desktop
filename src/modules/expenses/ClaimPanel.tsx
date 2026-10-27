@@ -188,7 +188,7 @@ export default function ClaimPanel({
               </div>
             ) : mayReopen && writable && (c.status === 'approved' || c.status === 'rejected') ? (
               <div className="mt-3 flex flex-col items-start gap-1.5 border-t border-line pt-3">
-                <button type="button" className={cx(btn, 'text-[#9A4A06] dark:text-warning')} onClick={() => setAsking('reopen')}>
+                <button type="button" className={cx(btn, 'text-warning-ink dark:text-warning')} onClick={() => setAsking('reopen')}>
                   <Icon name="unlock" size={14} /> Reopen for correction
                 </button>
                 <span className="text-[12px] text-ink-3">Hands it back to {c.claimant ?? 'the claimant'} to change and resubmit. The decision is recorded as set aside.</span>
@@ -354,7 +354,7 @@ function Trail({ claim }: { claim: ClaimDetail }) {
           <ol className="m-0 flex list-none flex-col gap-2 p-0">
             {r.steps.map((a) => (
               <li key={a.id} className="flex items-start gap-2.5">
-                <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', a.status === 'approved' ? 'bg-success' : a.status === 'rejected' ? 'bg-danger' : a.status === 'skipped' ? 'bg-line' : 'bg-[#E59A2F]')} />
+                <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', a.status === 'approved' ? 'bg-success' : a.status === 'rejected' ? 'bg-danger' : a.status === 'skipped' ? 'bg-line' : 'bg-amber')} />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="text-[13px] text-ink">
                     <b>{a.label ?? `Step ${a.step}`}</b> — {approvalLine(a)}

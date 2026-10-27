@@ -120,7 +120,7 @@ export const STATUSES: Array<{ id: Status; label: string; dot: string }> = [
 
 export const PRIORITIES: Array<{ id: Priority; label: string; tone: string }> = [
   { id: 'urgent', label: 'Urgent', tone: 'bg-danger-bg text-danger' },
-  { id: 'high', label: 'High', tone: 'bg-warning-bg text-[#9A4A06] dark:text-warning' },
+  { id: 'high', label: 'High', tone: 'bg-warning-bg text-warning-ink dark:text-warning' },
   { id: 'medium', label: 'Medium', tone: 'bg-selection text-primary' },
   { id: 'low', label: 'Low', tone: 'bg-subtle text-ink-2' },
   { id: 'none', label: 'None', tone: 'bg-subtle text-ink-3' },

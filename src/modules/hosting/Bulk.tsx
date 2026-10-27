@@ -44,7 +44,7 @@ export function BulkBar({ kind, ids, orgs, onClear }: { kind: BulkKind; ids: num
     }
   };
   return (
-    <div role="toolbar" aria-label={text('Change the selected rows')} className="flex flex-wrap items-center gap-2 rounded-[10px] border border-[#C9D3F5] bg-[#F5F7FF] px-3 py-2 text-[12.5px] dark:bg-primary/10">
+    <div role="toolbar" aria-label={text('Change the selected rows')} className="flex flex-wrap items-center gap-2 rounded-[10px] border border-info-line bg-info-soft px-3 py-2 text-[12.5px] dark:bg-primary/10">
       <span className="font-semibold text-ink">{text('{n} selected', { n: ids.length })}</span>
       <span className="flex-1" />
       {BULK_ACTIONS[kind].map((a) => (

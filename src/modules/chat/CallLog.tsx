@@ -79,7 +79,7 @@ export function CallLogList({ log, rooms, filter, needle }: { log: ReturnType<ty
                 aria-label={`${d.action} ${name}`}
                 title={d.action}
                 onClick={() => (d.kind === 'live' ? void answerCall(c.uuid, String(c.room_id), false, name) : void startCall(c.room_id, c.mode, name))}
-                className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-full', d.kind === 'live' ? 'bg-[#1F9D5C] text-white' : 'bg-selection text-primary hover:brightness-95')}
+                className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-full', d.kind === 'live' ? 'bg-green text-white' : 'bg-selection text-primary hover:brightness-95')}
               >
                 <Icon name={c.mode === 'video' ? 'video' : 'phone'} size={16} />
               </button>

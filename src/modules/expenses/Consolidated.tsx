@@ -162,7 +162,7 @@ export default function Consolidated(_props: ScreenProps) {
                       <Cell w={150} className="text-right font-bold text-ink tabular-nums">
                         {money(r.total, r.currency)}
                       </Cell>
-                      <Cell w={150} className="text-right text-[#9A4A06] tabular-nums dark:text-warning">
+                      <Cell w={150} className="text-right text-warning-ink tabular-nums dark:text-warning">
                         {money(r.pending, r.currency)}
                       </Cell>
                       <Cell w={150} className="text-right text-primary tabular-nums">

@@ -9,7 +9,7 @@ import { DesktopError } from '../../../electron/main/errors';
 import { loadPdfium, PdfiumProvider } from '../../../electron/services/pdf/pdfium-provider';
 import { PdfLocalFiles } from '../../../electron/services/pdf/local-files';
 import { PdfRecovery } from '../../../electron/services/pdf/recovery';
-import { DEFAULT_PDF_POLICY, DesktopPdfService, type EngineHandle } from '../../../electron/services/pdf/service';
+import { DEFAULT_PDF_POLICY, DesktopPdfService, type EngineHandle, type PdfServiceDeps } from '../../../electron/services/pdf/service';
 import { PdfStorage } from '../../../electron/services/pdf/storage';
 import { StudioApi } from '../../../electron/services/pdf/studio-api';
 import { makePdf } from './pdf-fixture';
@@ -156,7 +156,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-function service(over: { chooseSavePath?: (s: number, suggested: string) => Promise<string | null> } = {}) {
+function service(over: { chooseSavePath?: (s: number, suggested: string) => Promise<string | null>; chooseFolder?: () => Promise<string | null>; pickImages?: PdfServiceDeps['pickImages'] } = {}) {
   const storage = new PdfStorage(join(dir, 'PDF'), () => null);
   const http = {
     get: async <T,>(): Promise<T> => {
@@ -192,7 +192,9 @@ function service(over: { chooseSavePath?: (s: number, suggested: string) => Prom
       written.push({ path, bytes });
       writeFileSync(path, bytes);
     },
-    chooseSavePath: over.chooseSavePath ?? (async () => join(dir, 'chosen.pdf')),
+    chooseSavePath: over.chooseSavePath ?? (async (_s: number, suggested: string) => join(dir, suggested.endsWith('.txt') ? 'chosen.txt' : 'chosen.pdf')),
+    chooseFolder: over.chooseFolder ?? (async () => dir),
+    pickImages: over.pickImages,
   });
 }
 
@@ -464,5 +466,60 @@ describe('a PDF on this computer', () => {
     expect(r).toEqual({ saved: true, name: 'chosen.pdf' });
     expect((await annotationsIn(readFileSync(join(dir, 'chosen.pdf')))).pages).toBe(2);
     expect(last(v.id).pageCount).toBe(3);
+  });
+});
+
+describe('tools on this computer (D-G12)', () => {
+  it('stamps, duplicates and redacts as journaled edits, undone like any other', async () => {
+    const svc = service();
+    const v = await opened(svc);
+    await svc.setMode(1, v.id, 'EDIT');
+    await svc.edit(1, v.id, { op: 'page.stamp', pages: [0, 1, 2], stamp: { text: '{bates}', place: 'bottom-right', size: 9, color: [0, 0, 0], opacity: 1, bates: { prefix: 'C-', start: 1, digits: 4, suffix: '' } } });
+    await svc.edit(1, v.id, { op: 'page.duplicate', pages: [0], at: 3 });
+    expect(last(v.id).pageCount).toBe(4);
+    expect(last(v.id).edit.summary).toMatchObject({ content_edits: 3, pages_inserted: 1 });
+    await svc.undo(1, v.id);
+    expect(last(v.id).pageCount).toBe(3);
+  });
+
+  it('saves a protected copy and the text, and refuses to unlock a PDF with no security', async () => {
+    const svc = service();
+    const v = await opened(svc);
+    const r = await svc.derive(1, v.id, { kind: 'protect', userPassword: 'pw', ownerPassword: 'owner', allow: { print: true, copy: false, modify: false, annotate: false } });
+    expect(r).toMatchObject({ saved: true, files: 1, name: 'chosen.pdf' });
+    expect(r.open?.name).toBe('chosen.pdf');
+    const e = new PdfiumProvider(pdfium);
+    await expect(e.open({ kind: 'plain', path: join(dir, 'chosen.pdf'), size: readFileSync(join(dir, 'chosen.pdf')).length }, null)).rejects.toMatchObject({ code: 'password' });
+    const t = await svc.derive(1, v.id, { kind: 'text' });
+    expect(t.name).toBe('chosen.txt');
+    expect(readFileSync(join(dir, 'chosen.txt'), 'utf8')).toMatch(/--- Page 1 ---\nPage 1 of the contract/);
+    await expect(svc.derive(1, v.id, { kind: 'unprotect' })).rejects.toMatchObject({ code: 'IPC_VALIDATION_FAILED' });
+    expect(audit.filter((a) => a.action === 'pdf.exported').map((a) => a.details.kind)).toEqual(['protect', 'text']);
+  });
+
+  it('splits into parts in the folder chosen', async () => {
+    const svc = service();
+    const v = await opened(svc);
+    const r = await svc.derive(1, v.id, { kind: 'split', groups: [[0, 1], [2]] });
+    expect(r.files).toBe(2);
+    expect((await annotationsIn(readFileSync(join(dir, 'Contract (part 1).pdf')))).pages).toBe(2);
+    expect((await annotationsIn(readFileSync(join(dir, 'Contract (part 2).pdf')))).pages).toBe(1);
+  });
+
+  it('combines PDFs from this computer into a new one, and makes one from pictures', async () => {
+    const svc = service();
+    const a = join(dir, 'A.pdf');
+    const b = join(dir, 'B.pdf');
+    writeFileSync(a, makePdf({ pages: 2 }));
+    writeFileSync(b, makePdf({ pages: 3 }));
+    const { files } = await svc.registerLocal([a, b]);
+    const r = await svc.compose(1, { kind: 'combine', parts: [{ file: files[0]!.handle }, { file: files[1]!.handle, pages: [1] }], bookmarks: true, name: 'Both' });
+    expect(r).toMatchObject({ saved: true, name: 'chosen.pdf' });
+    expect((await annotationsIn(readFileSync(join(dir, 'chosen.pdf')))).pages).toBe(3);
+    const pics = service({ pickImages: async () => [{ name: 'a.png', width: 4, height: 4, bgra: new Uint8Array(64).fill(255) }] });
+    const p = await pics.compose(1, { kind: 'images', fit: 'a4', name: 'Scan' });
+    expect(p.saved).toBe(true);
+    expect((await annotationsIn(readFileSync(join(dir, 'chosen.pdf')))).pages).toBe(1);
+    expect(await service({ pickImages: async () => [] }).compose(1, { kind: 'images', fit: 'image', name: 'x' })).toMatchObject({ saved: false });
   });
 });

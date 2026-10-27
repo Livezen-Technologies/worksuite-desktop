@@ -48,7 +48,7 @@ export function useCallbackList(status: 'todo' | 'handled', mine: boolean, enabl
 
 const STATUS: Record<string, { label: string; tone: string }> = {
   open: { label: 'To do', tone: 'bg-selection text-primary' },
-  unreachable: { label: "Couldn't reach", tone: 'bg-warning-bg text-[#9A4A06] dark:text-warning' },
+  unreachable: { label: "Couldn't reach", tone: 'bg-warning-bg text-warning-ink dark:text-warning' },
   contacted: { label: 'Contacted', tone: 'bg-success-bg text-success' },
   done: { label: 'Done', tone: 'bg-subtle text-ink-3' },
 };

@@ -1,6 +1,6 @@
 {
     "module": "projects",
-    "version": "1.6.4",
+    "version": "1.6.5",
     "paths": [
         "electron/services/projects",
         "shared/projects.ts",

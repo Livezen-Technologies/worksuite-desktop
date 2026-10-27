@@ -139,7 +139,7 @@ export default function ProductPictures({ productId, pending, onPending }: { pro
       }}
       onDragLeave={() => setOver(false)}
       onDrop={dropFiles}
-      className={cx('rounded-[10px] border border-dashed p-2.5', over ? 'border-primary bg-[#F4F6FE] dark:bg-selection/40' : 'border-line')}
+      className={cx('rounded-[10px] border border-dashed p-2.5', over ? 'border-primary bg-info-soft dark:bg-selection/40' : 'border-line')}
     >
       {productId && images.isLoading ? <span className="text-[12px] text-ink-3">Loading pictures…</span> : null}
       {productId && images.error ? <span className="text-[12px] text-danger">{errorMessage(images.error)}</span> : null}

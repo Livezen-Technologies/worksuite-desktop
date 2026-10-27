@@ -163,7 +163,7 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
                   {inv.days_overdue} {inv.days_overdue === 1 ? 'day' : 'days'} late
                 </span>
               ) : null}
-              {inv.disputed ? <span className="rounded-[10px] bg-warning-bg px-2 py-0.5 text-[11px] font-semibold text-[#9A4A06] dark:text-warning">Disputed</span> : null}
+              {inv.disputed ? <span className="rounded-[10px] bg-warning-bg px-2 py-0.5 text-[11px] font-semibold text-warning-ink dark:text-warning">Disputed</span> : null}
             </span>
             <span className="truncate text-[12.5px] text-ink-3">{[inv.client ?? 'No customer', TYPE_LABEL[inv.type] ?? null, inv.project, inv.po_number ? `PO ${inv.po_number}` : null].filter(Boolean).join(' · ')}</span>
           </div>
@@ -193,7 +193,7 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
           ) : pending ? (
             inv.approval?.can_approve && !offline ? (
               <>
-                <button type="button" className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} disabled={busy} onClick={() => setAsking('approve')}>
+                <button type="button" className={btnPrimary + ' !bg-success hover:!bg-success'} disabled={busy} onClick={() => setAsking('approve')}>
                   Approve
                 </button>
                 <button type="button" className={btn + ' !text-danger'} disabled={busy} onClick={() => setAsking('reject')}>
@@ -209,7 +209,7 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
                 </button>
               ) : null}
               {mayPay && inv.due > 0 && live ? (
-                <button type="button" className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} onClick={() => setPaying(true)}>
+                <button type="button" className={btnPrimary + ' !bg-success hover:!bg-success'} onClick={() => setPaying(true)}>
                   Record payment
                 </button>
               ) : null}
@@ -234,7 +234,7 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
           </p>
         ) : null}
         {pending ? (
-          <p className="m-0 rounded-[10px] border border-[#F5D48A] bg-[#FFF8E6] px-3.5 py-2 text-[12.5px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+          <p className="m-0 rounded-[10px] border border-warning-line bg-warning-bg px-3.5 py-2 text-[12.5px] text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
             Waiting for approval
             {inv.approval?.submitted_at ? ` — submitted ${dateLabel(inv.approval.submitted_at)}` : ''}.{inv.approval?.rule ? ` ${inv.approval.rule}` : ''} It is issued when approved.
           </p>
@@ -310,7 +310,7 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
                 </label>
               ) : null}
               <div className="flex w-[320px] flex-col gap-1 self-end text-[12.5px]">
-                {dirty ? <span className="text-right text-[11.5px] text-[#9A4A06] dark:text-warning">Unsaved changes — the totals below update when you save.</span> : null}
+                {dirty ? <span className="text-right text-[11.5px] text-warning-ink dark:text-warning">Unsaved changes — the totals below update when you save.</span> : null}
                 <Total label="Subtotal" value={amount(inv.subtotal)} />
                 {inv.discount ? <Total label="Discount" value={`− ${amount(inv.discount)}`} /> : null}
                 {inv.tax_breakdown.length ? (
@@ -318,13 +318,13 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
                 ) : (
                   <Total label="Tax" value={amount(inv.tax_total)} />
                 )}
-                {inv.withholding ? <Total label="Withholding" value={`− ${amount(inv.withholding)}`} tone="text-[#9A4A06] dark:text-warning" /> : null}
+                {inv.withholding ? <Total label="Withholding" value={`− ${amount(inv.withholding)}`} tone="text-warning-ink dark:text-warning" /> : null}
                 <span className="flex border-t border-line pt-1.5 text-[15px]">
                   <span className="flex-1 text-ink">Total {inv.currency}</span>
                   <b className="text-ink tabular-nums">{amount(inv.total)}</b>
                 </span>
                 {!draft && !pending && inv.status !== 'cancelled' ? (
-                  <span className={cx('flex font-bold', inv.due > 0 ? 'text-danger' : 'text-[#1F7A4D] dark:text-success')}>
+                  <span className={cx('flex font-bold', inv.due > 0 ? 'text-danger' : 'text-success dark:text-success')}>
                     <span className="flex-1">Outstanding</span>
                     <span className="tabular-nums">{amount(inv.due)}</span>
                   </span>
@@ -487,7 +487,7 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
               ) : asking === 'approve' ? (
                 <button
                   type="button"
-                  className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'}
+                  className={btnPrimary + ' !bg-success hover:!bg-success'}
                   disabled={busy}
                   onClick={() =>
                     void run(async () => {
@@ -548,7 +548,7 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
           ) : null}
           {asking === 'cancel' ? (
             refusal ? (
-              <div role="alert" className="flex flex-col gap-1.5 rounded-[10px] border border-[#F1B8A8] bg-danger-bg px-3 py-2.5 text-[12.5px] text-danger dark:border-danger/40">
+              <div role="alert" className="flex flex-col gap-1.5 rounded-[10px] border border-danger-line bg-danger-bg px-3 py-2.5 text-[12.5px] text-danger dark:border-danger/40">
                 <b>{refusal.code === 'period_locked' ? 'The period is locked' : 'It cannot be cancelled'}</b>
                 <span>{refusal.message}</span>
                 {refusal.creditInstead ? <span className="text-ink-2">Raise a credit note for {amount(inv.due || inv.total, inv.currency)} instead: it is dated today, in the open period, and leaves the locked books as they are.</span> : null}
@@ -668,7 +668,7 @@ function Attachments({ id, canEdit }: { id: number; canEdit: boolean }) {
 
 function Card({ label, value, tint }: { label: string; value: ReactNode; tint?: boolean }) {
   return (
-    <div className={cx('flex flex-col gap-0.5 rounded-[10px] border border-line px-3 py-2.5', tint ? 'bg-[#EEF4FF] dark:bg-selection/50' : 'bg-surface')}>
+    <div className={cx('flex flex-col gap-0.5 rounded-[10px] border border-line px-3 py-2.5', tint ? 'bg-selection dark:bg-selection/50' : 'bg-surface')}>
       <span className="text-[11.5px] font-semibold text-ink-3">{label}</span>
       <b className="text-[16px] text-ink tabular-nums">{value}</b>
     </div>

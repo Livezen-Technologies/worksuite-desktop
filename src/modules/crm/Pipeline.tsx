@@ -131,7 +131,7 @@ function Column({ c, currency, canMove, over, dragging, onDragOver, onDrop, onDr
         onDragOver();
       }}
       onDrop={(e) => (e.preventDefault(), onDrop())}
-      className={cx('flex min-h-0 flex-col gap-2 rounded-[10px] bg-[#E9ECF3] p-2 dark:bg-well', over && dragging && dragging.stage_id !== c.id && 'ring-2 ring-primary')}
+      className={cx('flex min-h-0 flex-col gap-2 rounded-[10px] bg-info-bg p-2 dark:bg-well', over && dragging && dragging.stage_id !== c.id && 'ring-2 ring-primary')}
     >
       <div className="flex flex-col gap-0.5 px-1 pt-0.5" data-column-head>
         <span className="flex items-center gap-1.5">
@@ -166,13 +166,13 @@ function Column({ c, currency, canMove, over, dragging, onDragOver, onDrop, onDr
               <span className="flex items-center gap-1.5">
                 <b className="min-w-0 flex-1 text-[12.5px] text-ink tabular-nums">{money(d.amount, d.currency)}</b>
                 {stale ? (
-                  <span title={`${d.days_in_stage} days in this stage`} className="rounded-full bg-[#FFF4E0] px-1.5 text-[10.5px] font-bold text-[#9A4A06] dark:bg-warning-bg dark:text-warning">
+                  <span title={`${d.days_in_stage} days in this stage`} className="rounded-full bg-warning-bg px-1.5 text-[10.5px] font-bold text-warning-ink dark:bg-warning-bg dark:text-warning">
                     {d.days_in_stage}d
                   </span>
                 ) : null}
               </span>
               <span className="flex items-center gap-1.5 text-[11.5px]">
-                <span className={cx('min-w-0 flex-1 truncate', d.owner_name ? 'text-ink-2' : 'font-bold text-[#9A4A06] dark:text-warning')}>{d.owner_name ?? 'Unassigned'}</span>
+                <span className={cx('min-w-0 flex-1 truncate', d.owner_name ? 'text-ink-2' : 'font-bold text-warning-ink dark:text-warning')}>{d.owner_name ?? 'Unassigned'}</span>
                 <span className={late ? 'font-bold text-danger' : 'text-ink-3'}>{d.won_at ? `Won ${dateLabel(d.won_at)}` : d.close_date ? dateLabel(d.close_date) : ''}</span>
               </span>
             </button>
@@ -250,7 +250,7 @@ function DealDrawer({ id, canDeal, columns, onClose, onMove, onLose, onChanged, 
               [d.stage_name, `${d.probability}%`, d.stage_kind === 'open' ? `${d.days_in_stage}d in stage` : ''],
               ['Weighted', money((d.amount * d.probability) / 100, d.currency), ''],
             ].map(([l, v, sub]) => (
-              <div key={l} className="flex flex-col rounded-[10px] bg-[#F7F8FB] px-3 py-2 dark:bg-well">
+              <div key={l} className="flex flex-col rounded-[10px] bg-info-soft px-3 py-2 dark:bg-well">
                 <span className="text-[11.5px] font-semibold text-ink-3">{l}</span>
                 <b className="text-[16px] text-ink tabular-nums">{v}</b>
                 {sub ? <span className={cx('text-[11px]', d.days_in_stage >= 14 ? 'font-bold text-danger' : 'text-ink-3')}>{sub}</span> : null}

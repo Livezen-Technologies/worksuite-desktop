@@ -12,6 +12,7 @@ import { useNow } from '../../core/use-now';
 import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import { Button, Chip, cx } from '../../components/ui';
+import { SectionHeader, SettingRowFrame, SettingsGroup } from '../../components/SettingsKit';
 import { UpdateActions } from '../../app/screens/UpdateScreens';
 import { packageLine } from '../../app/screens/UpdateDialogs';
 import { ChannelRow, updateStateLabel } from './UpdatesCard';
@@ -115,12 +116,13 @@ function DownloadCard({ u }: { u: UpdateStatus }) {
   const title = moving ? `Downloading WorkSuite ${u.availableVersion}` : u.state === 'STAGED' ? `WorkSuite ${u.availableVersion} is ready` : `WorkSuite ${u.availableVersion} is available`;
   const line = packageLine(u, info?.platform, info?.arch);
   return (
-    <section aria-label="Download" className="rounded-[12px] border border-line bg-surface p-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-[15px] font-bold text-ink">{title}</h3>
-        {line ? <span className="text-[12.5px] text-ink-3">{line} · full package</span> : null}
-        <div className="flex-1" />
-        {u.state === 'DOWNLOADING' ? (
+    <SettingsGroup
+      label="Download"
+      title={title}
+      description={line ? `${line} · full package` : undefined}
+      className="!mb-0"
+      actions={
+        u.state === 'DOWNLOADING' ? (
           <>
             {d?.paused ? (
               <Button loading={working} onClick={() => run('updates:resumeDownload')}>
@@ -137,8 +139,11 @@ function DownloadCard({ u }: { u: UpdateStatus }) {
           </>
         ) : (
           <UpdateActions />
-        )}
-      </div>
+        )
+      }
+    >
+      {moving || u.state === 'STAGED' || u.pipeline ? (
+      <div className="px-[18px] pt-0 pb-4">
       {moving || u.state === 'STAGED' ? (
         <>
           <div role="progressbar" aria-label="Download progress" aria-valuenow={u.progress} aria-valuemin={0} aria-valuemax={100} className="mt-4 h-2 overflow-hidden rounded-full bg-subtle">
@@ -157,7 +162,9 @@ function DownloadCard({ u }: { u: UpdateStatus }) {
         </>
       ) : null}
       {u.pipeline ? <Pipeline steps={u.pipeline} installKind={u.installKind} /> : null}
-    </section>
+      </div>
+      ) : null}
+    </SettingsGroup>
   );
 }
 
@@ -245,17 +252,16 @@ function Preferences({ prefs, u }: { prefs: Preferences | null; u: UpdateStatus 
   const autoLock = isLocked('autoUpdate');
   const set = (patch: Partial<Preferences>) => void updatePrefs(patch).catch((e) => toast('error', errorMessage(e)));
   return (
-    <section aria-label="Preferences" className="rounded-[12px] border border-line bg-surface p-5">
-      <h3 className="text-[15px] font-bold text-ink">Preferences</h3>
-      <div className="mt-2">
+    <SettingsGroup title="Preferences" className="!mb-0">
+      <div className="px-[18px] pt-2.5">
         <PrefRow label="Download updates automatically" note={autoLock ? 'policy' : undefined} checked={autoLock ? true : prefs?.autoUpdate !== false} disabled={!!autoLock || !prefs} onChange={(v) => set({ autoUpdate: v })} />
         <PrefRow label="Show What's New after updating" checked={prefs?.updateShowWhatsNew !== false} disabled={!prefs} onChange={(v) => set({ updateShowWhatsNew: v })} />
         <PrefRow label="Install automatically when idle 02:00–04:00" checked={prefs?.updateInstallWhenIdle === true} disabled={!prefs} onChange={(v) => set({ updateInstallWhenIdle: v })} />
         <PrefRow label="Install when quitting" checked={prefs?.updateInstallOnQuit !== false} disabled={!prefs} onChange={(v) => set({ updateInstallOnQuit: v })} />
         <PrefRow label="Update notifications" checked={prefs?.updateNotifications !== false} disabled={!prefs} onChange={(v) => set({ updateNotifications: v })} />
       </div>
-      <p className="mt-2 text-[12px] text-ink-3">{checkLine(u, now)}</p>
-    </section>
+      <p className="px-[18px] pt-2 pb-3.5 text-[12px] text-ink-3">{checkLine(u, now)}</p>
+    </SettingsGroup>
   );
 }
 
@@ -264,15 +270,18 @@ function WhatsNewPanel({ u }: { u: UpdateStatus }) {
   const r = u.release;
   const meta = [r?.securityFixes !== null && r?.securityFixes !== undefined ? `Security: ${r.securityFixes} fix${r.securityFixes === 1 ? '' : 'es'}` : null, r && (r.knownIssues.length || r.securityFixes !== null) ? `Known issues: ${r.knownIssues.length ? r.knownIssues.join('; ') : 'none'}` : null].filter(Boolean);
   return (
-    <section aria-label={`What's new in ${n.version}`} className="rounded-[12px] border border-line bg-surface p-5">
-      <div className="flex items-center gap-3">
-        <h3 className="flex-1 text-[15px] font-bold text-ink">What&apos;s new in {n.version}</h3>
-        {n.url ? (
+    <SettingsGroup
+      title={`What's new in ${n.version}`}
+      className="!mb-0"
+      actions={
+        n.url ? (
           <button type="button" className="text-[12.5px] font-semibold text-primary underline" onClick={() => void call('app:openExternal', { url: n.url! })}>
             Full release notes
           </button>
-        ) : null}
-      </div>
+        ) : null
+      }
+    >
+      <div className="px-[18px] pt-2 pb-3.5">
       {n.summary && n.summary !== n.highlights[0] ? <p className="mt-1 text-[13px] text-ink-2">{n.summary}</p> : null}
       {n.highlights.length ? (
         <ul className="mt-2 list-disc space-y-1 pl-5 text-[13px] text-ink">
@@ -283,7 +292,8 @@ function WhatsNewPanel({ u }: { u: UpdateStatus }) {
       ) : null}
       {!n.summary && !n.highlights.length ? <p className="mt-1 text-[13px] text-ink-2">Release notes not available{n.url ? ' here: open the full release notes.' : '.'}</p> : null}
       {meta.length ? <p className="mt-2 text-[12px] text-ink-3">{meta.join(' · ')}</p> : null}
-    </section>
+      </div>
+    </SettingsGroup>
   );
 }
 
@@ -309,14 +319,15 @@ export function UpdatesPage({ onDiagnostics }: { onDiagnostics?: () => void }) {
   const showDownload = !!u?.availableVersion && ['AVAILABLE', 'DOWNLOADING', 'VERIFIED', 'STAGED'].includes(u.state);
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <h2 className="text-[20px] leading-tight font-bold text-ink">Updates</h2>
-        <Chip tone={state.tone}>{state.word.toUpperCase()}</Chip>
-        <div className="flex-1" />
-        <Button loading={checking || u?.state === 'CHECKING'} disabled={u?.state === 'DOWNLOADING' || u?.state === 'INSTALLING'} onClick={check}>
-          Check for updates
-        </Button>
-      </div>
+      <SectionHeader
+        title="Updates"
+        hint={<Chip tone={state.tone}>{state.word.toUpperCase()}</Chip>}
+        actions={
+          <Button loading={checking || u?.state === 'CHECKING'} disabled={u?.state === 'DOWNLOADING' || u?.state === 'INSTALLING'} onClick={check}>
+            Check for updates
+          </Button>
+        }
+      />
       {u?.failure ? <UpdateFailedPanel u={u} /> : null}
       {state.detail && !u?.failure && u?.state !== 'DOWNLOADING' ? <p className="text-[13px] text-ink-2">{state.detail}</p> : null}
       <StatGrid min={200}>
@@ -341,29 +352,28 @@ export function UpdatesPage({ onDiagnostics }: { onDiagnostics?: () => void }) {
         />
       </StatGrid>
       {showDownload && u ? <DownloadCard u={u} /> : null}
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid items-start gap-4 lg:grid-cols-[1.4fr_1fr]">
         {u?.notes && u.availableVersion ? (
           <WhatsNewPanel u={u} />
         ) : (
-          <section className="rounded-[12px] border border-line bg-surface p-5 text-[13px] text-ink-2">
-            <h3 className="text-[15px] font-bold text-ink">What&apos;s new</h3>
-            <p className="mt-1">{u?.availableVersion ? 'The Update Center sent no notes for this version.' : 'Nothing new to show: WorkSuite is up to date.'}</p>
-          </section>
+          <SettingsGroup title="What's new" className="!mb-0">
+            <p className="px-[18px] py-3.5 text-[13px] text-ink-2">{u?.availableVersion ? 'The Update Center sent no notes for this version.' : 'Nothing new to show: WorkSuite is up to date.'}</p>
+          </SettingsGroup>
         )}
         <Preferences prefs={prefs} u={u} />
       </div>
-      <section aria-label="Channel" className="rounded-[12px] border border-line bg-surface px-5">
+      <SettingsGroup label="Channel">
         <ChannelRow u={u} />
-        <p className="-mt-1 pb-2 text-[12px] text-ink-3">{channelSource(policy, !!prefs?.updateChannelChosen)}</p>
-        <div className="flex items-center gap-3 py-3.5">
+        <p className="px-[18px] py-2 text-[12px] text-ink-3">{channelSource(policy, !!prefs?.updateChannelChosen)}</p>
+        <SettingRowFrame className="flex items-center gap-3">
           <span className="flex-1 text-[13px] text-ink-2">Something not right? Diagnostics checks why an update would not arrive or install.</span>
           {onDiagnostics ? (
             <Button icon="stethoscope" onClick={onDiagnostics}>
               Diagnostics
             </Button>
           ) : null}
-        </div>
-      </section>
+        </SettingRowFrame>
+      </SettingsGroup>
     </div>
   );
 }
@@ -421,22 +431,21 @@ export function UpdateDiagnosticsPage() {
   return (
     <div className="space-y-4">
       {u?.failure ? <UpdateFailedPanel u={u} /> : null}
-      <section aria-label="Update Diagnostics" className="rounded-[12px] border border-line bg-surface">
-        <div className="flex items-center gap-3 border-b border-line px-5 py-3.5">
-          <h2 className="text-[16px] font-bold text-ink">Update Diagnostics</h2>
-          {result ? (
-            <span className="text-[12.5px] text-ink-3">
-              Ran {new Date(result.ranAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} · {result.checks.length} checks
-            </span>
-          ) : null}
-          <div className="flex-1" />
-          <Button loading={running} onClick={run}>
-            Run again
-          </Button>
-          <Button disabled={!result} onClick={exportReport}>
-            Export report
-          </Button>
-        </div>
+      <SectionHeader
+        title="Update Diagnostics"
+        hint={result ? `Ran ${new Date(result.ranAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} · ${result.checks.length} checks` : undefined}
+        actions={
+          <>
+            <Button loading={running} onClick={run}>
+              Run again
+            </Button>
+            <Button disabled={!result} onClick={exportReport}>
+              Export report
+            </Button>
+          </>
+        }
+      />
+      <SettingsGroup label="Update Diagnostics" className="!mb-0">
         {result ? (
           <table className="w-full text-[13px]">
             <tbody>
@@ -464,7 +473,7 @@ export function UpdateDiagnosticsPage() {
         ) : (
           <p className="px-5 py-4 text-[13px] text-ink-3">{running ? 'Running checks…' : q.error ? errorMessage(q.error) : 'No result yet.'}</p>
         )}
-      </section>
+      </SettingsGroup>
       {fix ? (
         <p className="text-[13px] text-ink-2">
           <strong>Suggested fix:</strong> {fix}

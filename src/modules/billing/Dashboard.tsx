@@ -112,8 +112,8 @@ export default function Dashboard({
             {trend.map((m) => (
               <div key={m.month} className="flex flex-1 flex-col items-center gap-1" title={`${m.month}: billed ${money(m.billed, cur)}, received ${money(m.received, cur)}`}>
                 <div className="flex h-[92px] items-end gap-[3px]">
-                  <span className="w-3 rounded-t-[3px] bg-[#7C3AED]" style={{ height: `${(m.billed / top) * 92}px` }} />
-                  <span className="w-3 rounded-t-[3px] bg-[#16A34A]" style={{ height: `${(m.received / top) * 92}px` }} />
+                  <span className="w-3 rounded-t-[3px] bg-violet" style={{ height: `${(m.billed / top) * 92}px` }} />
+                  <span className="w-3 rounded-t-[3px] bg-green" style={{ height: `${(m.received / top) * 92}px` }} />
                 </div>
                 <span className="text-[11px] text-ink-3">{m.month.slice(0, 3)}</span>
               </div>
@@ -122,7 +122,7 @@ export default function Dashboard({
           <div className="px-3.5 pt-1.5 pb-2.5 text-[11.5px] text-ink-2">
             {last ? `${last.month.slice(0, 3)} · billed ${money(last.billed, cur)} · received ${money(last.received, cur)}` : 'Nothing billed yet.'}
             <span className="ml-2 inline-flex items-center gap-1 text-ink-3">
-              <span className="h-2 w-2 rounded-[2px] bg-[#7C3AED]" /> billed <span className="ml-1 h-2 w-2 rounded-[2px] bg-[#16A34A]" /> received
+              <span className="h-2 w-2 rounded-[2px] bg-violet" /> billed <span className="ml-1 h-2 w-2 rounded-[2px] bg-green" /> received
             </span>
           </div>
         </Panel>

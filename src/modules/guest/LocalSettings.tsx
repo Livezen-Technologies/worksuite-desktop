@@ -9,6 +9,7 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Button, TextField } from '../../components/ui';
 import { LocalProfileForm } from './LocalProfileForms';
+import { SectionHeader, SettingsGroup } from '../../components/SettingsKit';
 
 /** Settings › Profile in guest mode (#149): the Local Profile's name, picture and PIN. */
 export function LocalProfileSection() {
@@ -44,11 +45,10 @@ export function LocalDataSection() {
   };
   const o = overview.data;
   return (
-    <section className="flex flex-col gap-4 text-[13.5px] text-ink-2">
-      <div>
-        <h2 className="text-[22px] font-bold text-ink">Backup & data</h2>
-        <p className="mt-1 text-ink-3">Your Local Profile is saved in this device's WorkSuite profile and is never uploaded automatically. Anyone using this device profile can reach it unless it has a PIN.</p>
-      </div>
+    <section className="flex flex-col text-[13.5px] text-ink-2">
+      <SectionHeader title="Backup & data" hint="Your Local Profile is saved in this device's WorkSuite profile and is never uploaded automatically. Anyone using this device profile can reach it unless it has a PIN." />
+      <SettingsGroup title="Backup">
+      <div className="flex flex-col gap-4 px-[18px] py-3.5">
       {o ? <p className="font-semibold text-ink">{text('{notes} notes, {tasks} tasks, {contacts} contacts and {events} events on this device.', { notes: o.notes, tasks: o.tasks, contacts: o.contacts, events: o.events })}</p> : null}
       <p>Export a readable JSON backup before changing devices, and keep it in a private place. Backups hold your notes, tasks, contacts, events and profile name, never the PIN. Restoring adds what is new and skips identical items; it never overwrites.</p>
       <div className="flex flex-wrap gap-2">
@@ -81,9 +81,10 @@ export function LocalDataSection() {
           </div>
         </div>
       ) : null}
-      <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
-        <h3 className="text-[15px] font-bold text-ink">Delete local data</h3>
-        <p className="text-[12.5px] text-ink-3">Deleting removes your Local Profile, its PIN and every local note, task, contact and event from this device.</p>
+      </div>
+      </SettingsGroup>
+      <SettingsGroup title="Delete local data" description="Deleting removes your Local Profile, its PIN and every local note, task, contact and event from this device.">
+      <div className="flex flex-col gap-2 px-[18px] py-3.5">
         <TextField label="Type DELETE LOCAL DATA to delete everything" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         <div>
           <Button variant="danger" disabled={confirm !== 'DELETE LOCAL DATA' || busy} onClick={() => void act(async () => {
@@ -95,6 +96,7 @@ export function LocalDataSection() {
           </Button>
         </div>
       </div>
+      </SettingsGroup>
     </section>
   );
 }

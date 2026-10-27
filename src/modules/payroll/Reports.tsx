@@ -70,7 +70,7 @@ export default function Reports({ runId, report, onReport }: { runId: number | n
           <div key={g} className="flex flex-col gap-0.5">
             <div className="mt-2 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{g}</div>
             {REPORTS.filter((r) => r.group === g).map((r) => (
-              <button key={r.key} type="button" aria-current={r.key === key ? 'page' : undefined} onClick={() => onReport(r.key)} className={cx('h-[30px] rounded-[7px] px-2 text-left', r.key === key ? 'bg-[#EEF1FD] font-bold text-[#3B5BDB] dark:bg-selection dark:text-primary' : 'text-ink-2 hover:bg-subtle')}>
+              <button key={r.key} type="button" aria-current={r.key === key ? 'page' : undefined} onClick={() => onReport(r.key)} className={cx('h-[30px] rounded-[7px] px-2 text-left', r.key === key ? 'bg-selection font-bold text-brand-soft dark:bg-selection dark:text-primary' : 'text-ink-2 hover:bg-subtle')}>
                 {r.label}
               </button>
             ))}

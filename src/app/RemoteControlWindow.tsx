@@ -35,7 +35,7 @@ function PointerTagWindow() {
   if (!name) return null;
   return (
     <div className="flex h-full items-start">
-      <span className="max-w-full truncate rounded-full bg-[#C8321E] px-2.5 py-1 text-[12px] font-bold text-white shadow-md">{name}</span>
+      <span className="max-w-full truncate rounded-full bg-orange px-2.5 py-1 text-[12px] font-bold text-white shadow-md">{name}</span>
     </div>
   );
 }
@@ -120,7 +120,7 @@ function ConsentWindow() {
   const handover = c.kind === 'handover';
   return (
     <div className="flex h-full flex-col bg-surface text-ink" role="alertdialog" aria-labelledby="rc-title" aria-describedby="rc-what">
-      <div className="drag flex items-center gap-2 bg-[#B42318] px-4 py-2.5 text-[12.5px] font-bold text-white">
+      <div className="drag flex items-center gap-2 bg-danger px-4 py-2.5 text-[12.5px] font-bold text-white">
         <span className="h-2 w-2 rounded-full bg-white" /> Remote control request
         <span className="ml-auto font-semibold tabular-nums" aria-label={`${left} seconds left to answer`}>{mmss(left * 1000)}</span>
       </div>
@@ -230,7 +230,7 @@ function IndicatorWindow() {
             ? `${s.controller}'s typing waits until the shared window is in front`
             : `${s.controller} is controlling your screen · ${s.capsLabel}`;
   return (
-    <div className={cx('flex h-full flex-col text-[12.5px] text-white', paused ? 'bg-[#6B4E0B]' : 'bg-[#B42318]')}>
+    <div className={cx('flex h-full flex-col text-[12.5px] text-white', paused ? 'bg-success' : 'bg-danger')}>
       <div className="flex h-[52px] shrink-0 items-center gap-2.5 px-3" role="status" aria-live="polite">
         <span className={cx('h-2.5 w-2.5 shrink-0 rounded-full bg-white', !paused && 'animate-pulse')} />
         <span className="min-w-0 flex-1 truncate font-semibold" title={text}>{text}</span>
@@ -239,11 +239,11 @@ function IndicatorWindow() {
           <button type="button" onClick={() => void act(() => call('rc:sendFile', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white/20 px-2.5 font-bold hover:bg-white/30">Send a file</button>
         ) : null}
         {paused ? (
-          <button type="button" onClick={() => void act(() => call('rc:resume', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-[#151A2D]">Resume</button>
+          <button type="button" onClick={() => void act(() => call('rc:resume', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-ink">Resume</button>
         ) : s.status === 'CONTROL_ACTIVE' ? (
           <button type="button" onClick={() => void act(() => call('rc:pause', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white/20 px-2.5 font-bold hover:bg-white/30">Pause</button>
         ) : null}
-        <button type="button" onClick={() => void act(() => call('rc:stop', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-[#B42318]" title={`Or press ${chordLabel(v.emergencyChord)}`}>Stop</button>
+        <button type="button" onClick={() => void act(() => call('rc:stop', { sessionId: s.id }))} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-danger" title={`Or press ${chordLabel(v.emergencyChord)}`}>Stop</button>
       </div>
       {v.offers.length ? (
         <ul className="flex flex-col border-t border-white/20 bg-black/15" aria-label="Files offered to you">
@@ -254,9 +254,9 @@ function IndicatorWindow() {
                 {confirming === o.id ? ' — a program: accept only if you trust it' : o.executable ? ' · a program' : ''}
               </span>
               {confirming === o.id ? (
-                <button type="button" onClick={() => void answerFile(o.id, true, true)} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-[#B42318]">Accept the program</button>
+                <button type="button" onClick={() => void answerFile(o.id, true, true)} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-danger">Accept the program</button>
               ) : (
-                <button type="button" onClick={() => void answerFile(o.id, true)} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-[#151A2D]">Accept</button>
+                <button type="button" onClick={() => void answerFile(o.id, true)} className="h-7 rounded-[7px] bg-white px-2.5 font-bold text-ink">Accept</button>
               )}
               <button type="button" onClick={() => void answerFile(o.id, false)} className="h-7 rounded-[7px] bg-white/20 px-2.5 font-bold hover:bg-white/30">Decline</button>
             </li>

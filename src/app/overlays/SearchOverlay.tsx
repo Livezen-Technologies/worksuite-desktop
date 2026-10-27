@@ -85,7 +85,7 @@ export function markWords(text: string, words: string[]): Array<{ text: string; 
   return out;
 }
 
-const MARK = 'rounded-[3px] bg-[#FFF1B8] px-px text-[#151A2D] dark:bg-[#5A4712] dark:text-[#FFE9A8]';
+const MARK = 'rounded-[3px] bg-yellow-bg px-px text-ink dark:bg-warning-soft dark:text-yellow-ink';
 
 function Marked({ text, words }: { text: string; words: string[] }) {
   return (

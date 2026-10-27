@@ -42,7 +42,7 @@ function NativeCallCard({ m, own, roomId, compact }: { m: ChatMessage; own: bool
   }
   return (
     <div className={cx('mt-3 flex', own ? 'justify-end' : 'justify-start')}>
-      <div className={cx('flex items-center gap-2.5 rounded-[12px] border px-3 py-2.5', d.tone === 'missed' ? 'border-[#F1B8A8] bg-surface dark:border-danger/40' : d.tone === 'live' ? 'border-[#9EE6C3] bg-surface' : 'border-line bg-surface')}>
+      <div className={cx('flex items-center gap-2.5 rounded-[12px] border px-3 py-2.5', d.tone === 'missed' ? 'border-danger-line bg-surface dark:border-danger/40' : d.tone === 'live' ? 'border-success-line bg-surface' : 'border-line bg-surface')}>
         <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', d.tone === 'missed' ? 'bg-danger-bg text-danger' : d.tone === 'live' ? 'bg-success-bg text-success' : 'bg-selection text-primary')}>
           <Icon name={video ? 'video' : 'phone'} size={15} />
         </span>

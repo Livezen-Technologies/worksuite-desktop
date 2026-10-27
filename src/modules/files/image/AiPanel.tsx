@@ -97,9 +97,9 @@ export function AiPanel(p: AiPanelProps) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <Head title="AI assistant">
-        <span data-testid="ai-provider" className="text-[12px] text-[#AFC0E8]">{provider}</span>
+        <span data-testid="ai-provider" className="text-[12px] text-stage-accent">{provider}</span>
       </Head>
-      <p className="text-[12px] leading-[1.5] text-[#AFC0E8]">Runs through your organization’s AI provider. Nothing is sent until you ask; the picture goes small, without its location or camera details. Suggestions arrive as normal editing steps you can change or undo.</p>
+      <p className="text-[12px] leading-[1.5] text-stage-accent">Runs through your organization’s AI provider. Nothing is sent until you ask; the picture goes small, without its location or camera details. Suggestions arrive as normal editing steps you can change or undo.</p>
       <div className="flex flex-wrap gap-1.5">
         {shown.map((c) => (
           <Chip key={c.label} disabled={!!c.disabled || busy} title={c.disabled} onClick={c.run}>
@@ -107,24 +107,24 @@ export function AiPanel(p: AiPanelProps) {
           </Chip>
         ))}
       </div>
-      {shown.some((c) => c.action === 'generative' && c.disabled === 'Needs image model') ? <span className="text-[11.5px] text-[#8C9BC0]">Remove background needs an image model — not configured for this organization.</span> : null}
+      {shown.some((c) => c.action === 'generative' && c.disabled === 'Needs image model') ? <span className="text-[11.5px] text-ink-4">Remove background needs an image model — not configured for this organization.</span> : null}
       <div aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto scroll-thin">
         {turns.map((t, i) =>
           t.me ? (
-            <p key={i} className="ml-8 self-end rounded-[12px] bg-[#3B5BDB] px-3 py-2 text-[12.5px] text-white">
+            <p key={i} className="ml-8 self-end rounded-[12px] bg-brand-soft px-3 py-2 text-[12.5px] text-white">
               {t.me}
             </p>
           ) : t.error ? (
-            <p key={i} className="rounded-[10px] border border-[#6B2B2B] bg-[#2A1414] px-3 py-2 text-[12.5px] text-[#FFB4A3]">
+            <p key={i} className="rounded-[10px] border border-stage-gray-2 bg-stage-gray px-3 py-2 text-[12.5px] text-stage-danger">
               {t.error}
             </p>
           ) : (
-            <div key={i} className="flex flex-col gap-2 rounded-[12px] border border-[#24314F] bg-[#121B33] px-3 py-2.5 text-[12.5px] text-[#E6ECFA]">
+            <div key={i} className="flex flex-col gap-2 rounded-[12px] border border-stage-line-soft bg-stage-2 px-3 py-2.5 text-[12.5px] text-stage-ink">
               {t.answer?.summary ? <span>{t.answer.summary}</span> : null}
               {t.used?.length ? (
                 <>
                   <span>{`Here is a plan — ${t.used.length} ${t.used.length === 1 ? 'step' : 'steps'}, previewed on the canvas:`}</span>
-                  <ul className="flex flex-col divide-y divide-[#24314F]">
+                  <ul className="flex flex-col divide-y divide-primary">
                     {t.used.map((u) => (
                       <li key={u} className="py-1.5">
                         {u}
@@ -142,14 +142,14 @@ export function AiPanel(p: AiPanelProps) {
                   </div>
                 </>
               ) : null}
-              {(t.answer?.steps || t.answer?.dropped) && !t.used?.length ? <span className="text-[#8C9BC0]">The suggestion used tools this editor does not have, so nothing was changed.</span> : null}
+              {(t.answer?.steps || t.answer?.dropped) && !t.used?.length ? <span className="text-ink-4">The suggestion used tools this editor does not have, so nothing was changed.</span> : null}
               {t.answer?.crops?.length ? <span>{`${t.answer.crops.length} suggested ${t.answer.crops.length === 1 ? 'crop is' : 'crops are'} on the picture — click one to use it.`}</span> : null}
               {t.answer?.text && (t.action === 'alt_text' || t.action === 'caption') ? <Words text={t.answer.text} kind={t.action === 'alt_text' ? 'alt' : 'caption'} fileId={p.fileId} /> : t.answer?.text ? <span>{t.answer.text}</span> : null}
             </div>
           ),
         )}
         {busy ? (
-          <span className="flex items-center gap-2 text-[12px] text-[#AFC0E8]">
+          <span className="flex items-center gap-2 text-[12px] text-stage-accent">
             <Icon name="spinner" size={14} className="animate-spin" />
             Thinking…
             <button type="button" onClick={() => abort.current?.abort()} className="font-semibold underline">

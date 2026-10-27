@@ -212,7 +212,7 @@ export default function CountDesk({ id, detail, currency, onBack, onOpenAdjustme
             </button>
           </div>
 
-          <div className="flex min-h-[60px] items-center gap-3.5 rounded-[12px] bg-[#0f172a] px-[18px] py-2 text-white dark:bg-[#0b1222]">
+          <div className="flex min-h-[60px] items-center gap-3.5 rounded-[12px] bg-primary px-[18px] py-2 text-white dark:bg-ground">
             <label htmlFor="count-scan" className="text-[14px] font-bold">
               Scan
             </label>
@@ -232,11 +232,11 @@ export default function CountDesk({ id, detail, currency, onBack, onOpenAdjustme
               autoComplete="off"
               spellCheck={false}
               disabled={!draft.loaded}
-              className="h-9 w-[260px] rounded-[8px] border border-white/20 bg-white/10 px-3 font-mono text-[14px] text-white outline-none placeholder:text-[#94a3b8] focus:border-[#60a5fa]"
+              className="h-9 w-[260px] rounded-[8px] border border-white/20 bg-white/10 px-3 font-mono text-[14px] text-white outline-none placeholder:text-ink-4 focus:border-indigo-bright"
             />
             <div className="flex min-w-0 flex-1 flex-col" role="status" aria-live="polite">
-              <span className={cx('truncate text-[14px] font-semibold', s.message && !s.message.ok && 'text-[#fca5a5]')}>{s.message?.text ?? 'Ready for a scan.'}</span>
-              <span id="count-scan-hint" className="text-[12.5px] text-[#cbd5e1]">
+              <span className={cx('truncate text-[14px] font-semibold', s.message && !s.message.ok && 'text-stage-danger')}>{s.message?.text ?? 'Ready for a scan.'}</span>
+              <span id="count-scan-hint" className="text-[12.5px] text-stage-gray-ink">
                 Each scan adds 1 · type a number to set the count
               </span>
             </div>
@@ -263,7 +263,7 @@ export default function CountDesk({ id, detail, currency, onBack, onOpenAdjustme
                   const mineLine = s.lines[String(l.id)];
                   const just = s.last === l.id;
                   return (
-                    <tr key={l.id} data-count-line={l.code ?? l.id} className={cx('border-b border-line/60 last:border-b-0', just && 'bg-[#eff6ff] dark:bg-selection/40')}>
+                    <tr key={l.id} data-count-line={l.code ?? l.id} className={cx('border-b border-line/60 last:border-b-0', just && 'bg-info-soft dark:bg-selection/40')}>
                       <td className="px-3 py-2">
                         <b className="text-ink">
                           {l.name}
@@ -294,7 +294,7 @@ export default function CountDesk({ id, detail, currency, onBack, onOpenAdjustme
         <aside aria-label="Sync queue" className="flex w-[300px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-line bg-surface px-4 py-5 scroll-thin">
           <b className="text-[14px] text-ink">Waiting to send</b>
           <span role="status" className={cx('flex items-center gap-2 text-[12.5px]', offline ? 'text-warning-ink' : 'text-ink-2')}>
-            <span className={cx('inline-block h-2 w-2 rounded-full', offline ? 'bg-[#f59e0b]' : waitingCount ? 'bg-primary' : 'bg-[#16a34a]')} />
+            <span className={cx('inline-block h-2 w-2 rounded-full', offline ? 'bg-amber' : waitingCount ? 'bg-primary' : 'bg-green')} />
             {offline ? `Offline · ${waitingCount} ${waitingCount === 1 ? 'change' : 'changes'} waiting` : waitingCount ? `Sending ${waitingCount} ${waitingCount === 1 ? 'change' : 'changes'}…` : unsentHere ? 'Sending…' : 'Everything is sent'}
           </span>
           {toSend ? <QueueRow label={queueLabel(c.reference, toSend)} state="on this computer" /> : null}

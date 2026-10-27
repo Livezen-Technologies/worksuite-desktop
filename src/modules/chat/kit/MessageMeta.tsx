@@ -13,7 +13,7 @@ export function MessageStatus({ receipt, label, size = 13, className }: { receip
     <Icon
       name={receipt === 'sent' ? 'check' : 'check-check'}
       size={size}
-      className={cx('shrink-0', receipt === 'read' ? 'text-[#3B6FE0] dark:text-[#8FB0FF]' : 'text-ink-3', className)}
+      className={cx('shrink-0', receipt === 'read' ? 'text-blue dark:text-indigo-bright' : 'text-ink-3', className)}
       label={label ?? (receipt === 'read' ? text('Read') : receipt === 'delivered' ? text('Delivered') : text('Sent'))}
     />
   );
@@ -28,7 +28,7 @@ export function MessageMeta({ m, inline = false, showTime = true }: { m: KitMess
   if (inline) {
     return (
       <span className="ml-auto inline-flex shrink-0 items-center gap-1 self-end pt-1 pl-1 text-[10.5px] leading-none whitespace-nowrap text-ink-3">
-        {m.starred ? <Icon name="star" size={10} className="text-[#CA8A04]" label="Starred" /> : null}
+        {m.starred ? <Icon name="star" size={10} className="text-amber-strong" label="Starred" /> : null}
         {m.edited ? 'edited · ' : ''}
         {timeLabel(m.at)}
         {r ? <MessageStatus receipt={r} label={m.receiptLabel} /> : null}

@@ -57,12 +57,12 @@ export function gaps(from: number, to: number, spans: Array<[number, number]>): 
 type Tone = 'done' | 'service' | 'confirmed' | 'pending' | 'late' | 'off';
 
 const TONES: Record<Tone, { cls: string; line: string }> = {
-  done: { cls: 'bg-[#F8FAFC] text-[#334155] dark:bg-subtle dark:text-ink-2', line: '#94A3B8' },
-  service: { cls: 'bg-[#F0FDFA] text-[#134E4A] dark:bg-[#0D2F2C] dark:text-[#5EEAD4]', line: '#14B8A6' },
-  confirmed: { cls: 'bg-[#EFF6FF] text-[#1E3A8A] dark:bg-[#172554] dark:text-[#BFDBFE]', line: '#3B82F6' },
-  pending: { cls: 'bg-[#FFFBEB] text-[#92400E] dark:bg-[#36240F] dark:text-[#FCD34D]', line: '#F59E0B' },
-  late: { cls: 'bg-[#FFF1F2] text-[#881337] dark:bg-[#3A1614] dark:text-[#FDA4AF]', line: '#F43F5E' },
-  off: { cls: 'bg-surface text-[#94A3B8] dark:text-ink-3', line: '#CBD5E1' },
+  done: { cls: 'bg-rail text-slate-ink dark:bg-subtle dark:text-ink-2', line: '#94A3B8' },
+  service: { cls: 'bg-rail text-slate-ink dark:bg-teal-bg dark:text-success-ink', line: '#14B8A6' },
+  confirmed: { cls: 'bg-info-soft text-primary dark:bg-blue-bg dark:text-slate-ink', line: '#3B82F6' },
+  pending: { cls: 'bg-rail text-orange-ink dark:bg-warning-bg dark:text-amber', line: '#F59E0B' },
+  late: { cls: 'bg-danger-bg text-rose-ink dark:text-danger-ink', line: '#F43F5E' },
+  off: { cls: 'bg-surface text-ink-4 dark:text-ink-3', line: '#CBD5E1' },
 };
 
 /** How a booking reads on the day: done, in the chair, confirmed, waiting to be confirmed, late, or off. */
@@ -174,8 +174,8 @@ function DayView({ date, today, clock, onOpen }: { date: string; today: string; 
       ) : (
         <div className="min-h-0 flex-1 overflow-auto rounded-[14px] border border-line bg-surface scroll-thin">
           <div className="flex min-w-max flex-col">
-            <div className="sticky top-0 z-20 flex border-b border-line bg-[#F8FAFC] dark:bg-subtle">
-              <div className="sticky left-0 z-10 w-14 shrink-0 bg-[#F8FAFC] dark:bg-subtle" />
+            <div className="sticky top-0 z-20 flex border-b border-line bg-rail dark:bg-subtle">
+              <div className="sticky left-0 z-10 w-14 shrink-0 bg-rail dark:bg-subtle" />
               {q.data.stylists.map((s) => (
                 <div key={s.id} className="flex w-[220px] min-w-[200px] flex-1 items-center gap-2 border-l border-line px-2.5 py-2">
                   <Who name={s.name} color={s.color} size={28} />
@@ -226,7 +226,7 @@ function DayView({ date, today, clock, onOpen }: { date: string; today: string; 
                       return (
                         <div
                           key={a}
-                          className="absolute inset-x-[3px] overflow-hidden rounded-[8px] border border-line px-2 py-1.5 text-[12px] text-[#475569] dark:text-ink-2"
+                          className="absolute inset-x-[3px] overflow-hidden rounded-[8px] border border-line px-2 py-1.5 text-[12px] text-ink-2 dark:text-ink-2"
                           style={{ top: y(a) + 1, height: (b - a) * PX_PER_MIN - 2, background: 'repeating-linear-gradient(135deg, var(--ws-subtle), var(--ws-subtle) 6px, var(--ws-surface) 6px, var(--ws-surface) 12px)' }}
                         >
                           {onLeave ? (
@@ -255,8 +255,8 @@ function DayView({ date, today, clock, onOpen }: { date: string; today: string; 
               })}
               {nowMin !== null && nowMin >= start && nowMin <= end ? (
                 <div className="pointer-events-none absolute inset-x-0 z-10" style={{ top: y(nowMin) }}>
-                  <div className="absolute right-0 left-[50px] border-t-2 border-[#E11D48]" />
-                  <span className="absolute left-1 -translate-y-1/2 rounded-[4px] bg-[#E11D48] px-1 py-0.5 text-[10px] font-bold text-white tabular-nums">{hm(nowMin)}</span>
+                  <div className="absolute right-0 left-[50px] border-t-2 border-red" />
+                  <span className="absolute left-1 -translate-y-1/2 rounded-[4px] bg-red px-1 py-0.5 text-[10px] font-bold text-white tabular-nums">{hm(nowMin)}</span>
                 </div>
               ) : null}
             </div>
@@ -333,7 +333,7 @@ function WeekView({ from, today, clock, onOpen, onDay }: { from: string; today: 
                     type="button"
                     onClick={() => onDay(d)}
                     title="Open this day by stylist"
-                    className={cx('sticky top-0 z-10 flex min-h-12 items-center justify-between gap-2 border-b border-line px-3 text-left', isToday ? 'bg-selection' : 'bg-[#F8FAFC] hover:bg-subtle dark:bg-subtle')}
+                    className={cx('sticky top-0 z-10 flex min-h-12 items-center justify-between gap-2 border-b border-line px-3 text-left', isToday ? 'bg-selection' : 'bg-rail hover:bg-subtle dark:bg-subtle')}
                   >
                     <span className={cx('text-[14px] font-bold', isToday ? 'text-primary' : 'text-ink')}>{weekdayLabel(d)}</span>
                     <span className="text-[12px] font-semibold text-ink-3 tabular-nums">{n === 0 ? '' : `${n} booked`}</span>
@@ -377,8 +377,8 @@ function WeekCard({ visit, tone, onOpen }: { visit: Visit; tone: Tone; onOpen: (
         <b className="tabular-nums">{visit.start}</b>
         {first ? <Who name={first.provider} color={first.provider_color} size={18} /> : null}
         <span className="min-w-0 flex-1 truncate opacity-85">{first ? firstName(first.provider) : ''}</span>
-        {visit.client.allergy ? <Icon name="warning" size={13} className="shrink-0 text-[#BE123C] dark:text-[#FDA4AF]" label="Allergy on file" /> : null}
-        {visit.money.deposit_owed > 0 ? <Icon name="wallet" size={13} className="shrink-0 text-[#B45309] dark:text-warning" label="Deposit owed" /> : null}
+        {visit.client.allergy ? <Icon name="warning" size={13} className="shrink-0 text-rose dark:text-danger-ink" label="Allergy on file" /> : null}
+        {visit.money.deposit_owed > 0 ? <Icon name="wallet" size={13} className="shrink-0 text-warning dark:text-warning" label="Deposit owed" /> : null}
       </div>
       <div className={cx('truncate font-bold', tone === 'off' && 'line-through')}>{visit.client.name}</div>
       <div className="truncate opacity-85">{servicesOf(visit)}</div>
@@ -447,7 +447,7 @@ function ListView({ from, today, clock, onOpen }: { from: string; today: string;
           ) : (
             byDay.map(({ d, visits }) => (
               <section key={d}>
-                <h2 className={cx('sticky top-0 z-10 flex items-baseline justify-between border-b border-line px-4 py-2 text-[13px] font-bold', d === today ? 'bg-selection text-primary' : 'bg-[#F8FAFC] text-ink dark:bg-subtle')}>
+                <h2 className={cx('sticky top-0 z-10 flex items-baseline justify-between border-b border-line px-4 py-2 text-[13px] font-bold', d === today ? 'bg-selection text-primary' : 'bg-rail text-ink dark:bg-subtle')}>
                   <span>{longDay(d).replace(/ \d{4}$/, '')}</span>
                   <span className="font-semibold text-ink-3">{visits.filter(ACTIVE).length} booked</span>
                 </h2>
@@ -508,8 +508,8 @@ function Block({ visit, item, top, height, tone, onOpen }: { visit: Visit; item:
     >
       <div className="flex min-w-0 items-center gap-1">
         <span className={cx('truncate font-bold', tone === 'off' && 'line-through')}>{visit.client.name}</span>
-        {visit.client.allergy ? <Icon name="warning" size={13} className="shrink-0 text-[#BE123C] dark:text-[#FDA4AF]" label="Allergy on file" /> : null}
-        {owed ? <Icon name="wallet" size={13} className="shrink-0 text-[#B45309] dark:text-warning" label="Deposit owed" /> : visit.money.advance > 0 ? <Icon name="wallet" size={13} className="shrink-0 text-[#6D28D9] dark:text-[#D2B4FE]" label="Advance received" /> : null}
+        {visit.client.allergy ? <Icon name="warning" size={13} className="shrink-0 text-rose dark:text-danger-ink" label="Allergy on file" /> : null}
+        {owed ? <Icon name="wallet" size={13} className="shrink-0 text-warning dark:text-warning" label="Deposit owed" /> : visit.money.advance > 0 ? <Icon name="wallet" size={13} className="shrink-0 text-violet dark:text-violet-ink" label="Advance received" /> : null}
       </div>
       {height >= 34 ? <div className="truncate opacity-85">{item.service}</div> : null}
     </button>

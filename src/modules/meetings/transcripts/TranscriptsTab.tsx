@@ -226,14 +226,14 @@ export function TranscriptView({ id, title, onBack }: { id: number; title: strin
           {segments.length ? (
             <ol className="flex flex-col rounded-[12px] border border-line bg-surface">
               {segments.map((s, i) => (
-                <li key={`${s.start_ms}-${i}`} className={cx('grid gap-2 border-b border-line px-3 py-2 last:border-0 [grid-template-columns:72px_1fr]', s.uncertain && 'bg-[#FFF9EC] dark:bg-warning-bg')}>
+                <li key={`${s.start_ms}-${i}`} className={cx('grid gap-2 border-b border-line px-3 py-2 last:border-0 [grid-template-columns:72px_1fr]', s.uncertain && 'bg-warning-bg dark:bg-warning-bg')}>
                   <span className="pt-0.5 font-mono text-[12px] text-ink-3">{stamp(s.start_ms)}</span>
                   <span className="flex min-w-0 flex-col gap-0.5">
                     {editing ? (
                       <input aria-label={`Speaker at ${stamp(s.start_ms)}`} value={s.speaker} placeholder={UNIDENTIFIED} onChange={(e) => set(i, { speaker: e.target.value })} className="h-8 max-w-[240px] rounded-[7px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
                     ) : (
                       <span className="flex items-center gap-1.5 text-[12px]">
-                        <b className={cx('truncate', s.speaker ? 'text-ink' : 'text-[#B45309] dark:text-warning')}>{s.speaker || UNIDENTIFIED}</b>
+                        <b className={cx('truncate', s.speaker ? 'text-ink' : 'text-warning dark:text-warning')}>{s.speaker || UNIDENTIFIED}</b>
                         {!s.speaker && t.can.correct && !working ? (
                           <button type="button" onClick={() => setEditing(t.segments ?? [])} className="font-semibold text-primary hover:underline">
                             name speaker
@@ -251,7 +251,7 @@ export function TranscriptView({ id, title, onBack }: { id: number; title: strin
                     ) : (
                       <span className="text-ink selectable">
                         {s.text}
-                        {s.uncertain ? <span className="ml-1 text-[11.5px] font-semibold text-[#9A5B00]">(unclear)</span> : null}
+                        {s.uncertain ? <span className="ml-1 text-[11.5px] font-semibold text-warning-ink">(unclear)</span> : null}
                       </span>
                     )}
                   </span>

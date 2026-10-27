@@ -118,12 +118,12 @@ export function Chip({ children, tone = 'muted', className }: { children: ReactN
 export const DATA_TEXT = 'text-[color:var(--c)] dark:text-[color:color-mix(in_srgb,var(--c)_45%,white)]';
 
 const AVATAR_TONES = [
-  'bg-[#E6F4F1] text-[#0E7C86] dark:bg-[#10343A] dark:text-[#7FD8DF]',
-  'bg-[#EEF1FD] text-[#23349E] dark:bg-[#1C2A5E] dark:text-[#AFC0FF]',
-  'bg-[#FDF1E3] text-[#B45309] dark:bg-[#3A2810] dark:text-[#F5C27A]',
-  'bg-[#F3E8FF] text-[#6B21A8] dark:bg-[#2E1D4A] dark:text-[#D2B4FE]',
-  'bg-[#FDECEA] text-[#B42318] dark:bg-[#3A1614] dark:text-[#F7A39B]',
-  'bg-[#E7F4ED] text-[#1F7A4D] dark:bg-[#12301F] dark:text-[#86D8AE]',
+  'bg-success-bg text-teal dark:bg-teal-bg dark:text-teal-ink',
+  'bg-selection text-primary dark:text-info-ink',
+  'bg-warning-bg text-warning dark:text-warning-strong',
+  'bg-violet-bg text-violet-ink',
+  'bg-danger-bg text-danger dark:text-danger-ink',
+  'bg-success-bg text-success dark:text-success-ink',
 ];
 
 /** The avatar colour that always goes with the same key (a name, a number): for an avatar drawn without initials. */
@@ -369,7 +369,7 @@ export function Modal({ title, children, onClose, width = 520, footer, labelledB
     };
   }, [prev]);
   return (
-    <div className="no-drag fixed inset-0 z-50 flex items-center justify-center bg-[#0B1020]/50 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
+    <div className="no-drag fixed inset-0 z-50 flex items-center justify-center bg-stage/50 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={labelledBy} className="animate-in bare-focus flex max-h-full w-full flex-col rounded-[14px] border border-line bg-surface shadow-2xl outline-none" style={{ maxWidth: width }}>
         {title ? (
           <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
@@ -478,9 +478,9 @@ export function FileBadge({ name, size = 36 }: { name: string; size?: number }) 
     csv: ['CSV', 'bg-success-bg text-success'],
     ppt: ['PPT', 'bg-warning-bg text-warning'],
     pptx: ['PPT', 'bg-warning-bg text-warning'],
-    png: ['IMG', 'bg-[#F3E8FF] text-[#6B21A8] dark:bg-[#2E1D4A] dark:text-[#D2B4FE]'],
-    jpg: ['IMG', 'bg-[#F3E8FF] text-[#6B21A8] dark:bg-[#2E1D4A] dark:text-[#D2B4FE]'],
-    jpeg: ['IMG', 'bg-[#F3E8FF] text-[#6B21A8] dark:bg-[#2E1D4A] dark:text-[#D2B4FE]'],
+    png: ['IMG', 'bg-violet-bg text-violet-ink'],
+    jpg: ['IMG', 'bg-violet-bg text-violet-ink'],
+    jpeg: ['IMG', 'bg-violet-bg text-violet-ink'],
     zip: ['ZIP', 'bg-subtle text-ink-2'],
   };
   const [label, tone] = map[ext] ?? [ext.slice(0, 3).toUpperCase() || 'FILE', 'bg-subtle text-ink-2'];

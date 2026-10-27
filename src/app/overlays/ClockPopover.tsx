@@ -43,10 +43,10 @@ import { Checkbox } from '../../components/Checkbox';
 let anchorRight = 300;
 
 const PILL: Record<DayPhase, string> = {
-  none: 'bg-[#1B2B57] text-white',
-  working: 'bg-[#123D33] text-[#9EE6C3]',
-  break: 'bg-[#3A3413] text-[#FDE68A]',
-  done: 'bg-[#1B2B57] text-[#C9D3EE]',
+  none: 'bg-stage-3 text-white',
+  working: 'bg-stage-gray-2 text-stage-success',
+  break: 'bg-stage-gray-2 text-stage-warning',
+  done: 'bg-stage-3 text-navy-ink',
 };
 
 export function ClockControl() {
@@ -83,8 +83,8 @@ export function ClockControl() {
       aria-label={label}
       className={cx('no-drag flex h-8 shrink-0 items-center gap-2 rounded-full border border-white/12 px-3 text-[12.5px] font-bold tabular-nums hover:brightness-110', PILL[phase], overlay === 'clock' && 'ring-1 ring-white/30')}
     >
-      {phase === 'working' ? <span className="h-2 w-2 rounded-full bg-[#3DD68C] shadow-[0_0_0_4px_rgba(61,214,140,.25)]" /> : null}
-      {phase === 'break' ? <span className="h-2 w-2 rounded-full bg-[#F5B53D]" /> : null}
+      {phase === 'working' ? <span className="h-2 w-2 rounded-full bg-green-bright shadow-[0_0_0_4px_rgba(61,214,140,.25)]" /> : null}
+      {phase === 'break' ? <span className="h-2 w-2 rounded-full bg-amber" /> : null}
       {phase === 'none' ? <Icon name="clock" size={15} /> : null}
       {phase === 'done' ? <Icon name="check" size={14} /> : null}
       {phase === 'working' ? hoursMinutes(worked) : phase === 'break' ? `On break · ${Math.floor(openBreakSeconds(today, now, countedAt) / 60)}m` : phase === 'done' ? hoursMinutes(worked) : 'Clock In'}
@@ -118,8 +118,8 @@ export function Ring({ size, fraction, tone, children }: { size: number; fractio
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={10} className="stroke-[#EEF0F5] dark:stroke-line" />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={10} strokeLinecap="round" strokeDasharray={`${(c * f).toFixed(1)} ${c.toFixed(1)}`} className={tone === 'green' ? 'stroke-[#1F9D5C]' : tone === 'amber' ? 'stroke-[#E9A23B]' : 'stroke-primary'} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={10} className="stroke-stage-ink dark:stroke-line" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={10} strokeLinecap="round" strokeDasharray={`${(c * f).toFixed(1)} ${c.toFixed(1)}`} className={tone === 'green' ? 'stroke-stage-green' : tone === 'amber' ? 'stroke-stage-amber' : 'stroke-primary'} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
     </div>
@@ -204,7 +204,7 @@ export function ClockPopover() {
                 role="radio"
                 aria-checked={l === place}
                 onClick={() => setWhere(l)}
-                className={cx('flex h-8 items-center rounded-full border px-3 text-[12.5px] font-semibold', l === place ? 'border-[#1F9D5C] bg-success-bg text-success' : 'border-line text-ink-2 hover:text-ink')}
+                className={cx('flex h-8 items-center rounded-full border px-3 text-[12.5px] font-semibold', l === place ? 'border-green bg-success-bg text-success' : 'border-line text-ink-2 hover:text-ink')}
               >
                 {l}
               </button>
@@ -222,7 +222,7 @@ export function ClockPopover() {
         className="h-[42px] rounded-full border border-line bg-ground px-3.5 text-[13px] text-ink outline-none focus:border-primary"
       />
       <div className="flex">
-        <button type="button" disabled={busy || (!!policy?.checkin_note_required && !note.trim()) || (needReason && !reason.trim())} onClick={() => void act('in')} className={cx(big, 'bg-[#1F9D5C] text-white hover:bg-[#1A8A50]')}>
+        <button type="button" disabled={busy || (!!policy?.checkin_note_required && !note.trim()) || (needReason && !reason.trim())} onClick={() => void act('in')} className={cx(big, 'bg-green text-white hover:bg-success')}>
           {busy ? <Icon name="spinner" size={17} className="animate-spin-slow" /> : <Icon name="clock" size={17} />}
           {showing === 'again' ? 'Clock In again' : 'Clock In'}
         </button>
@@ -283,12 +283,12 @@ export function ClockPopover() {
             </div>
             <div className="flex gap-2">
               {policy?.break_tracking !== false ? (
-                <button type="button" disabled={busy} onClick={() => void act('break')} className={cx(big, 'bg-[#FFF4E0] text-[#9A4A06] hover:bg-[#FDEBCC] dark:bg-warning-bg dark:text-warning')}>
+                <button type="button" disabled={busy} onClick={() => void act('break')} className={cx(big, 'bg-warning-bg text-warning-ink hover:bg-orange-bg dark:bg-warning-bg dark:text-warning')}>
                   <Icon name="coffee" size={17} />
                   Break
                 </button>
               ) : null}
-              <button type="button" disabled={busy} onClick={() => setStep('out')} className={cx(big, 'bg-[#E5484D] text-white hover:bg-[#D93D42]')}>
+              <button type="button" disabled={busy} onClick={() => setStep('out')} className={cx(big, 'bg-red text-white hover:bg-red')}>
                 Clock Out
               </button>
             </div>
@@ -315,7 +315,7 @@ export function ClockPopover() {
               <Tile label="Overtime" value={hoursMinutes(overtime)} sub="" />
             </div>
             <div className="flex">
-              <button type="button" disabled={busy} onClick={() => void act('resume')} className={cx(big, 'bg-[#1F9D5C] text-white hover:bg-[#1A8A50]')}>
+              <button type="button" disabled={busy} onClick={() => void act('resume')} className={cx(big, 'bg-green text-white hover:bg-success')}>
                 {busy ? <Icon name="spinner" size={17} className="animate-spin-slow" /> : <Icon name="play" size={16} />}
                 Resume
               </button>
@@ -336,7 +336,7 @@ export function ClockPopover() {
             </div>
             <div role="radiogroup" aria-label="What kind of day was it?" className="flex flex-wrap gap-1.5">
               {DAY_KINDS.map(([k, l]) => (
-                <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(kind === k ? null : k)} className={cx('flex h-[30px] items-center rounded-full border px-[11px] text-[12px] font-semibold', kind === k ? 'border-[#2563EB] bg-[#EFF6FF] text-[#1D4ED8] dark:bg-selection dark:text-primary' : 'border-line text-ink-2 hover:text-ink')}>
+                <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(kind === k ? null : k)} className={cx('flex h-[30px] items-center rounded-full border px-[11px] text-[12px] font-semibold', kind === k ? 'border-blue bg-info-soft text-brand-soft dark:bg-selection dark:text-primary' : 'border-line text-ink-2 hover:text-ink')}>
                   {l}
                 </button>
               ))}
@@ -358,7 +358,7 @@ export function ClockPopover() {
               <button type="button" onClick={() => (setStep('main'), setConfirmed(false))} className="h-12 rounded-full bg-subtle px-[18px] font-bold text-ink hover:bg-line">
                 Cancel
               </button>
-              <button type="button" disabled={busy || !confirmed || (needNote && !note.trim()) || (needReason && !reason.trim())} onClick={() => void act('out')} className={cx(big, 'bg-[#E5484D] text-white hover:bg-[#D93D42]')}>
+              <button type="button" disabled={busy || !confirmed || (needNote && !note.trim()) || (needReason && !reason.trim())} onClick={() => void act('out')} className={cx(big, 'bg-red text-white hover:bg-red')}>
                 {busy ? <Icon name="spinner" size={17} className="animate-spin-slow" /> : null}
                 Clock Out
               </button>

@@ -11,25 +11,25 @@ import type { AttachmentScan, AttachmentStatus, BannerAction, LinkCheckResult, M
 
 /** A verdict's chip: its words and colours, light and dark, as the designs draw them. */
 export const VERDICT_CHIP: Record<Verdict, { label: string; className: string }> = {
-  CLEAN: { label: 'Clean', className: 'bg-[#E6F4EC] text-[#1F7A4D] dark:bg-[#12301F] dark:text-[#5FD39A]' },
-  BULK: { label: 'Bulk', className: 'bg-[#E6F0FF] text-[#0A5BD6] dark:bg-[#0F2A52] dark:text-[#7DB4FF]' },
-  SPAM: { label: 'Spam', className: 'bg-[#FDF0E1] text-[#9A4A06] dark:bg-[#3A2610] dark:text-[#F5B26B]' },
-  HIGH_SPAM: { label: 'High spam', className: 'bg-[#FDF0E1] text-[#9A4A06] dark:bg-[#3A2610] dark:text-[#F5B26B]' },
-  PHISH: { label: 'Phishing', className: 'bg-[#FCE9E4] text-[#B42318] dark:bg-[#3D1A16] dark:text-[#FF8A7A]' },
-  SPOOF: { label: 'Spoofing', className: 'bg-[#F6F1FE] text-[#6B3FB5] dark:bg-[#241B3D] dark:text-[#C7A8FF]' },
-  MALWARE: { label: 'Malware', className: 'bg-[#B42318] text-white' },
-  POLICY: { label: 'Blocked file', className: 'bg-[#E3F4F5] text-[#0B6770] dark:bg-[#0E2F33] dark:text-[#6FD6DF]' },
-  UNSCANNED: { label: 'Not scanned', className: 'bg-[#ECEEF4] text-[#4A5168] dark:bg-[#1E2537] dark:text-[#A7AFC4]' },
-  CHECKING: { label: 'Checking', className: 'bg-[#ECEEF4] text-[#4A5168] dark:bg-[#1E2537] dark:text-[#A7AFC4]' },
+  CLEAN: { label: 'Clean', className: 'bg-success-bg text-success dark:text-success-ink' },
+  BULK: { label: 'Bulk', className: 'bg-info-bg text-brand-soft dark:bg-blue-bg dark:text-indigo-bright' },
+  SPAM: { label: 'Spam', className: 'bg-warning-bg text-warning-ink dark:text-orange-ink' },
+  HIGH_SPAM: { label: 'High spam', className: 'bg-warning-bg text-warning-ink dark:text-orange-ink' },
+  PHISH: { label: 'Phishing', className: 'bg-danger-bg text-danger dark:text-danger-ink' },
+  SPOOF: { label: 'Spoofing', className: 'bg-selection text-violet-ink dark:bg-violet-bg' },
+  MALWARE: { label: 'Malware', className: 'bg-danger text-white' },
+  POLICY: { label: 'Blocked file', className: 'bg-teal-bg text-teal-ink' },
+  UNSCANNED: { label: 'Not scanned', className: 'bg-subtle text-ink-2 dark:bg-slate-bg dark:text-ink-3' },
+  CHECKING: { label: 'Checking', className: 'bg-subtle text-ink-2 dark:bg-slate-bg dark:text-ink-3' },
 };
 
 /** The other chips the protection screens use (states, checks), in the same palette. */
 export const STATE_CHIP = {
-  ok: 'bg-[#E6F4EC] text-[#1F7A4D] dark:bg-[#12301F] dark:text-[#5FD39A]',
-  warn: 'bg-[#FDF0E1] text-[#9A4A06] dark:bg-[#3A2610] dark:text-[#F5B26B]',
-  bad: 'bg-[#FCE9E4] text-[#B42318] dark:bg-[#3D1A16] dark:text-[#FF8A7A]',
-  muted: 'bg-[#ECEEF4] text-[#4A5168] dark:bg-[#1E2537] dark:text-[#A7AFC4]',
-  info: 'bg-[#E6F0FF] text-[#0A5BD6] dark:bg-[#0F2A52] dark:text-[#7DB4FF]',
+  ok: 'bg-success-bg text-success dark:text-success-ink',
+  warn: 'bg-warning-bg text-warning-ink dark:text-orange-ink',
+  bad: 'bg-danger-bg text-danger dark:text-danger-ink',
+  muted: 'bg-subtle text-ink-2 dark:bg-slate-bg dark:text-ink-3',
+  info: 'bg-info-bg text-brand-soft dark:bg-blue-bg dark:text-indigo-bright',
 } as const;
 
 export const VERDICTS: Verdict[] = ['CLEAN', 'BULK', 'SPAM', 'HIGH_SPAM', 'PHISH', 'SPOOF', 'MALWARE', 'POLICY', 'UNSCANNED', 'CHECKING'];

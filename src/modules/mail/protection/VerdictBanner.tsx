@@ -20,9 +20,9 @@ import type { AttachmentStatus, BannerAction, MessageProtection } from './types'
  */
 
 const TONES: Record<BannerModel['tone'], string> = {
-  danger: 'border-[#F3C7BE] bg-[#FCE9E4] text-[#8A1C12] dark:border-[#5A2620] dark:bg-[#3D1A16] dark:text-[#FFB4A8]',
-  warn: 'border-[#F2D3AE] bg-[#FDF0E1] text-[#7A3B05] dark:border-[#5A3B14] dark:bg-[#3A2610] dark:text-[#F5C08A]',
-  info: 'border-[#C9DBFA] bg-[#E6F0FF] text-[#0A4AB0] dark:border-[#1D3D6E] dark:bg-[#0F2A52] dark:text-[#9CC4FF]',
+  danger: 'border-danger-line bg-danger-bg text-danger-ink',
+  warn: 'border-warning-line bg-warning-bg text-warning-strong',
+  info: 'border-info-line bg-info-bg text-blue-ink dark:border-primary-soft dark:bg-blue-bg',
   neutral: 'border-line bg-subtle text-ink',
 };
 

@@ -7,6 +7,7 @@ import { refusal } from '../finance/api';
 import { errorMessage } from '../../core/bridge';
 import { applyCalibration, fetchGeometry, fetchMarkers, fetchProfiles, fetchVersions, has, K, openPdf, printCalibration, recordCalibration, saveOffsets, type Access, type CalibrationRun } from './api';
 import { Check, Note, PageHead, Panel, Tile, btn, btnPrimary, num, td, th, useStation } from './parts';
+import { useOfflineReadOnly } from '../../core/offline-read';
 
 /**
  * D04 — Calibration test sheet + offsets (CHQ-CAL-01..04, WF-03). Pick a printer profile on this computer and one
@@ -36,7 +37,8 @@ export default function Calibration({ access, versionId, profileId, onPick }: { 
   const [kind, setKind] = useState<'sheet' | 'test_print'>('sheet');
   const [lastRun, setLastRun] = useState<CalibrationRun | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const mayCalibrate = has(access, 'cheque.template.calibrate');
+  const offline = useOfflineReadOnly('cheque').readOnly;
+  const mayCalibrate = has(access, 'cheque.template.calibrate') && !offline;
   const mayManage = has(access, 'cheque.printer.manage');
 
   if (!device) return <Note tone="warn">This computer is not registered with WorkSuite, so it has no printer profiles to calibrate.</Note>;
@@ -117,25 +119,25 @@ export default function Calibration({ access, versionId, profileId, onPick }: { 
             title="Where the printer will land after offset"
             action={
               <span className="flex gap-2.5 text-[11.5px] font-semibold">
-                <span className="text-[#DC2626]">▢ saved</span>
-                <span className="text-[#2563EB]">▢ trying</span>
+                <span className="text-red">▢ saved</span>
+                <span className="text-blue">▢ trying</span>
               </span>
             }
           >
             {g ? (
               <div className="overflow-auto">
-                <div className="relative border border-[#B6CFC4] bg-[#F3F9F5]" style={{ width: g.width_mm * PX, height: g.height_mm * PX }}>
+                <div className="relative border border-slate-line bg-ground" style={{ width: g.width_mm * PX, height: g.height_mm * PX }}>
                   {g.zones.map((z, i) => (
                     <div key={`z${i}`} className="absolute grid place-items-center border border-dashed border-ink-3 text-[10px] font-bold text-ink-3 uppercase" style={{ ...box(z, 0, 0), background: 'repeating-linear-gradient(45deg,transparent 0 6px,rgba(100,116,139,.18) 6px 8px)' }}>
                       {z.kind === 'micr' ? 'MICR / clearing zone' : z.kind}
                     </div>
                   ))}
                   {g.fields.map((f) => (
-                    <div key={`s${f.key}`} className="absolute border border-dashed border-[#DC2626] bg-[rgba(220,38,38,.06)] px-1 text-[10px] text-[#B91C1C]" style={box(f, profile.offset_x_mm, profile.offset_y_mm)}>{f.key.replace(/_/g, ' ')}</div>
+                    <div key={`s${f.key}`} className="absolute border border-dashed border-red bg-[rgba(220,38,38,.06)] px-1 text-[10px] text-danger" style={box(f, profile.offset_x_mm, profile.offset_y_mm)}>{f.key.replace(/_/g, ' ')}</div>
                   ))}
                   {valid
                     ? g.fields.map((f) => (
-                        <div key={`n${f.key}`} className="absolute border border-[#2563EB] bg-[rgba(37,99,235,.06)] px-1 text-right text-[10px] text-[#1D4ED8]" style={box(f, x, y)}>{f.key.replace(/_/g, ' ')}</div>
+                        <div key={`n${f.key}`} className="absolute border border-blue bg-[rgba(37,99,235,.06)] px-1 text-right text-[10px] text-brand-soft" style={box(f, x, y)}>{f.key.replace(/_/g, ' ')}</div>
                       ))
                     : null}
                 </div>

@@ -16,10 +16,10 @@ export type Place = { view: View } | { group: number } | { account: number };
 
 export const VIEWS: Array<{ id: View; label: string; icon: string; tint?: string; count?: keyof Stats }> = [
   { id: 'all', label: 'All contacts', icon: 'users', count: 'total' },
-  { id: 'fav', label: 'Favorites', icon: 'star', tint: 'text-[#D97706]', count: 'favorites' },
-  { id: 'employee', label: 'Employees', icon: 'id-card', tint: 'text-[#1F9D5C]', count: 'employees' },
-  { id: 'customer', label: 'Customers', icon: 'user', tint: 'text-[#D97706]', count: 'customers' },
-  { id: 'vendor', label: 'Vendors', icon: 'building', tint: 'text-[#7C3AED]', count: 'vendors' },
+  { id: 'fav', label: 'Favorites', icon: 'star', tint: 'text-amber-strong', count: 'favorites' },
+  { id: 'employee', label: 'Employees', icon: 'id-card', tint: 'text-green', count: 'employees' },
+  { id: 'customer', label: 'Customers', icon: 'user', tint: 'text-amber-strong', count: 'customers' },
+  { id: 'vendor', label: 'Vendors', icon: 'building', tint: 'text-violet', count: 'vendors' },
   { id: 'archived', label: 'Archived', icon: 'archive' },
   { id: 'directory', label: 'Company directory', icon: 'contact' },
   // Possible duplicates and sync conflicts.

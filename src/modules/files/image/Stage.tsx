@@ -254,7 +254,7 @@ export function Stage(p: StageProps) {
   return (
     <div
       ref={wrap}
-      className={cx('relative flex min-h-0 min-w-0 flex-1 bg-[#0B1120] [background-image:radial-gradient(rgba(255,255,255,.035)_1px,transparent_1px)] [background-size:18px_18px]', p.zoom === 'fit' ? 'items-center justify-center overflow-hidden' : 'overflow-auto')}
+      className={cx('relative flex min-h-0 min-w-0 flex-1 bg-stage [background-image:radial-gradient(rgba(255,255,255,.035)_1px,transparent_1px)] [background-size:18px_18px]', p.zoom === 'fit' ? 'items-center justify-center overflow-hidden' : 'overflow-auto')}
       onDragOver={(e) => {
         if (Array.from(e.dataTransfer.types).includes('Files')) {
           e.preventDefault();
@@ -270,7 +270,7 @@ export function Stage(p: StageProps) {
           <>
             <canvas ref={beforeCanvas} aria-hidden className="pointer-events-none absolute inset-0 block h-full w-full" style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }} />
             <span className="pointer-events-none absolute top-2 left-2 rounded-[6px] bg-black/60 px-2 py-0.5 text-[11.5px] font-bold text-white">Before</span>
-            <span className="pointer-events-none absolute top-2 right-2 rounded-[6px] bg-[#3B5BDB] px-2 py-0.5 text-[11.5px] font-bold text-white">After</span>
+            <span className="pointer-events-none absolute top-2 right-2 rounded-[6px] bg-brand-soft px-2 py-0.5 text-[11.5px] font-bold text-white">After</span>
             <input
               type="range"
               min={0}
@@ -281,12 +281,12 @@ export function Stage(p: StageProps) {
               className="absolute inset-x-0 top-1/2 z-20 w-full -translate-y-1/2 cursor-ew-resize opacity-0"
             />
             <span className="pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-white" style={{ left: `${split}%` }}>
-              <span className="absolute top-1/2 left-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[13px] font-bold text-[#0F1B3D] shadow">⇆</span>
+              <span className="absolute top-1/2 left-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[13px] font-bold text-ink shadow">⇆</span>
             </span>
           </>
         ) : null}
         {p.compare === 'peek' ? <span className="pointer-events-none absolute top-2 left-2 rounded-[6px] bg-black/60 px-2 py-0.5 text-[11.5px] font-bold text-white">Before</span> : null}
-        {p.badge ? <span className="pointer-events-none absolute top-3 left-3 z-10 rounded-[8px] bg-[#C9D4FF] px-2.5 py-1 text-[12px] font-bold text-[#1B2980]">{p.badge}</span> : null}
+        {p.badge ? <span className="pointer-events-none absolute top-3 left-3 z-10 rounded-[8px] bg-primary-soft px-2.5 py-1 text-[12px] font-bold text-info-ink">{p.badge}</span> : null}
         <div
           ref={overlay}
           data-testid="stage-overlay"
@@ -330,10 +330,10 @@ export function Stage(p: StageProps) {
                             onPointerDown={(e) => startHandle(e, o, hd)}
                             onPointerMove={move}
                             onPointerUp={up}
-                            className={cx('absolute h-2.5 w-2.5 rounded-[2px] border border-[#3B5BDB] bg-white', HANDLE_POS[hd])}
+                            className={cx('absolute h-2.5 w-2.5 rounded-[2px] border border-brand-soft bg-white', HANDLE_POS[hd])}
                           />
                         ))}
-                        <span aria-hidden onPointerDown={(e) => startHandle(e, o, 'rotate')} onPointerMove={move} onPointerUp={up} className="absolute -top-7 left-1/2 h-3.5 w-3.5 -translate-x-1/2 cursor-grab rounded-full border-2 border-[#3B5BDB] bg-white" />
+                        <span aria-hidden onPointerDown={(e) => startHandle(e, o, 'rotate')} onPointerMove={move} onPointerUp={up} className="absolute -top-7 left-1/2 h-3.5 w-3.5 -translate-x-1/2 cursor-grab rounded-full border-2 border-brand-soft bg-white" />
                       </>
                     ) : null}
                     {editing ? <TextEditor o={o as TextObject} ch={dh * (content.h / out.h)} onChange={(text) => p.onLive({ ...p.recipe, objects: objects.map((x) => (x.id === o.id ? { ...x, text } : x)) })} onDone={() => (p.onSettle(), p.onEditText(null))} /> : null}
@@ -342,7 +342,7 @@ export function Stage(p: StageProps) {
               })
             : null}
           {p.tool === 'area' && p.recipe.area
-            ? p.recipe.area.seeds.map((s, i) => <span key={i} aria-hidden className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#3B5BDB]" style={{ left: pct(s.x), top: pct(s.y) }} />)
+            ? p.recipe.area.seeds.map((s, i) => <span key={i} aria-hidden className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-brand-soft" style={{ left: pct(s.x), top: pct(s.y) }} />)
             : null}
           {redactBox ? <span aria-hidden className="pointer-events-none absolute bg-black/85 outline outline-1 outline-white" style={{ left: pct(redactBox.x), top: pct(redactBox.y), width: pct(redactBox.w), height: pct(redactBox.h) }} /> : null}
           {drag?.kind === 'draw' && p.draw ? (
@@ -358,7 +358,7 @@ export function Stage(p: StageProps) {
         </div>
       </div>
       {dropping ? (
-        <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-[14px] border-2 border-dashed border-[#7FA2FF] bg-[#3B5BDB]/15 text-[14px] font-bold text-white">Drop to place it as a layer</div>
+        <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-[14px] border-2 border-dashed border-indigo-bright bg-brand-soft/15 text-[14px] font-bold text-white">Drop to place it as a layer</div>
       ) : null}
     </div>
   );
@@ -519,7 +519,7 @@ function TextEditor({ o, ch, onChange, onDone }: { o: TextObject; ch: number; on
         e.stopPropagation();
         if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) onDone();
       }}
-      className="absolute inset-0 z-10 resize-none overflow-hidden border border-[#7FA2FF] bg-black/40 p-0 text-white outline-none"
+      className="absolute inset-0 z-10 resize-none overflow-hidden border border-indigo-bright bg-black/40 p-0 text-white outline-none"
       style={{ fontFamily: `"${o.font}", "Noto Sans Sinhala", "Noto Sans Tamil", sans-serif`, fontSize: px, fontWeight: o.weight, fontStyle: o.italic ? 'italic' : 'normal', textAlign: o.align, lineHeight: o.lineHeight, minHeight: px * o.lineHeight }}
     />
   );

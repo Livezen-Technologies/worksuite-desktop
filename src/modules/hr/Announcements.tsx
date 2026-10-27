@@ -207,7 +207,7 @@ export default function Announcements() {
                   <span title={(r.companies ?? []).map((c) => c.name).join(', ') || r.company}>{companiesLabel(r)}</span>
                 </Cell>
                 <Cell w={100} className="!overflow-visible">
-                  <StatusChip className={r.priority === 'urgent' ? '!bg-danger-bg !text-danger' : r.priority === 'important' ? '!bg-warning-bg !text-[#9A4A06] dark:!text-warning' : '!bg-subtle !text-ink-2'}>{text(PRIORITY[r.priority] ?? r.priority)}</StatusChip>
+                  <StatusChip className={r.priority === 'urgent' ? '!bg-danger-bg !text-danger' : r.priority === 'important' ? '!bg-warning-bg !text-warning-ink dark:!text-warning' : '!bg-subtle !text-ink-2'}>{text(PRIORITY[r.priority] ?? r.priority)}</StatusChip>
                 </Cell>
                 <Cell w={120} className="text-ink-2">{r.requires_ack ? 'Required' : 'Not required'}</Cell>
                 <Cell w={110} className="!overflow-visible">
@@ -366,7 +366,7 @@ export function CompanyPicker({ companies, value, onChange }: { companies: Compa
         {value.map((id) => {
           const c = companies.find((x) => x.id === id);
           return c ? (
-            <span key={id} className={cx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold', c.publish === false ? 'bg-warning-bg text-[#9A4A06] dark:text-warning' : 'bg-selection text-primary')} title={c.publish === false ? text('You may write drafts for {name} but not publish to it.', { name: c.name }) : undefined}>
+            <span key={id} className={cx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold', c.publish === false ? 'bg-warning-bg text-warning-ink dark:text-warning' : 'bg-selection text-primary')} title={c.publish === false ? text('You may write drafts for {name} but not publish to it.', { name: c.name }) : undefined}>
               {c.name}
               {c.publish === false ? <span className="font-normal">· {text('draft only')}</span> : null}
               <button type="button" aria-label={text('Remove {name}', { name: c.name })} onClick={() => flip(id)} className="rounded-full hover:bg-primary/10">

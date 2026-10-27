@@ -14,7 +14,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Button, ErrorNote, Spinner, Switch, cx } from '../../components/ui';
 import { K as AccountK } from '../account/api';
-import { Card, SettingRow } from '../account/parts';
+import { SectionHeader, SettingRow, SettingRowFrame, SettingsGroup } from '../../components/SettingsKit';
 import { computerZone, useZones } from '../account/regional';
 import { appOf } from './api';
 import { Checkbox } from '../../components/Checkbox';
@@ -98,29 +98,32 @@ export default function NotificationSettings() {
   return (
     <div className="h-full overflow-y-auto bg-ground scroll-thin">
       <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-8 py-6">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => navigate('/notifications')} className="flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle" aria-label="Back to notifications" title="Back to notifications">
+        <div className="flex items-start gap-3">
+          <button type="button" onClick={() => navigate('/notifications')} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle" aria-label="Back to notifications" title="Back to notifications">
             <Icon name="chevron-left" size={18} />
           </button>
-          <div className="min-w-0 flex-1">
-            <h1 className="m-0 text-[22px] font-extrabold text-ink">Notification settings</h1>
-            <p className="m-0 text-[13px] text-ink-3">What reaches you, where, and when it must not. Your account’s choices apply on every device; “This computer” is this computer’s.</p>
+          <div className="min-w-0 flex-1 [&>header]:mb-0">
+            <SectionHeader
+              level={1}
+              title="Notification settings"
+              hint="What reaches you, where, and when it must not. Your account’s choices apply on every device; “This computer” is this computer’s."
+              actions={
+                <label className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                  Send me notifications
+                  <Switch label="Send me notifications" checked={enabled} onChange={(v) => commit({ enabled: v })} />
+                </label>
+              }
+            />
           </div>
-          <label className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-            Send me notifications
-            <Switch label="Send me notifications" checked={enabled} onChange={(v) => commit({ enabled: v })} />
-          </label>
         </div>
 
-        <Card title="Device delivery">
-          <label className="flex items-center justify-between gap-3 text-[13px] text-ink">
-            Desktop app takes priority
+        <SettingsGroup title="Device delivery" className="!mb-0">
+          <SettingRow label="Desktop app takes priority" hint="One device alerts you. Other devices update their badges quietly.">
             <Switch label="Desktop app takes priority" checked={cats.device_delivery?.desktop_priority !== false} onChange={(v) => commit({ categories: { ...cats, device_delivery: { ...cats.device_delivery, desktop_priority: v } } })} />
-          </label>
-          <p className="text-[12px] text-ink-3">One device alerts you. Other devices update their badges quietly.</p>
-        </Card>
-        <Card title="By notification type">
-          <div className="space-y-3">
+          </SettingRow>
+        </SettingsGroup>
+        <SettingsGroup title="By notification type" className="!mb-0">
+          <div className="space-y-3 px-[18px] py-2">
             {data.catalogue.flatMap((category) => category.events).map((event) => {
               const key = `event:${event.key}`;
               const own = cats[key] ?? {};
@@ -136,9 +139,9 @@ export default function NotificationSettings() {
               </div>;
             })}
           </div>
-        </Card>
-        <Card title="By app and channel" action={<span className="text-[12px] text-ink-3">A switch at the top turns a whole channel on or off</span>}>
-          <div className="overflow-x-auto" data-notif-matrix>
+        </SettingsGroup>
+        <SettingsGroup title="By app and channel" className="!mb-0" actions={<span className="text-[12px] text-ink-3">A switch at the top turns a whole channel on or off</span>}>
+          <div className="overflow-x-auto px-[18px] pb-2" data-notif-matrix>
             <table className="w-full table-fixed border-collapse text-[13px]">
               <thead>
                 <tr className="border-b border-line text-left">
@@ -200,15 +203,17 @@ export default function NotificationSettings() {
               </tbody>
             </table>
           </div>
-        </Card>
+        </SettingsGroup>
 
         {categoryVisible('files', visible) ? <FilesNotifications categories={cats as Record<string, EventChoices>} commit={commit} /> : null}
         {categoryVisible('support', visible) ? <SupportNotifications categories={cats as Record<string, EventChoices>} commit={commit} prefs={prefs} local={local} /> : null}
 
         <div className="grid items-start gap-4 lg:grid-cols-2">
           <QuietHours p={p} commit={commit} prefs={prefs} local={local} />
-          <Card title={<span className="flex items-center gap-2"><Icon name="monitor" size={16} className="text-ink-3" /> This computer</span>}>
-            <BannerBlocked prefs={prefs} supported={status?.notificationsSupported !== false} pausedUntil={status?.notificationsPausedUntil ?? null} />
+          <SettingsGroup label="This computer" className="!mb-0" title={<span className="flex items-center gap-2"><Icon name="monitor" size={16} className="text-ink-3" /> This computer</span>}>
+            <div className="px-[18px] pt-3 empty:hidden">
+              <BannerBlocked prefs={prefs} supported={status?.notificationsSupported !== false} pausedUntil={status?.notificationsPausedUntil ?? null} />
+            </div>
             <SettingRow label="Show banners" hint="Notifications appear in the corner of the screen, even with WorkSuite’s window closed.">
               <Switch label="Show banners" checked={prefs.notificationsEnabled} onChange={(v) => local({ notificationsEnabled: v })} />
             </SettingRow>
@@ -230,16 +235,18 @@ export default function NotificationSettings() {
             <SettingRow label="Badge count on the app icon" hint="Unread chat and notifications, on the Dock or the taskbar.">
               <Switch label="Badge count on the app icon" checked={prefs.badgeCount !== false} onChange={(v) => local({ badgeCount: v })} />
             </SettingRow>
-            <SystemPermission enabled={prefs.notificationsEnabled} />
-            <div className="flex flex-wrap items-center gap-2 pt-3">
+            <div className="px-[18px] pb-3 empty:hidden">
+              <SystemPermission enabled={prefs.notificationsEnabled} />
+            </div>
+            <SettingRowFrame className="flex flex-wrap items-center gap-2">
               <Button icon="bell" onClick={() => void call('notifications:test').then((ok) => !ok && toast('warning', 'This system does not support notifications. Check its notification settings.'))}>
                 Send a test notification
               </Button>
               <Button icon="chat" onClick={() => navigate('/account/notifications')}>
                 Chat and calls
               </Button>
-            </div>
-          </Card>
+            </SettingRowFrame>
+          </SettingsGroup>
         </div>
       </div>
     </div>
@@ -294,7 +301,7 @@ function QuietHours({ p, commit, prefs, local }: { p: Prefs; commit: (patch: Pre
     if (prefs.dndEnabled && f && t) local({ dndFrom: f, dndTo: t });
   };
   return (
-    <Card title={<span className="flex items-center gap-2"><Icon name="moon" size={16} className="text-ink-3" /> Quiet hours</span>}>
+    <SettingsGroup label="Quiet hours" className="!mb-0" title={<span className="flex items-center gap-2"><Icon name="moon" size={16} className="text-ink-3" /> Quiet hours</span>}>
       <SettingRow label="Quiet hours" hint="Email and browser pushes wait until they end. The bell still fills.">
         <Switch
           label="Quiet hours"
@@ -310,7 +317,8 @@ function QuietHours({ p, commit, prefs, local }: { p: Prefs; commit: (patch: Pre
       </SettingRow>
       {onNow ? (
         <>
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          <SettingRowFrame className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <label className="flex flex-col gap-1 text-[12.5px] font-semibold text-ink">
               From
               <input type="time" value={from} onChange={(e) => setHours(e.target.value, to)} aria-label="Quiet from" className="h-[34px] rounded-[8px] border border-line bg-surface px-2.5 text-[13px] text-ink outline-none focus:border-primary" />
@@ -320,7 +328,7 @@ function QuietHours({ p, commit, prefs, local }: { p: Prefs; commit: (patch: Pre
               <input type="time" value={to} onChange={(e) => setHours(from, e.target.value)} aria-label="Quiet to" className="h-[34px] rounded-[8px] border border-line bg-surface px-2.5 text-[13px] text-ink outline-none focus:border-primary" />
             </label>
           </div>
-          <div className="mt-3 flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <span className="text-[12.5px] font-semibold text-ink">By the clock of</span>
             <Select label="Time zone for quiet hours" value={zone} searchable options={(zones.data?.zones ?? [{ value: zone, label: zone, offset: '', group: '' }]).map((z) => ({ value: z.value, label: z.offset ? `${z.label} (UTC${z.offset})` : z.label, group: z.group || undefined }))} onValueChange={(v) => commit({ timezone: v })} />
             {here && here !== zone ? (
@@ -332,7 +340,7 @@ function QuietHours({ p, commit, prefs, local }: { p: Prefs; commit: (patch: Pre
               </span>
             ) : null}
           </div>
-          <div className="mt-3 flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <span className="text-[12.5px] font-semibold text-ink">During quiet hours, email and pushes</span>
             <Select
               label="During quiet hours"
@@ -345,6 +353,7 @@ function QuietHours({ p, commit, prefs, local }: { p: Prefs; commit: (patch: Pre
               onValueChange={(v) => commit({ quiet_action: v })}
             />
           </div>
+          </SettingRowFrame>
           <SettingRow label="Urgent ones still come through" hint="Only what is sent as critical: security alerts, outages.">
             <Switch label="Urgent ones still come through" checked={on(p.quiet_allows_urgent)} onChange={(v) => commit({ quiet_allows_urgent: v })} />
           </SettingRow>
@@ -353,6 +362,6 @@ function QuietHours({ p, commit, prefs, local }: { p: Prefs; commit: (patch: Pre
           </SettingRow>
         </>
       ) : null}
-    </Card>
+    </SettingsGroup>
   );
 }

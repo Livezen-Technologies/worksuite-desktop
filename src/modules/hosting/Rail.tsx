@@ -29,7 +29,7 @@ const UNDER: Partial<Record<HostingView, HostingView>> = { domain: 'domains', se
 export function HostingRail({ view, counts, onPick }: { view: HostingView; counts: Partial<Record<HostingView, number>>; onPick: (v: HostingView, newTab: boolean) => void }) {
   const at = UNDER[view] ?? view;
   return (
-    <nav aria-label="Hosting" className="flex w-[88px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-[#FBFBFD] px-1.5 py-2 scroll-thin dark:bg-surface">
+    <nav aria-label="Hosting" className="flex w-[88px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-rail px-1.5 py-2 scroll-thin dark:bg-surface">
       {RAIL.map((r) => {
         const on = r.id === at;
         const n = counts[r.id];
@@ -40,11 +40,11 @@ export function HostingRail({ view, counts, onPick }: { view: HostingView; count
             aria-current={on ? 'page' : undefined}
             title={r.label}
             onClick={(e: MouseEvent) => onPick(r.id, e.metaKey || e.ctrlKey)}
-            className={cx('relative flex flex-col items-center gap-1 rounded-[10px] px-0.5 py-2 text-center text-[10.5px] leading-tight', on ? 'bg-[#E6F6F9] font-semibold text-[#0E7490] dark:bg-[#0891B2]/20 dark:text-[#67D4EA]' : 'text-ink-2 hover:bg-subtle')}
+            className={cx('relative flex flex-col items-center gap-1 rounded-[10px] px-0.5 py-2 text-center text-[10.5px] leading-tight', on ? 'bg-teal-bg font-semibold text-teal dark:bg-teal/20 dark:text-teal-ink' : 'text-ink-2 hover:bg-subtle')}
           >
-            <Icon name={r.icon} size={18} className={on ? 'text-[#0891B2] dark:text-[#67D4EA]' : 'text-ink-3'} />
+            <Icon name={r.icon} size={18} className={on ? 'text-teal dark:text-teal-ink' : 'text-ink-3'} />
             <span className="max-w-full truncate">{r.label}</span>
-            {n ? <span className="absolute top-1 right-2 min-w-[16px] rounded-full bg-[#B42318] px-1 text-[10px] font-bold text-white tabular-nums">{n > 99 ? '99+' : n}</span> : null}
+            {n ? <span className="absolute top-1 right-2 min-w-[16px] rounded-full bg-danger px-1 text-[10px] font-bold text-white tabular-nums">{n > 99 ? '99+' : n}</span> : null}
           </button>
         );
       })}

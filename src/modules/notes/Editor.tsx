@@ -13,7 +13,7 @@ import { LinkPicker, MoveNote, ShareDialog, VersionHistory } from './Dialogs';
 import { NoteBody, NoteView } from './NoteBody';
 
 type Draft = { title: string; body: string; tags: string };
-const LINK_TONE: Record<string, string> = { contact: 'bg-[#E3F4F5] text-[#0B6770] dark:bg-subtle dark:text-[#5CC6CF]', event: 'bg-selection text-primary', task: 'bg-warning-bg text-[#9A4A06] dark:text-warning' };
+const LINK_TONE: Record<string, string> = { contact: 'bg-teal-bg text-teal-ink dark:bg-subtle dark:text-teal-ink', event: 'bg-selection text-primary', task: 'bg-warning-bg text-warning-ink dark:text-warning' };
 
 /**
  * A note, open (NotesMain, right): where it lives and whether it is saved,
@@ -182,7 +182,7 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
       )}
       {owner ? (
         <>
-          <Button size="sm" aria-pressed={n.is_favorite} onClick={() => void toggle('favorite')} className={n.is_favorite ? '!border-[#E9B949] !bg-warning-bg !text-[#9A4A06] dark:!border-warning/40 dark:!text-warning' : ''}>{n.is_favorite ? '★ Favorite' : '☆ Favorite'}</Button>
+          <Button size="sm" aria-pressed={n.is_favorite} onClick={() => void toggle('favorite')} className={n.is_favorite ? '!border-amber !bg-warning-bg !text-warning-ink dark:!border-warning/40 dark:!text-warning' : ''}>{n.is_favorite ? '★ Favorite' : '☆ Favorite'}</Button>
           {guest ? null : <Button size="sm" onClick={() => setDialog('history')}>Version history</Button>}
           {guest ? null : <Button size="sm" onClick={() => setDialog('share')}>Share{n.shares?.length ? ` · ${n.shares.length}` : ''}</Button>}
           {/* Saves now (it also saves itself as you type): the normal primary button, never drawn as disabled. */}
@@ -241,7 +241,7 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
         className="bare-focus w-full bg-transparent p-0 text-[24px] font-bold text-ink outline-none"
       />
       <span className="flex flex-wrap items-center gap-2 text-[12px] text-ink-3">
-        {n.is_pinned ? <span className="rounded-[6px] bg-warning-bg px-2 py-px font-bold text-[#9A4A06] dark:text-warning">Pinned</span> : null}
+        {n.is_pinned ? <span className="rounded-[6px] bg-warning-bg px-2 py-px font-bold text-warning-ink dark:text-warning">Pinned</span> : null}
         {n.is_archived ? <span className="rounded-[6px] bg-subtle px-2 py-px font-semibold">Archived</span> : null}
         <span>{meta}</span>
       </span>
@@ -261,9 +261,9 @@ export function NoteEditor({ id, notebooks, sections, ownerName, onGone, onOpen 
         </div>
       )}
       {converted && canTasks ? (
-        <div role="status" className="absolute bottom-5 left-1/2 z-20 flex w-[300px] -translate-x-1/2 items-center gap-2 rounded-[10px] bg-[#0F1B3D] px-3.5 py-2.5 text-[13px] text-white shadow-xl">
+        <div role="status" className="absolute bottom-5 left-1/2 z-20 flex w-[300px] -translate-x-1/2 items-center gap-2 rounded-[10px] bg-navy px-3.5 py-2.5 text-[13px] text-white shadow-xl">
           <span className="flex-1">Converted to task</span>
-          <button type="button" onClick={() => navigate(`/tasks?task=${converted}`)} className="font-bold text-[#AFC6FF] hover:underline">Open</button>
+          <button type="button" onClick={() => navigate(`/tasks?task=${converted}`)} className="font-bold text-stage-accent hover:underline">Open</button>
         </div>
       ) : null}
       {dialog === 'share' ? <ShareDialog note={n} onClose={() => setDialog(null)} onChanged={lists} /> : null}

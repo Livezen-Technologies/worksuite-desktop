@@ -41,7 +41,7 @@ export default function MyAccess({ companies }: { companies: Company[] }) {
       </PageHead>
       {tab === 'scope' ? (
         <>
-          <p className="m-0 rounded-[10px] border border-[#F5D48A] bg-[#FFF8E6] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+          <p className="m-0 rounded-[10px] border border-warning-line bg-warning-bg px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
             A tender belongs to one company. You see the tenders of the companies below and no others — a tender in another company does not open for you, even from a link.
           </p>
           <Panel title="Companies whose tenders you can see" bodyClassName="flex flex-wrap gap-1.5 px-3.5 py-3">
@@ -79,7 +79,7 @@ export default function MyAccess({ companies }: { companies: Company[] }) {
             const yes = p.held || can(perms, p.slug);
             return (
               <div key={p.slug} data-permission={p.slug} className="flex items-center gap-3 border-b border-line/60 px-4 py-2.5 text-[13px] last:border-b-0">
-                <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full', yes ? 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-3')}>
+                <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full', yes ? 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-3')}>
                   <Icon name={yes ? 'check' : 'minus'} size={13} />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">

@@ -302,7 +302,7 @@ function Row({
         'group relative flex cursor-default flex-col gap-0.5 border-b border-line py-2 pr-3 pl-1',
         picked ? 'bg-selection/70' : selected ? 'bg-selection' : 'hover:bg-subtle',
         // Unread: bold, with a blue edge (D-01).
-        unread && 'before:absolute before:inset-y-1.5 before:left-0.5 before:w-[3px] before:rounded-full before:bg-[#2563EB]',
+        unread && 'before:absolute before:inset-y-1.5 before:left-0.5 before:w-[3px] before:rounded-full before:bg-blue',
       )}
     >
       <span className="flex min-w-0 items-center gap-1.5">

@@ -369,12 +369,12 @@ function LiveBanner({ c, onOpen }: { c: LiveVoiceCall; onOpen: () => void }) {
   return (
     <div role="status" className="flex items-center gap-3 rounded-[12px] border border-success/30 bg-success-bg px-3.5 py-2.5">
       <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full bg-success shadow-[0_0_0_4px_rgb(47_158_103/0.2)]" />
-      <div className="min-w-0 flex-1 truncate text-[13px] text-[#14502e] dark:text-success">
+      <div className="min-w-0 flex-1 truncate text-[13px] text-success-ink dark:text-success">
         <b>{lead}</b> {people.length ? text('{visitor} with {people}', { visitor: who, people: people.join(' & ') }) : who}
         {' · '}<span className="font-mono tabular-nums">{time}</span>
         {' · '}{c.recorded ? text('recorded') : text('not recorded')}
       </div>
-      <button type="button" onClick={onOpen} className="h-[30px] shrink-0 rounded-[15px] border border-success/30 bg-surface px-3 text-[12.5px] font-semibold text-[#14502e] hover:bg-subtle dark:text-success">
+      <button type="button" onClick={onOpen} className="h-[30px] shrink-0 rounded-[15px] border border-success/30 bg-surface px-3 text-[12.5px] font-semibold text-success-ink hover:bg-subtle dark:text-success">
         {text('Open call')}
       </button>
     </div>
@@ -461,7 +461,7 @@ function CallDetails({ id, onOpenChat }: { id: number; onOpenChat: (conversation
         )}
         <h3 className={cx(PANEL_HEADING, 'mt-1')}>{text('Call notes · staff only')}</h3>
         {c.notes ? (
-          <div className="rounded-[10px] border border-dashed border-[#d9a441] bg-warning-bg px-3 py-2.5 text-[12.5px] whitespace-pre-wrap text-[#6b4a10] select-text dark:text-warning">{c.notes}</div>
+          <div className="rounded-[10px] border border-dashed border-amber bg-warning-bg px-3 py-2.5 text-[12.5px] whitespace-pre-wrap text-warning-strong select-text dark:text-warning">{c.notes}</div>
         ) : !noting ? (
           <div className="text-[12.5px] text-ink-3">{text('No notes yet.')}</div>
         ) : null}

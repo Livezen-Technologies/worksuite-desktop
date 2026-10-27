@@ -17,6 +17,50 @@ lock, text find-and-replace, compare with report, shared review, form detection,
 `tools.ts` marks those tools **partial** with what works. Still to build on the desktop: canvas-level editing with
 the engine, PKCS#11 tokens and the OS keystores, field placement on the canvas, local-file Pro operations.
 
+## 0.1 Tools on this computer, and no dead buttons (audit D-G12, 2026-10-27)
+
+The audit counted the "UI" cells below (30, plus 2 Missing). Each now either works on this computer with the engine
+the app ships (PDFium, `@embedpdf/pdfium`; engine ops in `pdfium-provider.ts`, IPC `pdf:edit`, `pdf:derive`,
+`pdf:compose`), or says plainly in its panel what it needs — **Needs the WorkSuite server** (PDF Studio Pro, with an
+*Open the Pro panel* button for Drive PDFs) or **Needs WorkSuite Office** — instead of a run button that is always
+off. Tools with nothing working anywhere are not listed (`hidden` in `tools.ts`). The status columns below are kept
+as the history of the plan; this table is the current state.
+
+| Item (rows below) | Outcome |
+|---|---|
+| Create (DK06, T02) | **Built here:** pictures (PNG, JPEG) to a PDF, fitted on A4/Letter or at their own size; blank pages. Office and web pages: *Needs WorkSuite Office*. |
+| Edit (DK03, T05) | **Partial here:** page design (header, footer, watermark, Bates) is the stamp op. Editing a PDF's own text and images: *Needs the WorkSuite server* (Pro panel). Dead buttons removed. |
+| Export (DK06, T06) | **Built here:** each page as PNG (72/150/300 dpi), the text as .txt. Word, Excel, PowerPoint, HTML: *Needs WorkSuite Office* (Pro panel Convert for Drive PDFs). |
+| Combine (DK04, T03) | **Built here:** PDFs from this computer, in order, page ranges, a bookmark per file, into a new PDF. Non-PDF inputs: *Needs WorkSuite Office*. |
+| Organize additions (T04) | **Built here:** duplicate pages (journaled), split into files every n pages. |
+| Compress (DK06, T07) | *Needs the WorkSuite server* (PDFium cannot re-encode images; no device optimizer). No run button. |
+| Scan & OCR (DK07, T10) | *Needs the WorkSuite server* (Pro panel OCR for Drive PDFs). Scanner and device OCR not in this version. |
+| Shared review (DK05, T09) | *Needs the WorkSuite server* (Pro panel); the four dead buttons removed. |
+| Fill & Sign (W09, T11) | Partial (unchanged): a drawn or typed signature placed as a mark. |
+| E-signatures (DK08, T12) | *Needs the WorkSuite server* (Pro panel). The dead form and buttons removed. |
+| Prepare form (DK09, T13) | *Needs the WorkSuite server* (Pro panel). |
+| Protect (DK10, T14) | **Built here:** a protected copy — AES-256, open and permissions passwords, print/change/comment/copy permissions — and an unlocked copy of a PDF opened with its password. Certificate encryption: *Needs the WorkSuite server*. |
+| Redact (DK10, T15) | **Built here:** patterns and words found, reviewed, then truly removed from the pages (text under them taken out of the content, pictures and drawings wholly inside removed, black boxes drawn), as an edit. Sanitise and reason codes: *Needs the WorkSuite server*. |
+| Certificates (DK10, T16) | *Needs the WorkSuite server* (Pro panel signing and validation). |
+| Compare (DK11, T17) | *Needs the WorkSuite server* (Pro panel). |
+| Accessibility (DK12, T18) | *Needs the WorkSuite server* (Pro panel). |
+| Standards (DK12, T19) | **Hidden:** no PDF/A or veraPDF route is wired. |
+| Print production (DK13, T20) | **Hidden:** needs colour management in the engine. |
+| Measure (DK13, T21) | **Hidden:** needs measurement annotations and path snapping. |
+| Bates, header & footer, watermark (DK14, T23) | **Built here:** the stamp op — Bates numbers, Page n of N, the date, diagonal watermarks — on the pages chosen, upright on turned pages, undoable. Latin text (Helvetica). |
+| Action wizard (DK14, T22) | *Needs the WorkSuite server* (Pro panel runs saved Actions). |
+| AI Assistant (DK15, T24) | *Needs the WorkSuite server* (Pro panel). |
+| Offline + recovery (DK16) | Unchanged page; "Offline copies" says *Not in this version* instead of a dead Manage. |
+| Settings (DK17) | Dead buttons replaced: default app ("In your system's settings: Default apps"), saved signatures (*Needs the WorkSuite server*), digital IDs ("Chosen when you sign"). |
+| Admin policy (A01) | Save says *Saving needs the WorkSuite server (Admin Center › Files › PDF Studio)*; no dead button. |
+| Jobs (W08) | Unchanged: the server capability rows (informational). |
+| Libraries (T26, Missing) | Not built: admin libraries are the server's; nothing is shown for them. |
+| Entitlement (PRO-ENT, Missing) | Not built: needs `pdf_studio_pro` in the session flags; Pro badges stay informational. |
+
+Tests: `tests/unit/electron/pdf-tools.test.ts` (the engine ops on PDFium), `tests/unit/electron/pdf-editing.test.ts`
+(the service: journaled stamps, duplicates and undo; protected copy, text, split, combine, pictures), and
+`tests/unit/renderer/pdf-tools.test.tsx` (each panel's call, and the server tools' "Needs" with no dead button).
+
 ## 1. What this change adds (UI first)
 
 Every desktop screen in the design now exists in `src/modules/pdf`, driven by one tool registry

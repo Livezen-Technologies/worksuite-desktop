@@ -61,7 +61,7 @@ import { ADMIN_PROTECTION_ROUTE, useHasPermission } from './AdminNav';
 import { AdminProtection } from '../mail/protection/admin/AdminProtection';
 import { syncedPrefOf } from '@shared/desktop-settings';
 import { setDesktopSettings, useDesktopSettings } from '../../core/desktop-settings';
-import { SectionHeader, SettingRow, SettingsGroup, SettingsQuery, SettingsSearchBox } from './kit';
+import { SectionHeader, SettingRow, SettingsGroup, SettingsNavGroup, SettingsNavItem, SettingsQuery, SettingsSearchBox } from '../../components/SettingsKit';
 import { FeaturesSettings } from './FeaturesSettings';
 import { StartupSettings } from './StartupSettings';
 import { searchSettings } from './search-index';
@@ -147,14 +147,7 @@ function SettingsSections(_props: ModuleProps) {
   const hits = find.trim() ? searchSettings(find, listed) : null;
   const navItem = (s: (typeof SECTIONS)[number], sub?: string[]) => (
     <div key={s.id}>
-      <button
-        type="button"
-        onClick={() => go(`/settings/${s.id}`)}
-        aria-current={section === s.id ? 'page' : undefined}
-        className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px] transition-colors', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}
-      >
-        <Icon name={s.icon} size={16} /> {s.label}
-      </button>
+      <SettingsNavItem label={s.label} icon={s.icon} current={section === s.id} onClick={() => go(`/settings/${s.id}`)} />
       {sub?.length ? (
         <ul className="mb-1 ms-[34px] flex flex-col">
           {sub.slice(0, 4).map((l) => (
@@ -189,7 +182,7 @@ function SettingsSections(_props: ModuleProps) {
               ) : (
                 listed.map((s, i, list) => (
                   <div key={s.id}>
-                    {s.group !== list[i - 1]?.group ? <div className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{s.group}</div> : null}
+                    {s.group !== list[i - 1]?.group ? <SettingsNavGroup>{s.group}</SettingsNavGroup> : null}
                     {navItem(s)}
                   </div>
                 ))
@@ -202,9 +195,7 @@ function SettingsSections(_props: ModuleProps) {
         {/* The organisation's ringing rules, for whoever manages website chats (P-03); it opens here, in the app. */}
         {(managesRinging || seesProtection) && !guest ? (
           <div data-settings-footer className="shrink-0 border-t border-line px-3 py-2">
-            <button type="button" onClick={() => go(managesRinging ? ADMIN_RINGING_ROUTE : ADMIN_PROTECTION_ROUTE)} className="flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px] text-ink hover:bg-subtle">
-              <Icon name="shield-check" size={16} /> Admin Center
-            </button>
+            <SettingsNavItem label="Admin Center" icon="shield-check" onClick={() => go(managesRinging ? ADMIN_RINGING_ROUTE : ADMIN_PROTECTION_ROUTE)} />
           </div>
         ) : null}
       </nav>
@@ -915,7 +906,7 @@ export function AiSection({ prefs }: { prefs: Preferences }) {
     <>
       <H title="AI Assistant" hint="How the assistant works on this computer. It only sees what you give it and never sends anything without you." />
       {writer.isError || (writer.data && !writer.data.available) ? (
-        <p className="mb-2 rounded-[10px] bg-warning-bg px-3 py-2 text-[13px] text-[#7A4308] dark:text-warning">{writer.isError ? writerProblem(writer.error) : 'No AI connection is configured for this workspace yet.'}</p>
+        <p className="mb-2 rounded-[10px] bg-warning-bg px-3 py-2 text-[13px] text-warning-strong dark:text-warning">{writer.isError ? writerProblem(writer.error) : 'No AI connection is configured for this workspace yet.'}</p>
       ) : null}
       <Row label="Display mode" hint={DISPLAY_HINT[a.display]}>
         <Select<AiDisplay>
@@ -2063,7 +2054,7 @@ export function RemoteControlSection() {
   return (
     <>
       <H title="Remote control" hint="When you share your screen in a meeting, others can ask to use your mouse and keyboard. Nothing happens until you allow it, on this computer, each time." />
-      <div className={cx('mb-4 rounded-[12px] border p-4 text-[13.5px]', works || pending || unknown ? 'border-line bg-surface' : 'border-[#F1D9B5] bg-[#FFF9EC] dark:bg-warning-bg')} data-testid="rc-banner">
+      <div className={cx('mb-4 rounded-[12px] border p-4 text-[13.5px]', works || pending || unknown ? 'border-line bg-surface' : 'border-warning-line bg-warning-bg dark:bg-warning-bg')} data-testid="rc-banner">
         <div className="flex items-center gap-2 font-semibold text-ink">
           <Icon name={pending || unknown || hint === 'restart' ? 'refresh' : works ? 'shield-check' : 'warning'} size={17} className={works ? 'text-success' : 'text-warning'} />
           {headline}

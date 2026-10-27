@@ -258,7 +258,7 @@ export function MissedDetail({ id, m, onOpenChat }: { id: string; m: Missed | un
             {!placeLine && !visitLine ? <span className="text-ink-3">{text('Nothing known about the visit')}</span> : null}
           </div>
           {/* UX-MISS-03: the server reopens the chat and rings again when they come back and write. */}
-          <div role="note" className="rounded-[12px] border border-warning/40 bg-warning-bg p-3 text-[12px] text-[#6B4A10] dark:text-warning">
+          <div role="note" className="rounded-[12px] border border-warning/40 bg-warning-bg p-3 text-[12px] text-warning-strong dark:text-warning">
             {online ? text('{name} is back on the site — the chat is open again and rings when they write.', { name: first }) : text('If {name} comes back to the site, this chat reopens and rings again.', { name: first })}
           </div>
         </aside>

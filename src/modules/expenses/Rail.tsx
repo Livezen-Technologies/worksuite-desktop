@@ -134,7 +134,7 @@ export function ExpensesRail({
         type="button"
         aria-current={on ? 'page' : undefined}
         onClick={() => onPick(id)}
-        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
       >
         <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
         <Icon name={ICONS[id]} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
@@ -146,7 +146,7 @@ export function ExpensesRail({
   const head = (label: string, ids: ExpenseView[]) => (ids.some(shows) ? <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div> : null);
 
   return (
-    <nav aria-label="Expenses" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="Expenses" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         <OrgSwitcher orgs={orgs} selected={selected} onSelect={onSelect} onFavourite={onFavourite} />
         {onFile ? (

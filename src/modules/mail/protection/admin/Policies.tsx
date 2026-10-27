@@ -151,10 +151,10 @@ function PolicyEditor({ policy, canManage, showHistory }: { policy: Policy; canM
           <div className="flex flex-col gap-2">
             <legend className="font-bold text-ink">{text('Spam thresholds')}</legend>
             <div aria-hidden className="relative flex h-2 overflow-hidden rounded-[4px]">
-              <span className="bg-[#2E9E6A]" style={{ width: `${(th.junk / scale) * 100}%` }} />
-              <span className="bg-[#E0A030]" style={{ width: `${((th.quarantine - th.junk) / scale) * 100}%` }} />
-              <span className="bg-[#D25B4B]" style={{ width: `${((th.reject - th.quarantine) / scale) * 100}%` }} />
-              <span className="flex-1 bg-[#8C2F24]" />
+              <span className="bg-green" style={{ width: `${(th.junk / scale) * 100}%` }} />
+              <span className="bg-amber" style={{ width: `${((th.quarantine - th.junk) / scale) * 100}%` }} />
+              <span className="bg-red" style={{ width: `${((th.reject - th.quarantine) / scale) * 100}%` }} />
+              <span className="flex-1 bg-danger" />
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {(
@@ -164,7 +164,7 @@ function PolicyEditor({ policy, canManage, showHistory }: { policy: Policy; canM
                   ['reject', text('Refuse at gateway at'), text('mail server only')],
                 ] as const
               ).map(([k, label, hint]) => (
-                <div key={k} className={cx('flex items-center gap-2 rounded-[10px] border px-3 py-2', th[k] !== policy.settings.thresholds[k] ? 'border-[#E0A030] bg-[#FDF0E1] dark:bg-[#3A2610]' : 'border-line')}>
+                <div key={k} className={cx('flex items-center gap-2 rounded-[10px] border px-3 py-2', th[k] !== policy.settings.thresholds[k] ? 'border-amber bg-warning-bg' : 'border-line')}>
                   <label htmlFor={`th-${k}`} className="flex flex-1 flex-col">
                     <b className="text-[12.5px] text-ink">{label}</b>
                     <span className="text-[11.5px] text-ink-3">{th[k] !== policy.settings.thresholds[k] ? text('was {n}', { n: policy.settings.thresholds[k] }) : hint}</span>
@@ -266,7 +266,7 @@ function PolicyEditor({ policy, canManage, showHistory }: { policy: Policy; canM
           </Button>
         </Card>
         <Card title={text('Before applying')}>
-          <p className={cx('text-[12.5px]', problems.length ? 'text-danger' : 'text-[#1F7A4D] dark:text-[#5FD39A]')}>
+          <p className={cx('text-[12.5px]', problems.length ? 'text-danger' : 'text-success dark:text-success-ink')}>
             {problems.length ? `✕ ${problems.join(' ')}` : `✓ ${text('Thresholds in order ({a} < {b} < {c})', { a: th.junk, b: th.quarantine, c: th.reject })}`}
           </p>
           <p className="text-[12.5px] text-ink-2">• {text('Self-test runs EICAR and GTUBE through every path; a failure rolls the change back.')}</p>

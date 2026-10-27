@@ -97,11 +97,11 @@ export function MeetRingScreen() {
   };
 
   return (
-    <div role="alertdialog" aria-label={`${name} invites you to ${title}`} className="drag flex h-full flex-col bg-[#0F1B3D] text-white">
-      <div className="flex items-center gap-2 pt-3 pr-3 pl-4 text-[11.5px] font-semibold text-[#AFC0E8]">
+    <div role="alertdialog" aria-label={`${name} invites you to ${title}`} className="drag flex h-full flex-col bg-navy text-white">
+      <div className="flex items-center gap-2 pt-3 pr-3 pl-4 text-[11.5px] font-semibold text-stage-accent">
         <BrandMark size={18} />
         <span className="flex-1">WorkSuite · Invitation to a meeting</span>
-        <button type="button" aria-label="Not now" title="Stop ringing — they see you didn't answer" disabled={busy} onClick={() => void answer('dismiss')} className="no-drag flex h-[26px] w-[26px] items-center justify-center rounded-full bg-white/8 text-[#C3CEEA] hover:text-white">
+        <button type="button" aria-label="Not now" title="Stop ringing — they see you didn't answer" disabled={busy} onClick={() => void answer('dismiss')} className="no-drag flex h-[26px] w-[26px] items-center justify-center rounded-full bg-white/8 text-stage-ink-2 hover:text-white">
           <Icon name="x" size={14} />
         </button>
       </div>
@@ -109,16 +109,16 @@ export function MeetRingScreen() {
         <CallAvatar name={name} size={52} glow="incoming" />
         <div className="flex min-w-0 flex-col gap-[3px]">
           <span className="truncate text-[17px] font-bold">{name}</span>
-          <span className="truncate text-[12.5px] text-[#C3CEEA]">invites you to join “{title}”</span>
+          <span className="truncate text-[12.5px] text-stage-ink-2">invites you to join “{title}”</span>
         </div>
       </div>
       <div className="no-drag flex flex-1 flex-col gap-2.5 px-4 pb-2">
         <div className="flex gap-2.5">
-          <button type="button" disabled={busy} onClick={() => void answer('decline')} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#C4321C] text-[13.5px] font-bold hover:bg-[#A8291A] disabled:opacity-60">
+          <button type="button" disabled={busy} onClick={() => void answer('decline')} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-orange text-[13.5px] font-bold hover:bg-danger disabled:opacity-60">
             <Icon name="phone-off" size={16} />
             Decline
           </button>
-          <button type="button" autoFocus disabled={busy} onClick={() => void answer('accept')} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#1F7A4D] text-[13.5px] font-bold hover:bg-[#1A6841] disabled:opacity-60">
+          <button type="button" autoFocus disabled={busy} onClick={() => void answer('accept')} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-success text-[13.5px] font-bold hover:bg-success disabled:opacity-60">
             <Icon name="video" size={16} />
             Accept
           </button>
@@ -134,7 +134,7 @@ export function MeetRingScreen() {
           Audio only
         </button>
         {error ? (
-          <p role="alert" className="text-[12px] text-[#FFB4A2]">
+          <p role="alert" className="text-[12px] text-stage-danger">
             {error}
           </p>
         ) : reasons ? (
@@ -146,19 +146,19 @@ export function MeetRingScreen() {
             ))}
           </div>
         ) : (
-          <p className="text-[11.5px] text-[#AFC0E8]">Accept opens the meeting with your microphone and camera off; Audio only leaves your microphone as it was.</p>
+          <p className="text-[11.5px] text-stage-accent">Accept opens the meeting with your microphone and camera off; Audio only leaves your microphone as it was.</p>
         )}
         <div className="mt-auto flex justify-center gap-4">
-          <button type="button" aria-expanded={reasons} onClick={() => setReasons(!reasons)} className="text-[12px] font-semibold text-[#AFC0E8] hover:text-white">
+          <button type="button" aria-expanded={reasons} onClick={() => setReasons(!reasons)} className="text-[12px] font-semibold text-stage-accent hover:text-white">
             {reasons ? 'Back' : 'Decline with a message'}
           </button>
-          <button type="button" onClick={() => setMuted(!muted)} className="text-[12px] font-semibold text-[#AFC0E8] hover:text-white">
+          <button type="button" onClick={() => setMuted(!muted)} className="text-[12px] font-semibold text-stage-accent hover:text-white">
             {muted ? 'Ringtone on' : 'Mute the ringtone'}
           </button>
         </div>
       </div>
       <div className="h-[3px] shrink-0 bg-white/8" aria-hidden>
-        <div className="animate-drain h-[3px] bg-[#7FA2FF]" style={{ animationDuration: `${expires}s` }} />
+        <div className="animate-drain h-[3px] bg-indigo-bright" style={{ animationDuration: `${expires}s` }} />
       </div>
     </div>
   );

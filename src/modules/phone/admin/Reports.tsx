@@ -23,8 +23,8 @@ const PERIODS = [
 
 // Answered / missed: validated (dataviz) for both themes; amber is below 3:1 on white, so the chart has a legend,
 // direct labels and a table view.
-const ANSWERED = 'bg-[#2a78d6] dark:bg-[#3987e5]';
-const MISSED = 'bg-[#eda100] dark:bg-[#c98500]';
+const ANSWERED = 'bg-blue dark:bg-primary';
+const MISSED = 'bg-amber dark:bg-orange';
 const SEQ_LIGHT = ['#f1f5fb', '#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#0d366b'];
 const SEQ_DARK = ['#17213f', '#1c3360', '#1c4a8a', '#256abf', '#3987e5', '#6da7ec', '#9ec5f4', '#cde2fb'];
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

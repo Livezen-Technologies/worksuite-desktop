@@ -27,7 +27,7 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Chip, Modal, TextField, cx } from '../../components/ui';
-import { LockBadge } from './kit';
+import { LockBadge } from '../../components/SettingsKit';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
@@ -435,7 +435,7 @@ export function MiniPreview({ tokens: t, label }: { tokens: Tokens; label: strin
               <span key={n} className="flex items-center justify-between rounded-[4px] px-1 text-[9px] font-semibold" style={{ color: t['--ws-navy-ink'], background: i === 1 ? t['--ws-navy-3'] : 'transparent' }}>
                 {n}
                 {i === 1 ? (
-                  <span className="rounded-full px-1 text-[8px] leading-[12px] text-white" style={{ background: '#e0522f' }}>
+                  <span className="rounded-full px-1 text-[8px] leading-[12px] text-white" style={{ background: 'var(--ws-badge)' }}>
                     3
                   </span>
                 ) : null}

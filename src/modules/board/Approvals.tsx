@@ -28,7 +28,7 @@ export default function Approvals({ circular, offline }: { circular: number | nu
         <ul>
           {items.map((a) => (
             <li key={a.id}>
-              <button type="button" aria-current={sel?.id === a.id ? 'true' : undefined} onClick={() => setSelId(a.id)} className={cx('flex w-full items-center gap-2 border-b border-line px-3.5 py-2.5 text-left', sel?.id === a.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+              <button type="button" aria-current={sel?.id === a.id ? 'true' : undefined} onClick={() => setSelId(a.id)} className={cx('flex w-full items-center gap-2 border-b border-line px-3.5 py-2.5 text-left', sel?.id === a.id ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
                 <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-bold">{a.title}</div><div className="truncate text-[11.5px] text-ink-3">{a.sub}</div></div>
                 <Status tone={a.overdue ? 'danger' : a.due_label ? 'warning' : 'indigo'}>{a.due_label ?? KIND[a.kind]}</Status>
               </button>
@@ -109,10 +109,10 @@ function SignPane({ a }: { a: Approval }) {
   return (
     <>
       <div className="flex justify-center overflow-y-auto bg-subtle p-8 scroll-thin">
-        <article aria-label="Document preview" className="h-fit w-[420px] bg-white p-8 font-serif text-[12px] text-[#111] shadow">
+        <article aria-label="Document preview" className="h-fit w-[420px] bg-white p-8 font-serif text-[12px] text-ink shadow">
           <h2 className="text-center text-[13px] font-bold uppercase">{a.title}</h2>
           {isMinutes ? (doc.isPending ? <Spinner /> : <div className="mt-3 space-y-2">{(m?.blocks ?? []).filter((b) => b.text).map((b) => <p key={b.id} className="whitespace-pre-wrap">{b.text}</p>)}</div>) : <p className="mt-3">{a.sub}</p>}
-          {needsSign ? <div className="mt-10 border-t-2 border-dashed border-[#3B5BDB] bg-[#EEF1FD] px-2 pt-1 text-[11px] text-[#3B5BDB]">Sign here</div> : null}
+          {needsSign ? <div className="mt-10 border-t-2 border-dashed border-brand-soft bg-selection px-2 pt-1 text-[11px] text-brand-soft">Sign here</div> : null}
         </article>
       </div>
       <aside className="flex flex-col gap-3 border-l border-line bg-surface p-3.5">

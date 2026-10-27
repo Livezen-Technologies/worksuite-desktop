@@ -54,13 +54,13 @@ export default function MyAccess() {
             </div>
             <p className="m-0 text-[12.5px] text-ink-2">{a.scope.why}</p>
             {!a.linked ? (
-              <p className="m-0 mt-1.5 rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#9A4A06] dark:text-warning">
+              <p className="m-0 mt-1.5 rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-ink dark:text-warning">
                 Your login is not linked to an employee record, so anything that starts from "which employee am I" — your attendance, documents and leave — has nothing to start from. An administrator sets that link on the employee record.
               </p>
             ) : null}
           </section>
           {a.via_master > 0 ? (
-            <section className="rounded-[12px] border border-[#F5D9A8] bg-warning-bg px-4 py-3 text-[12.5px] text-[#7A3E06] dark:border-warning/40 dark:text-warning">
+            <section className="rounded-[12px] border border-warning-line bg-warning-bg px-4 py-3 text-[12.5px] text-warning-strong dark:border-warning/40 dark:text-warning">
               <b>
                 {a.via_master} of these {a.permissions.length} permissions are yours only through <code>hr.manage</code>.
               </b>{' '}
@@ -72,10 +72,10 @@ export default function MyAccess() {
         <Panel title="Permissions" sub="Green is granted to you; amber is effective only through hr.manage; grey you do not hold.">
           {a.permissions.map((p) => (
             <div key={p.slug} className="flex items-center gap-2.5 border-b border-line/70 px-3.5 py-[7px] text-[12.5px] last:border-b-0">
-              <span className={cx('h-2 w-2 shrink-0 rounded-full', !p.effective ? 'bg-[#C9CFDD] dark:bg-line' : p.via === 'hr.manage' ? 'bg-[#B45309]' : 'bg-[#1F7A4D]')} />
+              <span className={cx('h-2 w-2 shrink-0 rounded-full', !p.effective ? 'bg-primary-soft dark:bg-line' : p.via === 'hr.manage' ? 'bg-warning' : 'bg-success')} />
               <span className={cx('min-w-0 flex-1 truncate', p.effective ? 'text-ink' : 'text-ink-3')}>{p.name}</span>
               <code className="shrink-0 font-mono text-[11.5px] text-ink-3">{p.slug}</code>
-              <span className={cx('w-[92px] shrink-0 text-right text-[11.5px] font-bold', !p.effective ? 'text-ink-3' : p.via === 'hr.manage' ? 'text-[#B45309] dark:text-warning' : 'text-success')}>{!p.effective ? 'Not held' : p.via === 'hr.manage' ? 'via hr.manage' : 'Held'}</span>
+              <span className={cx('w-[92px] shrink-0 text-right text-[11.5px] font-bold', !p.effective ? 'text-ink-3' : p.via === 'hr.manage' ? 'text-warning dark:text-warning' : 'text-success')}>{!p.effective ? 'Not held' : p.via === 'hr.manage' ? 'via hr.manage' : 'Held'}</span>
             </div>
           ))}
         </Panel>

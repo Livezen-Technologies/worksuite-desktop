@@ -30,12 +30,12 @@ const TONE: Record<string, string> = {
   issued: 'in', returned: 'ok', refused: 'er', looked: 'ne', good: 'ok', fair: 'wa', poor: 'er', new: 'ok', damaged: 'er', checked_out: 'in',
 };
 const PILL: Record<string, string> = {
-  ok: 'bg-[#E7F6EE] text-[#13734A] dark:bg-success/15 dark:text-success',
-  wa: 'bg-[#FFF4DB] text-[#8A5200] dark:bg-warning/15 dark:text-warning',
-  er: 'bg-[#FDECEA] text-[#B42318] dark:bg-danger/15 dark:text-danger',
-  in: 'bg-[#EAEDFB] text-[#23349E] dark:bg-primary/15 dark:text-primary',
-  vi: 'bg-[#F2EEFD] text-[#5B3FB5] dark:bg-[#5B3FB5]/20 dark:text-[#B9A7F0]',
-  ne: 'bg-[#EEF0F6] text-[#4A5068] dark:bg-subtle dark:text-ink-2',
+  ok: 'bg-success-bg text-success dark:bg-success/15 dark:text-success',
+  wa: 'bg-warning-bg text-yellow-ink dark:bg-warning/15 dark:text-warning',
+  er: 'bg-danger-bg text-danger dark:bg-danger/15 dark:text-danger',
+  in: 'bg-info-bg text-primary dark:bg-primary/15 dark:text-primary',
+  vi: 'bg-selection text-violet-ink dark:bg-violet/20',
+  ne: 'bg-subtle text-ink-2 dark:bg-subtle dark:text-ink-2',
 };
 
 export function Badge({ status, children }: { status: string; children?: ReactNode }) {
@@ -46,7 +46,7 @@ export function Pills<T extends string>({ value, onChange, options, label }: { v
   return (
     <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1.5">
       {options.map((o) => (
-        <button key={o.id} type="button" aria-pressed={o.id === value} onClick={() => onChange(o.id)} className={cx('h-[28px] rounded-[14px] border px-2.5 text-[12px] font-semibold', o.id === value ? 'border-primary bg-[#EAEDFB] text-[#23349E] dark:bg-selection dark:text-primary' : 'border-line bg-surface text-ink-2 hover:bg-subtle')}>
+        <button key={o.id} type="button" aria-pressed={o.id === value} onClick={() => onChange(o.id)} className={cx('h-[28px] rounded-[14px] border px-2.5 text-[12px] font-semibold', o.id === value ? 'border-primary bg-info-bg text-primary dark:bg-selection dark:text-primary' : 'border-line bg-surface text-ink-2 hover:bg-subtle')}>
           {o.label}
           {o.n ? <span className="ml-1 tabular-nums opacity-70">{o.n}</span> : null}
         </button>
@@ -127,7 +127,7 @@ export function PageHead({ title, sub, children }: { title: ReactNode; sub?: Rea
 }
 
 export function Note({ tone = 'info', children }: { tone?: 'info' | 'warn' | 'ok' | 'error'; children: ReactNode }) {
-  const c = { info: 'border-[#C9D3F5] bg-[#F5F7FF] text-[#23349E] dark:bg-primary/10 dark:text-primary', warn: 'border-[#F5D48A] bg-[#FFF8E6] text-[#7A3B05] dark:bg-warning-bg dark:text-warning', ok: 'border-[#BDE5CF] bg-[#EFFAF4] text-[#13734A] dark:bg-success/10 dark:text-success', error: 'border-[#F4C7C3] bg-[#FDF2F1] text-[#B42318] dark:bg-danger/10 dark:text-danger' }[tone];
+  const c = { info: 'border-info-line bg-info-soft text-primary dark:bg-primary/10 dark:text-primary', warn: 'border-warning-line bg-warning-bg text-warning-strong dark:bg-warning-bg dark:text-warning', ok: 'border-success-line bg-slate-bg text-success dark:bg-success/10 dark:text-success', error: 'border-danger-line bg-ground text-danger dark:bg-danger/10 dark:text-danger' }[tone];
   return <div className={cx('flex flex-wrap items-center gap-2 rounded-[9px] border px-3.5 py-2.5 text-[12.5px]', c)}>{children}</div>;
 }
 

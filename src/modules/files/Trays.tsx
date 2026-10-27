@@ -149,7 +149,7 @@ export function UrlDownloads({ folderId, folderName, onClose, onOpenFolder }: { 
                 <b className="min-w-0 flex-1 truncate font-semibold text-ink" title={j.url}>{j.filename || j.url.replace(/^magnet:\?.*dn=([^&]+).*$/, (_m, n: string) => decodeURIComponent(n))}</b>
                 <span className={cx('shrink-0', j.status === 'completed' ? 'text-success' : j.status === 'failed' ? 'text-danger' : 'text-ink-2')}>{status}</span>
               </div>
-              {bar(pct, j.status === 'completed' ? 'bg-success' : j.status === 'failed' ? 'bg-danger' : 'bg-[#0E7C86]')}
+              {bar(pct, j.status === 'completed' ? 'bg-success' : j.status === 'failed' ? 'bg-danger' : 'bg-teal')}
               <div className="flex items-center gap-2 text-[11.5px] text-ink-3">
                 <span className="min-w-0 flex-1 truncate">{j.error ?? (magnet ? `Magnet link${Number(j.speed) ? ` · ${bytes(Number(j.speed))}/s` : ''}` : `${total ? `${bytes(got)} of ${bytes(total)} · ` : ''}${Number(j.speed) ? `${bytes(Number(j.speed))}/s · ` : ''}${j.url}`)}</span>
                 {j.status === 'downloading' || j.status === 'queued' ? <button type="button" onClick={() => void act(j, 'pause')} className="font-semibold text-primary hover:underline">Pause</button> : null}

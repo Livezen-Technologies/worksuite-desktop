@@ -96,7 +96,7 @@ export default function Timesheet() {
         ) : null}
       </PageHead>
       {sheet?.status === 'rejected' ? (
-        <div className="rounded-[9px] border border-[#F6D9A8] bg-[#FFF4E0] px-3 py-2.5 font-semibold text-[#6B3A06] dark:border-warning/30 dark:bg-warning-bg dark:text-warning">
+        <div className="rounded-[9px] border border-warning-line bg-warning-bg px-3 py-2.5 font-semibold text-warning-strong dark:border-warning/30 dark:bg-warning-bg dark:text-warning">
           Sent back{sheet.decided_by ? ` by ${sheet.decided_by}` : ''}
           {sheet.decision_note ? `: “${sheet.decision_note}”` : '.'} Change it and submit the week again.
         </div>

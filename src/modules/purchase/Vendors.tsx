@@ -115,11 +115,11 @@ export default function Vendors({
                   type="button"
                   data-vendor={v.id}
                   onClick={() => onOpen(v.id)}
-                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === v.id && 'bg-[#F4F6FE] dark:bg-selection/40')}
+                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === v.id && 'bg-info-soft dark:bg-selection/40')}
                 >
                   <span className="flex min-w-0 flex-1 flex-col">
                     <b className="truncate text-ink">
-                      {v.is_favourite ? <span className="mr-1 text-[#E9A23B]">★</span> : null}
+                      {v.is_favourite ? <span className="mr-1 text-stage-amber">★</span> : null}
                       {v.name}
                       {v.lapsed_documents ? <span className="ml-1.5 text-[11px] font-semibold text-danger">{v.lapsed_documents} lapsed</span> : null}
                     </b>
@@ -551,7 +551,7 @@ function VendorFormSheet({ id, initial, canCost: fromServer, onClose, onSaved }:
         </div>
         {f.status !== initial.status && f.status !== 'active' ? text('status_reason', 'Why', { max: 400, hint: `Why is this vendor ${f.status}? This is recorded on the timeline.` }) : null}
         {dupes.length ? (
-          <span className="rounded-[10px] bg-[#FFF4E0] px-3 py-2 text-[12.5px] text-[#9A4A06] dark:bg-warning-bg dark:text-warning">
+          <span className="rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-ink dark:bg-warning-bg dark:text-warning">
             <b>This may already be on file</b> — {dupes.map((m) => `${m.name}${m.code ? ` · ${m.code}` : ''} (${m.reasons.join(', ')})`).join('; ')}. Two branches of one group are genuinely two vendors, so this does not stop you saving.
           </span>
         ) : null}

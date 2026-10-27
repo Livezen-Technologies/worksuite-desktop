@@ -86,7 +86,7 @@ export function PhoneNav({ section, onPick }: { section: Section; onPick: (s: Se
   const foot = server ?? (status.data ? (status.data.pbx.ok ? 'Phone system online' : 'No PBX reachable') : '');
 
   return (
-    <nav aria-label="Phone" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="Phone" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-1.5 px-3 pt-3.5 pb-2">
         <b className="text-[15px]">Phone</b>
         <span className={cx('inline-flex w-fit max-w-full items-center gap-1.5 truncate rounded-full px-2 py-0.5 text-[11.5px] font-semibold', CHIP[tone])}>
@@ -109,7 +109,7 @@ export function PhoneNav({ section, onPick }: { section: Section; onPick: (s: Se
                     type="button"
                     aria-current={active ? 'page' : undefined}
                     onClick={() => onPick(it.id)}
-                    className={cx('relative flex h-8 shrink-0 items-center gap-2.5 rounded-[9px] pr-2 pl-2.5 text-left', active ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+                    className={cx('relative flex h-8 shrink-0 items-center gap-2.5 rounded-[9px] pr-2 pl-2.5 text-left', active ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
                   >
                     <span className={cx('absolute top-[7px] bottom-[7px] left-0 w-[3px] rounded-r-[3px]', active ? 'bg-primary' : 'bg-transparent')} />
                     <Icon name={it.icon} size={16} className={cx('shrink-0', active ? 'text-primary' : 'text-ink-3')} />

@@ -308,7 +308,7 @@ export default function ReturnDialog({ onClose }: { onClose: () => void }) {
             {t('pos.ret.reason.other')}
           </button>
         </div>
-        {other ? <input autoFocus value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} aria-label={t('pos.reason')} placeholder={t('pos.reason')} className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none" /> : null}
+        {other ? <input autoFocus value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} aria-label={t('pos.reason')} placeholder={t('pos.reason')} className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none" /> : null}
         <div className="text-[13px] font-bold text-ink-2">{t('pos.ret.to')}</div>
         {toOptions.length > 1 ? (
           <div role="radiogroup" aria-label={t('pos.ret.to')} className="flex flex-col gap-2">

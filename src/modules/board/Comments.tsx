@@ -61,7 +61,7 @@ export default function Comments({ meetingId, item, participants, canComment, on
             {(list.data ?? []).map((c) => {
               const mine = c.user_id === me;
               return (
-                <li key={c.id} className={cx('max-w-[75%] rounded-[10px] border border-line p-2.5 text-[12.5px]', mine ? 'ml-auto bg-[#EEF1FD] dark:bg-selection' : 'bg-subtle')}>
+                <li key={c.id} className={cx('max-w-[75%] rounded-[10px] border border-line p-2.5 text-[12.5px]', mine ? 'ml-auto bg-selection dark:bg-selection' : 'bg-subtle')}>
                   <div className="flex justify-between gap-3 font-semibold"><span>{mine ? 'You' : c.author}</span><span className="font-normal text-ink-3">{fmtDate(c.created_at)} {fmtTime(c.created_at)}</span></div>
                   {scope === 'all' && itemNo.get(c.agenda_item_id) ? <div className="text-[11px] text-ink-3">{itemNo.get(c.agenda_item_id)}</div> : null}
                   <p className="whitespace-pre-wrap">{c.body}</p>

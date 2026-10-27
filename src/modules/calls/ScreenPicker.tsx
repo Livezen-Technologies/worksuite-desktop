@@ -204,7 +204,7 @@ export function ScreenPicker({ onPick, onClose, changing, control, inMeeting }: 
         {view.kind === 'empty' || view.kind === 'list' ? (
           <>
             {view.partial ? (
-              <p className="flex items-center gap-1.5 text-[12px] text-[#9A4A06] dark:text-warning">
+              <p className="flex items-center gap-1.5 text-[12px] text-warning-ink dark:text-warning">
                 <Icon name="alert" size={13} /> {tab === 'screen' ? 'Windows' : 'Screens'} could not be listed this time; {tab === 'screen' ? 'screens' : 'windows'} can still be shared.
               </p>
             ) : null}
@@ -238,7 +238,7 @@ export function ScreenPicker({ onPick, onClose, changing, control, inMeeting }: 
 
 function Notice({ tone, title, children }: { tone: 'warn' | 'error'; title: string; children: React.ReactNode }) {
   return (
-    <div role="alert" className={cx('flex flex-col gap-1 rounded-[10px] px-3.5 py-3 text-[12.5px]', tone === 'warn' ? 'border border-[#F1D9B5] bg-[#FFF9EC] text-[#7A3B05] dark:border-transparent dark:bg-warning-bg dark:text-warning' : 'bg-danger-bg text-danger')}>
+    <div role="alert" className={cx('flex flex-col gap-1 rounded-[10px] px-3.5 py-3 text-[12.5px]', tone === 'warn' ? 'border border-warning-line bg-warning-bg text-warning-strong dark:border-transparent dark:bg-warning-bg dark:text-warning' : 'bg-danger-bg text-danger')}>
       <b className="text-[13px]">{title}</b>
       <div>{children}</div>
     </div>

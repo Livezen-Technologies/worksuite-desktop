@@ -51,7 +51,7 @@ export default function Dashboard({
   return (
     <div className="flex flex-col gap-4 px-6 py-5">
       {notBilled > 0 ? (
-        <button type="button" onClick={() => onGo('bill')} className="rounded-[10px] border border-[#F3D9A4] bg-[#FFF8EA] px-3.5 py-2 text-left text-[12.5px] text-[#7A3E05] hover:underline dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+        <button type="button" onClick={() => onGo('bill')} className="rounded-[10px] border border-warning-line bg-warning-bg px-3.5 py-2 text-left text-[12.5px] text-warning-strong hover:underline dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           {notBilled} {notBilled === 1 ? 'order has' : 'orders have'} goods received that nobody has billed. Until the bill is entered, the cost is on the shelf but not in the ledger — enter it.
         </button>
       ) : null}

@@ -148,7 +148,7 @@ export default function Station({ active }: ViewProps) {
           {printers.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
         </select>
       </div>
-      {!station ? <p className="m-0 rounded-[8px] bg-[#FFF4DB] px-3 py-2 text-[12.5px] text-[#8A5200]">Choose a registered, approved printer on this computer for the station (Printers).</p> : null}
+      {!station ? <p className="m-0 rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-yellow-ink">Choose a registered, approved printer on this computer for the station (Printers).</p> : null}
       <Section>
         <div className="flex flex-col gap-3 p-4">
           <input

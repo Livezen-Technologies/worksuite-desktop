@@ -236,7 +236,9 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   {
     input: defineDesktopManifest({
       id: 'marketing', name: 'Marketing', icon: 'megaphone', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'NONE' },
+      // Read-only offline (D-G14): the audience, campaigns and reports as last read, with their "as of" time; sending,
+      // editing and importing wait for the connection. Webhooks, channel credentials and imports are never kept.
+      offline: { mode: 'READ_CACHE', entities: ['campaign', 'contact'], cache: ['/api/marketing'] },
       native: ['notifications'],
       quickActions: [
         { id: 'marketing-queue', label: 'My call queue', route: '/marketing?view=queue' },
@@ -279,9 +281,10 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   {
     // Recruitment (WS-REC SRS §9, gap doc §9.3 D01–D05): the pipeline board, the review queue with the CV, my
     // interviews today, the scorecard beside the Meet call (its own window too) and approvals waiting on me, over the
-    // staff API `/api/recruitment`. Nothing is kept for offline: every screen is a decision the server must see.
+    // staff API `/api/recruitment`. Offline (D-G14) it reads from the encrypted cache, read-only: every decision is the
+    // server's and waits for the connection; a CV or other document is never kept.
     input: defineDesktopManifest({
-      id: 'recruitment', name: 'Recruitment', icon: 'user-plus', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      id: 'recruitment', name: 'Recruitment', icon: 'user-plus', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'READ_CACHE', entities: ['candidate', 'interview'], cache: ['/api/recruitment'] },
       native: ['notifications'],
       windows: [{ id: 'scorecard', route: '/recruitment?tab=cards&solo=1' }],
       quickActions: [{ id: 'interviews-today', label: 'Interviews today', route: '/recruitment?tab=today' }],
@@ -308,7 +311,9 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     // notices, the live room with votes and the secretary's live minutes with polls, over `/api/board`. Packs kept
     // offline live in the main process's encrypted vault (board-vault.ts), not the read cache.
     input: defineDesktopManifest({
-      id: 'board', name: 'Board', icon: 'landmark', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      // The vault (board-vault.ts) keeps each granted pack to read offline and queues comments and circular responses,
+      // signed with this device's key, until the connection is back (D-G14: the manifest says so now).
+      id: 'board', name: 'Board', icon: 'landmark', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'PARTIAL_WRITE', entities: ['pack', 'comment', 'circular_response'] },
       native: ['notifications'],
       quickActions: [{ id: 'board-packs', label: 'Board packs', route: '/board?view=packs' }, { id: 'board-approvals', label: 'Board approvals', route: '/board?view=approvals' }],
       deepLinks: ['board', 'board/meetings/:id', 'board/meetings/:id/room', 'board/circulars/:id'],
@@ -371,7 +376,9 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     // computer as the certified print station — home, print queue, direct print and confirm, calibration and
     // offsets, batch runs and reconciling an interrupted batch. Printing happens only in the main process.
     input: defineDesktopManifest({
-      id: 'cheque', name: 'Cheque Manager', icon: 'printer', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      // Read-only offline (D-G14): the queue, batches and returns as last read; nothing prints offline (the server checks
+      // every print), and a pre-print check or calibration sheet is never kept.
+      id: 'cheque', name: 'Cheque Manager', icon: 'printer', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'READ_CACHE', entities: ['cheque', 'batch'], cache: ['/api/cheque'] },
       quickActions: [{ id: 'cheque-queue', label: 'Cheque print queue', route: '/cheque?tab=queue' }],
       deepLinks: ['cheque', 'cheque/queue', 'cheque/batches/:id'],
     }),
@@ -411,10 +418,12 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./label/LabelShell'),
   },
   {
-    // Figures are not cached for offline reading: a stale trial balance looks exactly like a current one.
+    // Read-only offline (D-G14) from the encrypted cache (shared/offline-reads.ts): the books as last read, under a
+    // banner with their "as of" time — a stale trial balance is never shown as a current one. Every change waits for
+    // the connection; share links and exports are never kept.
     input: defineDesktopManifest({
       id: 'finance', name: 'Finance', icon: 'landmark', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'NONE' },
+      offline: { mode: 'READ_CACHE', entities: ['journal', 'account'], cache: ['/api/finance'] },
       quickActions: [{ id: 'new-journal', label: 'New Journal', route: '/finance?tab=journals&make=journal' }],
     }),
     load: () => import('./finance/FinanceShell'),
@@ -422,7 +431,9 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   {
     input: defineDesktopManifest({
       id: 'expenses', name: 'Expenses', icon: 'wallet', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'NONE' },
+      // Read-only offline (D-G14): claims, approvals and the lists as last read, with their "as of" time; filing,
+      // approving and paying wait for the connection. Receipts, cards and exports are never kept.
+      offline: { mode: 'READ_CACHE', entities: ['claim', 'advance'], cache: ['/api/expense'] },
       quickActions: [{ id: 'file-expense', label: 'File an Expense', route: '/expenses?file=1' }],
     }),
     load: () => import('./expenses/ExpensesShell'),

@@ -140,7 +140,7 @@ export default function Leave() {
                     {r.responsible_status ? <StatusChip>{`cover ${r.responsible_status}`}</StatusChip> : null}
                   </span>
                   <span className="truncate text-[12.5px] text-ink-2">{describeLeave(r)}</span>
-                  {note ? <span className="text-[12px] font-semibold text-[#9A4A06] dark:text-warning">{note}</span> : null}
+                  {note ? <span className="text-[12px] font-semibold text-warning-ink dark:text-warning">{note}</span> : null}
                 </span>
                 <span className="flex shrink-0 flex-wrap justify-end gap-1.5">
                   {r.can_decide && r.status === 'pending' ? (
@@ -225,8 +225,8 @@ function LeaveCalendar({ month, setMonth, requests, holidays, onOpen }: { month:
           const on = requests.filter((r) => r.starts_on <= c.day && r.ends_on >= c.day);
           return (
             <div key={c.day} role="gridcell" className={cx('flex min-h-[74px] flex-col gap-0.5 overflow-hidden border-r border-b border-line/70 px-1.5 py-1', c.weekend ? 'bg-ground/60' : 'bg-surface', !c.inMonth && 'opacity-45')}>
-              <span className={cx('text-[11.5px] font-bold', c.day === today ? 'text-primary' : hol ? 'text-[#6B3FB5]' : 'text-ink-2')}>{parseYmd(c.day).getDate()}</span>
-              {hol ? <span className="truncate rounded-[4px] bg-[#F1EAFB] px-1.5 py-px text-[10.5px] font-bold text-[#5B2FA0] dark:bg-[#2A1F45] dark:text-[#C4A8F0]">{hol.name}</span> : null}
+              <span className={cx('text-[11.5px] font-bold', c.day === today ? 'text-primary' : hol ? 'text-violet-ink' : 'text-ink-2')}>{parseYmd(c.day).getDate()}</span>
+              {hol ? <span className="truncate rounded-[4px] bg-violet-bg px-1.5 py-px text-[10.5px] font-bold text-violet-ink">{hol.name}</span> : null}
               {on.slice(0, 3).map((r) => (
                 <button
                   key={r.id}
@@ -690,13 +690,13 @@ export function ReviewLeave({ id, canDecide, onClose, onDone }: { id: number; ca
                 </span>
               ) : v && pending && mayDecide ? (
                 <span className="ml-auto flex flex-wrap justify-end gap-2">
-                  <button type="button" disabled={busy || approval.busy === id} className={btn + ' !border-[#F1B8A8] !text-danger dark:!border-danger/40'} onClick={() => void reject()}>
+                  <button type="button" disabled={busy || approval.busy === id} className={btn + ' !border-danger-line !text-danger dark:!border-danger/40'} onClick={() => void reject()}>
                     Reject
                   </button>
                   {blocked ? (
                     <WaitingForCover name={cover?.mine ? 'You' : cover?.name} />
                   ) : (
-                    <button type="button" disabled={busy || approval.busy === id} className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} onClick={() => void approval.approve(id, { note, review: v })}>
+                    <button type="button" disabled={busy || approval.busy === id} className={btnPrimary + ' !bg-success hover:!bg-success'} onClick={() => void approval.approve(id, { note, review: v })}>
                       Approve
                     </button>
                   )}

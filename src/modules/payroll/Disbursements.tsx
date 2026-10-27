@@ -61,7 +61,7 @@ export default function Disbursements({ runId, onRun }: { runId: number | null; 
         <Card>
           {batches.isLoading ? <Spinner /> : batches.error ? <div className="p-3"><ErrorNote error={batches.error} /></div> : null}
           {(batches.data?.batches ?? []).map((x) => (
-            <button key={x.id} type="button" onClick={() => setSel(x.id)} aria-current={x.id === b ? 'true' : undefined} className={cx('flex w-full flex-col items-start gap-0.5 border-b border-line/70 px-3.5 py-2.5 text-left text-[12.5px]', x.id === b ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+            <button key={x.id} type="button" onClick={() => setSel(x.id)} aria-current={x.id === b ? 'true' : undefined} className={cx('flex w-full flex-col items-start gap-0.5 border-b border-line/70 px-3.5 py-2.5 text-left text-[12.5px]', x.id === b ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
               <span className="flex w-full items-center gap-2"><b className="flex-1 font-mono text-[11.5px]">{x.reference ?? `PAY-${x.id}`}</b><Badge status={x.failed ? 'failed' : x.status}>{x.failed ? `${x.failed} failed` : humanise(x.status)}</Badge></span>
               <span className="text-[11.5px] text-ink-2">{[humanise(x.method ?? 'bank'), x.line_count != null ? `${x.line_count} lines` : null, x.total ? amt(x.total, x.currency ?? '') : null].filter(Boolean).join(' · ')}</span>
             </button>

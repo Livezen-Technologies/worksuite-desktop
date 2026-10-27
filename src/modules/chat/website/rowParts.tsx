@@ -20,7 +20,7 @@ import { clock, waited } from './Ringing';
 const TAG = {
   danger: 'bg-danger-bg text-danger',
   indigo: 'bg-selection text-primary',
-  warning: 'bg-warning-bg text-[#9A4A06] dark:text-warning',
+  warning: 'bg-warning-bg text-warning-ink dark:text-warning',
   muted: 'bg-subtle text-ink-3',
   // "Back on the site" on an offline enquiry (C-05).
   success: 'bg-success-bg text-success',
@@ -60,7 +60,7 @@ export function RingBell({ ring }: { ring: WebchatRingChat }) {
 /** "Ringing · silenced" in the table's Status column (R-04): it still rings for colleagues, not for me. */
 export function SilencedStatus() {
   return (
-    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-[#9A5B10] dark:text-warning">
+    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-warning-ink dark:text-warning">
       <Icon name="bell-off" size={14} className="shrink-0" label={text('Silenced for you')} />
       {text('Ringing · silenced')}
     </span>
@@ -161,7 +161,7 @@ export function WaitClock({ since, amber, red, size = 'sm', silenced = false }: 
   return (
     <span data-tone={tone} title={silenced ? undefined : tone === 'amber' ? text('Offered a callback') : tone === 'red' && (amber || red) ? text('Waiting past the callback offers') : undefined}
       aria-label={text('waiting {time}', { time: waited(since, now) })}
-      className={cx('shrink-0 font-mono tabular-nums', big ? 'text-[13px] font-semibold' : 'text-[11px] font-bold', tone === 'red' ? 'text-danger' : tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
+      className={cx('shrink-0 font-mono tabular-nums', big ? 'text-[13px] font-semibold' : 'text-[11px] font-bold', tone === 'red' ? 'text-danger' : tone === 'amber' ? 'text-warning-ink dark:text-warning' : 'text-ink-2')}>
       {waited(since, now)}
     </span>
   );

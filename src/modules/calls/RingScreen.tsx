@@ -101,12 +101,12 @@ export function RingScreen() {
   };
 
   return (
-    <div role="alertdialog" aria-label="Incoming WorkSuite call" className="drag flex h-full flex-col bg-[#0F1B3D] text-white" onKeyDown={(e) => e.key === 'Escape' && replying && setReplying(false)}>
-      <div className="flex items-center gap-2 pt-3 pr-3 pl-4 text-[11.5px] font-semibold text-[#AFC0E8]">
+    <div role="alertdialog" aria-label="Incoming WorkSuite call" className="drag flex h-full flex-col bg-navy text-white" onKeyDown={(e) => e.key === 'Escape' && replying && setReplying(false)}>
+      <div className="flex items-center gap-2 pt-3 pr-3 pl-4 text-[11.5px] font-semibold text-stage-accent">
         <BrandMark size={18} />
         <span className="flex-1">WorkSuite · Incoming {video ? 'video' : 'voice'} call</span>
         <span className="rounded-[9px] bg-white/10 px-2 py-0.5 text-[10.5px]">Always on top</span>
-        <button type="button" aria-label="Dismiss" title="Stop ringing here" onClick={close} className="no-drag flex h-[26px] w-[26px] items-center justify-center rounded-full bg-white/8 text-[#C3CEEA] hover:text-white">
+        <button type="button" aria-label="Dismiss" title="Stop ringing here" onClick={close} className="no-drag flex h-[26px] w-[26px] items-center justify-center rounded-full bg-white/8 text-stage-ink-2 hover:text-white">
           <Icon name="x" size={14} />
         </button>
       </div>
@@ -114,7 +114,7 @@ export function RingScreen() {
         <CallAvatar name={name} size={52} glow="incoming" />
         <div className="flex min-w-0 flex-col gap-[3px]">
           <span className="truncate text-[17px] font-bold">{name}</span>
-          <span className="truncate text-[12.5px] text-[#C3CEEA]">
+          <span className="truncate text-[12.5px] text-stage-ink-2">
             {video ? 'Video call' : 'Voice call'}
             {where ? ` · ${where}` : ''}
           </span>
@@ -124,24 +124,24 @@ export function RingScreen() {
         <div className="no-drag flex min-h-0 flex-1 flex-col gap-1.5 px-4 pb-2">
           <div className="flex flex-wrap gap-1.5">
             {QUICK_REPLIES.map((r) => (
-              <button key={r} type="button" disabled={busy} onClick={() => void reply(r)} className="max-w-full truncate rounded-[12px] bg-white/8 px-2.5 py-[5px] text-left text-[11.5px] font-semibold text-[#E6ECFA] hover:bg-white/14">
+              <button key={r} type="button" disabled={busy} onClick={() => void reply(r)} className="max-w-full truncate rounded-[12px] bg-white/8 px-2.5 py-[5px] text-left text-[11.5px] font-semibold text-stage-ink hover:bg-white/14">
                 {r}
               </button>
             ))}
           </div>
           <form
-            className="mt-auto flex items-center gap-2 rounded-[12px] border border-[#7FA2FF] bg-white/8 py-1 pr-1 pl-3"
+            className="mt-auto flex items-center gap-2 rounded-[12px] border border-indigo-bright bg-white/8 py-1 pr-1 pl-3"
             onSubmit={(e) => {
               e.preventDefault();
               void reply(text);
             }}
           >
-            <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={`Reply to ${name.split(' ')[0]}…`} aria-label="Reply with a message" className="bare-focus h-8 min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-[#8FA0CC]" />
-            <button type="submit" aria-label="Send reply" disabled={busy || !text.trim()} className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#3B5BDB] text-white disabled:opacity-50">
+            <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={`Reply to ${name.split(' ')[0]}…`} aria-label="Reply with a message" className="bare-focus h-8 min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-ink-4" />
+            <button type="submit" aria-label="Send reply" disabled={busy || !text.trim()} className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-brand-soft text-white disabled:opacity-50">
               <Icon name="send" size={15} />
             </button>
           </form>
-          <div className="flex justify-between text-[11px] text-[#8FA0CC]">
+          <div className="flex justify-between text-[11px] text-ink-4">
             <span>Enter to send · the call is declined</span>
             <button type="button" onClick={() => setReplying(false)} className="font-semibold hover:text-white">
               Back
@@ -151,16 +151,16 @@ export function RingScreen() {
       ) : (
         <div className="no-drag flex flex-1 flex-col gap-2.5 px-4 pb-2">
           <div className="flex gap-2.5">
-            <button type="button" disabled={busy} onClick={() => void decline()} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#C4321C] text-[13.5px] font-bold hover:bg-[#A8291A]">
+            <button type="button" disabled={busy} onClick={() => void decline()} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-orange text-[13.5px] font-bold hover:bg-danger">
               <Icon name="phone-off" size={16} />
               Decline
             </button>
-            <button type="button" disabled={busy || locked && !prefs?.lockedAnswerCalls} onClick={() => void answer(video)} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-[#1F7A4D] text-[13.5px] font-bold hover:bg-[#1A6841]">
+            <button type="button" disabled={busy || locked && !prefs?.lockedAnswerCalls} onClick={() => void answer(video)} className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] bg-success text-[13.5px] font-bold hover:bg-success">
               <Icon name={video ? 'video' : 'phone'} size={16} />
               {locked && !prefs?.lockedAnswerCalls ? 'Unlock to answer' : 'Answer'}
             </button>
           </div>
-          <label className="flex items-center gap-2 text-[11.5px] text-[#AFC0E8]">
+          <label className="flex items-center gap-2 text-[11.5px] text-stage-accent">
             <Icon name={muted ? 'volume-off' : 'volume'} size={14} />
             <input
               type="range"
@@ -176,13 +176,13 @@ export function RingScreen() {
                 saveRingVolume(v);
                 tone.current?.setVolume(v);
               }}
-              className="min-w-0 flex-1 accent-[#7FA2FF]"
+              className="min-w-0 flex-1 accent-indigo-bright"
             />
-            <button type="button" onClick={() => setMuted(!muted)} className="font-semibold whitespace-nowrap text-[#C9D3EE] hover:text-white">
+            <button type="button" onClick={() => setMuted(!muted)} className="font-semibold whitespace-nowrap text-navy-ink hover:text-white">
               {muted ? 'Ringtone on' : 'Mute the ringtone'}
             </button>
           </label>
-          <div className="mt-auto flex justify-center gap-4 text-[12px] font-semibold text-[#AFC0E8]">
+          <div className="mt-auto flex justify-center gap-4 text-[12px] font-semibold text-stage-accent">
             {video ? (
               <button type="button" disabled={busy || locked && !prefs?.lockedAnswerCalls} onClick={() => void answer(false)} className="hover:text-white">
                 Answer with voice only
@@ -195,7 +195,7 @@ export function RingScreen() {
         </div>
       )}
       <div className="h-[3px] shrink-0 bg-white/8" aria-hidden>
-        <div className="animate-drain h-[3px] bg-[#7FA2FF]" style={{ animationDuration: `${expires}s` }} />
+        <div className="animate-drain h-[3px] bg-indigo-bright" style={{ animationDuration: `${expires}s` }} />
       </div>
     </div>
   );

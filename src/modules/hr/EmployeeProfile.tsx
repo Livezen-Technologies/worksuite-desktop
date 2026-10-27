@@ -95,7 +95,7 @@ export default function EmployeeProfile({ id, onBack }: { id: number; onBack: ()
         <button type="button" className="shrink-0 font-semibold text-primary hover:underline" onClick={onBack}>
           ← Back
         </button>
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0E7C86] text-[16px] font-bold text-white">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal text-[16px] font-bold text-white">
           {e.name
             .split(/\s+/)
             .slice(0, 2)
@@ -108,7 +108,7 @@ export default function EmployeeProfile({ id, onBack }: { id: number; onBack: ()
           <span className="truncate text-[12.5px] text-ink-3">
             {[e.employee_no, e.designation, e.department].filter(Boolean).join(' · ')}
             {' · '}
-            <b className={e.status === 'active' ? 'text-success' : 'text-[#9A4A06] dark:text-warning'}>{humanise(e.status)}</b>
+            <b className={e.status === 'active' ? 'text-success' : 'text-warning-ink dark:text-warning'}>{humanise(e.status)}</b>
           </span>
         </div>
         {e.email && canMail ? (
@@ -136,7 +136,7 @@ export default function EmployeeProfile({ id, onBack }: { id: number; onBack: ()
         ) : null}
       </div>
       {p.leaving ? (
-        <div className="flex items-center gap-2 rounded-[10px] border border-[#F5D9A8] bg-warning-bg px-3.5 py-2 text-[12.5px] text-[#7A3E06] dark:border-warning/40 dark:text-warning">
+        <div className="flex items-center gap-2 rounded-[10px] border border-warning-line bg-warning-bg px-3.5 py-2 text-[12.5px] text-warning-strong dark:border-warning/40 dark:text-warning">
           <b>{p.leaving.former ? 'Left' : 'Leaving'}{p.leaving.exit_at ? ` ${dayLong(p.leaving.exit_at)}` : ''}</b>
           {p.leaving.reason ? <span>· {p.leaving.reason}</span> : null}
           {p.leaving.offboarding ? <span>· offboarding {p.leaving.offboarding.status_label.toLowerCase()}, {p.leaving.offboarding.percent}%</span> : null}
@@ -586,7 +586,7 @@ function LeaveTab({ p }: { p: Profile }) {
           <div key={b.type_id} className={row}>
             <Cell w={null} className="font-semibold">
               {b.type}
-              {b.taken_from_requests !== b.taken ? <span className="ml-1.5 text-[11px] font-medium text-[#9A4A06] dark:text-warning" title="Approved requests add up to a different figure">requests say {b.taken_from_requests}</span> : null}
+              {b.taken_from_requests !== b.taken ? <span className="ml-1.5 text-[11px] font-medium text-warning-ink dark:text-warning" title="Approved requests add up to a different figure">requests say {b.taken_from_requests}</span> : null}
             </Cell>
             <Cell w={70} className="tabular-nums">{b.entitled}</Cell>
             <Cell w={80} className="tabular-nums">{b.carried_in}</Cell>
@@ -695,7 +695,7 @@ function ManageBalance({ employeeId, year, b, onClose, onDone }: { employeeId: n
       <Field label="Reason" hint="Recorded on the employee.">
         <input aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Opening balance carried over from the old system" className={input} />
       </Field>
-      <div className={cx('rounded-[8px] px-3 py-2 text-[12.5px]', result < 0 ? 'bg-warning-bg text-[#9A4A06] dark:text-warning' : 'bg-ground text-ink-2')}>
+      <div className={cx('rounded-[8px] px-3 py-2 text-[12.5px]', result < 0 ? 'bg-warning-bg text-warning-ink dark:text-warning' : 'bg-ground text-ink-2')}>
         {result < 0 ? 'This leaves them owing days. Allowed, but rarely intended.' : `Available after saving: ${Math.round(result * 100) / 100}`}
       </div>
     </Sheet>

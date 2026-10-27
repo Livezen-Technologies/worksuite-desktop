@@ -37,6 +37,7 @@ import { SpamSecurity } from './protection/SpamSecurity';
 import { RepairPassword, oauthProviderOf, signInAgain } from './AccountAttention';
 import { RepairLocalMailButton } from './RepairLocalMail';
 import { MailAlertSettings } from './alerts/MailAlertSettings';
+import { SectionHeader, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Settings › Mail: the accounts and what this computer keeps (Accounts &
@@ -175,22 +176,24 @@ function Accounts() {
   if (!prefs) return null;
   return (
     <>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[20px] font-bold text-ink">Accounts & offline</h2>
-        <Button variant="primary" onClick={() => setAdding(true)}>
-          Add a mailbox
-        </Button>
-      </div>
+      <SectionHeader
+        title="Accounts & offline"
+        actions={
+          <Button variant="primary" onClick={() => setAdding(true)}>
+            Add a mailbox
+          </Button>
+        }
+      />
       {boxes.isLoading ? <Spinner /> : boxes.error ? <ErrorNote error={boxes.error} onRetry={() => void boxes.refetch()} /> : null}
       {list.length && sync.data?.accounts ? <AccountsSync boxes={list} prefs={mailPrefs.prefs} onPrefs={mailPrefs.set} onRepair={(b) => void repair(b)} onManage={setManaging} /> : null}
       {list.length && sync.data && !sync.data.accounts ? (
-        <ul role="list" className="overflow-hidden rounded-[12px] border border-line bg-surface">
+        <SettingsGroup list={text('Mailboxes')}>
           {list.map((b) => {
             const s = sync.data?.mailboxes.find((m) => m.mailbox === b.id);
             const problem = b.auth_state === 'problem';
             const words = syncWords(b, s);
             return (
-              <li key={b.id} className={cx('flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0', problem && 'bg-danger-bg/40')}>
+              <li key={b.id} className={cx('flex items-center gap-3 px-[18px] py-3', problem && 'bg-danger-bg/40')}>
                 <AccountAvatar letter={mailboxLetter(b)} colour={b.colour} size={32} className="rounded-[8px]" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[14px] font-bold text-ink">{b.email}</span>
@@ -208,12 +211,12 @@ function Accounts() {
               </li>
             );
           })}
-        </ul>
+        </SettingsGroup>
       ) : null}
-      <div className="mt-5 grid grid-cols-2 gap-4">
-        <section aria-label="Offline mail on this computer" className="rounded-[12px] border border-line bg-surface p-4">
-          <h3 className="text-[15px] font-bold text-ink">Offline mail on this computer</h3>
-          <div className="mt-3">
+      <div className="mt-5 grid grid-cols-2 items-start gap-4">
+        <SettingsGroup title="Offline mail on this computer" className="!mb-0">
+          <div className="px-[18px] py-3.5">
+          <div>
             <Select label="Keep messages from the last" value={prefs.mailCacheDays} options={MAIL_DAYS.map((d) => ({ ...d, label: text(d.label) }))} onValueChange={(v) => void updatePrefs({ mailCacheDays: v as Preferences['mailCacheDays'] })} />
           </div>
           <p className="mt-2 text-[12.5px] text-ink-3">{prefs.mailCacheDays === 0 ? text('Only the lists are kept; a message is read from the server.') : text('Messages from this period in Inbox, Sent and Drafts are downloaded in the background, newest and unread first, and kept encrypted so they read offline.')}</p>
@@ -239,10 +242,11 @@ function Accounts() {
               Clear
             </Button>
           </div>
-        </section>
-        <section aria-label="Notifications and other apps" className="rounded-[12px] border border-line bg-surface p-4">
-          <h3 className="text-[15px] font-bold text-ink">Notifications & other apps</h3>
-          <div className="mt-3 flex flex-col gap-3 text-[13.5px] text-ink">
+          </div>
+        </SettingsGroup>
+        <SettingsGroup title="Notifications & other apps" label="Notifications and other apps" className="!mb-0">
+          <div className="px-[18px] py-3.5">
+          <div className="flex flex-col gap-3 text-[13.5px] text-ink">
             <label className="flex items-center gap-2.5">
               <Checkbox checked={prefs.moduleNotifications.mail !== false} onChange={(e) => void updatePrefs({ moduleNotifications: { ...prefs.moduleNotifications, mail: e.target.checked } })} />
               Desktop notifications for new mail
@@ -269,8 +273,6 @@ function Accounts() {
                   {text('VIPs can break through quiet hours')}
                 </label>
                 <p className="text-[12px] text-ink-3">{text('Quiet hours are set under Settings › Notifications. Rules that run on this computer can also show an alert or play a sound.')}</p>
-                {/* New-mail alerts (ENH-MAIL-05): preview level, Mail sound and the pause. */}
-                <MailAlertSettings />
               </div>
             ) : null}
             <label className="flex items-center gap-2.5">
@@ -289,8 +291,11 @@ function Accounts() {
               Mail app passwords
             </button>
           </p>
-        </section>
+          </div>
+        </SettingsGroup>
       </div>
+      {/* New-mail alerts (ENH-MAIL-05): preview level, Mail sound and the pause — their own card while mail notifies. */}
+      {prefs.moduleNotifications.mail !== false ? <div className="mt-5"><MailAlertSettings /></div> : null}
       {passwords ? <AppPasswords onClose={() => setPasswords(false)} /> : null}
       {adding ? <AddMailbox onClose={() => setAdding(false)} /> : null}
       {managing ? <ManageMailbox box={managing} onClose={() => setManaging(null)} /> : null}
@@ -432,12 +437,17 @@ function Storage() {
       .catch((e) => toast('error', errorMessage(e)));
   return (
     <>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[20px] font-bold text-ink">Storage & sync</h2>
-        <SyncButton label={text('Sync all now')} onSync={syncAll} />
-      </div>
+      <SectionHeader
+        title="Storage & sync"
+        actions={
+          <>
+            <SyncButton label={text('Sync all now')} onSync={syncAll} />
+          </>
+        }
+      />
       <div className="grid grid-cols-2 gap-4">
-        <section aria-label="On this computer" className="flex flex-col gap-2.5 rounded-[12px] border border-line bg-surface p-[18px]">
+        <SettingsGroup label="On this computer">
+          <div className="px-[18px] py-3.5 flex flex-col gap-2.5">
           <div className="flex items-baseline gap-2">
             <h3 className="flex-1 text-[14.5px] font-bold text-ink">On this computer</h3>
             <b className="font-mono text-[13px] text-ink">{bytes(s?.total ?? 0)}</b>
@@ -461,8 +471,10 @@ function Storage() {
             </>
           ) : null}
           <p className="text-[12px] text-ink-3">Encrypted with a key kept in your system keychain. Removed when you sign out.</p>
-        </section>
-        <section aria-label="In WorkSuite storage" className="flex flex-col gap-2.5 rounded-[12px] border border-line bg-surface p-[18px]">
+          </div>
+        </SettingsGroup>
+        <SettingsGroup label="In WorkSuite storage">
+          <div className="px-[18px] py-3.5 flex flex-col gap-2.5">
           <div className="flex items-center gap-2">
             <h3 className="flex-1 text-[14.5px] font-bold text-ink">In WorkSuite storage</h3>
             {mode ? <Chip tone="success">{text('Set by your admin')}</Chip> : null}
@@ -488,7 +500,8 @@ function Storage() {
           ) : (
             <p className="text-[12.5px] text-ink-3">Your organization does not keep a copy of this mail on the WorkSuite server.</p>
           )}
-        </section>
+          </div>
+        </SettingsGroup>
       </div>
       {list.length ? (
         <table className="mt-5 w-full overflow-hidden rounded-[12px] border border-line bg-surface text-left text-[13px]">
@@ -534,7 +547,8 @@ function Storage() {
           </tbody>
         </table>
       ) : null}
-      <div className="mt-4 flex items-center gap-3 rounded-[10px] border border-line bg-surface px-3.5 py-3 text-[13px]">
+      <SettingsGroup>
+        <div className="px-[18px] py-3.5 flex items-center gap-3 text-[13px]">
         <span className="flex-1 text-ink-2">Short on disk space? Choose a shorter keep period above; older mail stays searchable on the server and downloads when you open it. Each folder can also keep recent messages, headers only or nothing (right-click it › On this computer): Inbox, Sent and Drafts keep recent mail, Archive is online only, other folders keep headers.</span>
         {clearing ? (
           <Button size="sm" variant="danger" onClick={clearAll}>
@@ -545,7 +559,8 @@ function Storage() {
             Clear everything
           </Button>
         )}
-      </div>
+        </div>
+      </SettingsGroup>
     </>
   );
 }
@@ -570,10 +585,9 @@ function Layout() {
   );
   return (
     <>
-      <h2 className="mb-4 text-[20px] font-bold text-ink">Appearance & reading</h2>
-      <section aria-label="Theme" className="rounded-[12px] border border-line bg-surface p-4">
-        <h3 className="text-[15px] font-bold text-ink">Theme</h3>
-        <p className="text-[12.5px] text-ink-3">Applies to Mail and every WorkSuite app on this computer.</p>
+      <SectionHeader title="Appearance & reading" />
+      <SettingsGroup title="Theme" description="Applies to Mail and every WorkSuite app on this computer.">
+        <div className="px-[18px] py-3.5">
         <div role="radiogroup" aria-label="Theme" className="mt-3 grid grid-cols-3 gap-3">
           {(
             [
@@ -588,21 +602,23 @@ function Layout() {
             </button>
           ))}
         </div>
-      </section>
+        </div>
+      </SettingsGroup>
       <label className="mt-3 flex items-center gap-2.5 text-[13.5px] text-ink">
         <Checkbox checked={desktopPrefs?.highContrast === true} onChange={(e) => void updatePrefs({ highContrast: e.target.checked })} />
         {text('High contrast')}
       </label>
-      <section aria-label="Mail layout" className="mt-4 rounded-[12px] border border-line bg-surface p-4">
-        <h3 className="text-[15px] font-bold text-ink">Mail layout</h3>
+      <SettingsGroup title="Mail layout">
+        <div className="px-[18px] py-3.5">
         {seg('pane', prefs.pane, 'right', [['right', 'Right'], ['bottom', 'Bottom'], ['hidden', 'Off']], 'Reading pane')}
         {seg('view', prefs.view, 'compact', [['classic', 'Classic'], ['compact', 'Compact'], ['super', 'Super compact'], ['table', 'Full list']], 'Density')}
         {seg('zoom', prefs.zoom, 100, [[90, 'Small'], [100, 'Default'], [120, 'Large']], 'Text size')}
         {seg('toolbar', prefs.toolbar, 'docked', [['docked', 'Docked'], ['floating', 'Floating'], ['compact', 'Compact'], ['minimal', 'Minimal']], 'Action bar')}
         <p className="mt-2 text-[12px] text-ink-3">Kept with your WorkSuite account, so every computer you use shows Mail the same way.</p>
-      </section>
-      <section aria-label="Reading" className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
-        <h3 className="text-[15px] font-bold text-ink">Reading</h3>
+        </div>
+      </SettingsGroup>
+      <SettingsGroup title="Reading">
+        <div className="px-[18px] py-3.5 flex flex-col gap-3 text-[13.5px] text-ink">
         <label className="flex items-center gap-2.5">
           <Checkbox checked={prefs.tabs !== false} onChange={(e) => set({ tabs: e.target.checked })} />
           Open messages in tabs
@@ -624,12 +640,15 @@ function Layout() {
         {/* Which account a message came to, on the rows of the combined views (#227); each account's own label and colour are under Accounts. */}
         {seg('accountTag', prefs.accountTag, 'name', [['name', 'Name tag'], ['dot', 'Dot only'], ['off', 'Off']], 'Account tag')}
         <SwitchRow label={text('Pull to refresh')} hint={text('At the top of the mail list, scroll or pull down a little further to check for new mail.')} checked={pull} onChange={(v) => setPullEnabled('mail', v)} />
-      </section>
+        </div>
+      </SettingsGroup>
       <InboxAndKeyboard prefs={prefs} set={set} />
       <FormattingSettings prefs={prefs} set={set} />
-      <section aria-label={text('Catch up')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
+      <SettingsGroup label={text('Catch up')}>
+        <div className="px-[18px] py-3.5 flex flex-col gap-3 text-[13.5px] text-ink">
         <SwitchRow label={text('Catch up after time away')} hint={text('Back after eight hours or more: unread mail from VIPs, mail that mentions you and flags due, at the top of Mail.')} checked={prefs.catchUp !== false} onChange={(v) => set({ catchUp: v })} />
-      </section>
+        </div>
+      </SettingsGroup>
     </>
   );
 }
@@ -639,8 +658,8 @@ function InboxAndKeyboard({ prefs, set }: { prefs: MailPrefs; set: (p: Partial<M
   const boxes = (useMailboxes().data?.mailboxes ?? []).filter((b) => !b.archived);
   const off = prefs.focusedOff ?? [];
   return (
-    <section aria-label={text('Inbox and keyboard')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4 text-[13.5px] text-ink">
-      <h3 className="text-[15px] font-bold text-ink">{text('Inbox and keyboard')}</h3>
+    <SettingsGroup title={text('Inbox and keyboard')}>
+      <div className="px-[18px] py-3.5 flex flex-col gap-3 text-[13.5px] text-ink">
       <SwitchRow label={text('Show setup tips')} hint={text('The banner above the mail list with the steps left to set up Mail: import email, add a signature, make WorkSuite the default mail app.')} checked={prefs.firstRun === 'outlook'} onChange={(v) => set({ firstRun: v ? 'outlook' : 'done' })} />
       <SwitchRow label={text('Focused Inbox')} hint={text('Sort the inbox into Focused and Other. Moving a message between the tabs teaches it.')} checked={prefs.focused !== false} onChange={(v) => set({ focused: v })} />
       {prefs.focused !== false && boxes.length > 1 ? (
@@ -688,6 +707,7 @@ function InboxAndKeyboard({ prefs, set }: { prefs: MailPrefs; set: (p: Partial<M
           className="h-8 w-[200px]"
         />
       </div>
-    </section>
+      </div>
+    </SettingsGroup>
   );
 }

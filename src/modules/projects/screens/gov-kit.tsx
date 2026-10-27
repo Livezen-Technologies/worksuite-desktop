@@ -72,10 +72,10 @@ export function usedTone(pct: number | null | undefined, warn = 80): string {
   return 'text-ink-2';
 }
 
-const ORANGE = 'bg-[#FFEDD5] text-[#9A3412] dark:bg-[#9A3412]/30 dark:text-[#FDBA74]';
+const ORANGE = 'bg-orange-bg text-orange-ink dark:bg-danger/30';
 
 export const RISK_LEVEL: Record<string, { label: string; cell: string }> = {
-  critical: { label: 'Critical', cell: 'bg-[#FECACA] text-[#7F1D1D] dark:bg-[#B91C1C]/45 dark:text-[#FECACA]' },
+  critical: { label: 'Critical', cell: 'bg-danger-soft text-danger-ink dark:bg-danger/45 dark:text-slate-ink' },
   high: { label: 'High', cell: ORANGE },
   medium: { label: 'Medium', cell: 'bg-warning-bg text-warning-ink' },
   low: { label: 'Low', cell: 'bg-subtle text-ink-2' },
