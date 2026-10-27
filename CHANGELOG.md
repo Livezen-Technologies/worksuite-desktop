@@ -11,7 +11,9 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
-## Unreleased
+## 0.2.283 — 2026-10-27
+
+Needs the server with **Core 1.32.0** (`/api/capabilities`), **SocialMedia 1.0.0** for Social Media, and **Voip 2.0.1** for company-scoped Phone; on an older server those screens stay hidden or fall back.
 
 The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G19, D-G21, D-G22, D-G24, D-G25), and
 its release and CI round (D-G01, D-G02, D-G06, D-G20), and its UX round (D-G09, D-G12, D-G14, D-G23).
