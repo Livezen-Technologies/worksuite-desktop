@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Select } from '../../components/Select';
 import { ErrorNote, IconButton, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { errorText, gGet, gPost, K, nice, type BoardColumn } from './api';
 import { JobCardView, useGarage } from './parts';
 import { Checkbox } from '../../components/Checkbox';

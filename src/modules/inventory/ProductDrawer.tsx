@@ -10,9 +10,9 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnSmall, Facts, SidePanel } from '../hr/parts';
+import { btnSmall, Facts, SidePanel } from '../../components/PageKit';
 import { archiveProduct, cost, costingLabel, fetchProduct, fetchTimeline, fetchTrade, K, kindLabel, moveWhat, num, pictureSrc, qty, restoreProduct, signed, trackingLabel, whole, type ProductDetail, type ProductImage, stampWords } from './api';
-import { Pill, Signed } from './parts';
+import { Pill, Signed } from '../../components/ListKit';
 import { openWeb } from './Rail';
 import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 

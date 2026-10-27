@@ -4,7 +4,7 @@ import { call, isMac } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
 import { cx, initials } from '../../components/ui';
 import { formatClock } from '../chat/parts';
-import { RoundButton, VideoView, Wave } from './parts';
+import { RoundButton, VideoView, Wave } from '../../components/CallKit';
 import { session } from './session';
 
 /**

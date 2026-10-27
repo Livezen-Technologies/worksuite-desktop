@@ -10,9 +10,9 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
 import { longDate, refusal, shortDate } from '../finance/api';
-import { ConfirmSheet, LoadFailed, Notice, ReasonSheet } from '../finance/parts';
-import { btn, btnBad, btnGood, btnPrimary, btnSmall, Caps, Field, Grid, input, Sheet, SidePanel } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { ConfirmSheet, LoadFailed, Notice, ReasonSheet } from '../../components/RecordKit';
+import { btn, btnBad, btnGood, btnPrimary, btnSmall, Caps, Field, Grid, input, Sheet, SidePanel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, canAct, K, money, type Org } from './api';
 import {
   approvalLine,

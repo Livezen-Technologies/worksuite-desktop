@@ -6,9 +6,9 @@ import { monthWords, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Cell, Empty, input, PageHead, Panel, row, Sheet, THead } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Cell, Empty, input, PageHead, Panel, row, Sheet, THead } from '../../components/PageKit';
 import { can, fromCents, K, money, problemsOf, refusal, shortDate, type Company } from './api';
-import { ConfirmSheet, Notice } from './parts';
+import { ConfirmSheet, Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { chargeMonth, fetchDepreciation, forbiddenWhy, KS, openingSplit, previousMonth, sameId, saveOpeningDepreciation, type Opening } from './setup';
 

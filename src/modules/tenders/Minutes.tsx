@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Field, input, Sheet } from '../../components/PageKit';
 import { PRIORITIES } from '../tasks/api';
 import { wallParts } from './api';
 import { convertedLabel, parseMinutes, POINT_MAX, saveMinutes, toFollowUp, toReminder, toTask, writeMinutes, type Context, type Converted, type Minutes, type Point } from './minutesText';

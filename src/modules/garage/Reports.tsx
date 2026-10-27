@@ -4,7 +4,7 @@ import { GARAGE_REPORTS, type GarageDoc } from '@shared/garage-docs';
 import { Select } from '../../components/Select';
 import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { download, errorText, gGet, K, money, type Report, type ReportList } from './api';
 import { input, Section, useGarage } from './parts';
 

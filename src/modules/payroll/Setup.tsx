@@ -4,7 +4,7 @@ import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { humanise } from '../hr/parts';
+import { humanise } from '../../components/PageKit';
 import { fetchComponents, fetchGroups, fetchPeriods, fetchStructures, generatePeriods } from './api';
 import { Badge, Card, NotYet, Pills, Table, td, useReadOnly } from './parts';
 import { clickOnKey } from '../../components/press';

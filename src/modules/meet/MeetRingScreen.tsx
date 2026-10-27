@@ -3,7 +3,7 @@ import { ApiError, apiPost } from '../../core/api';
 import { call, errorMessage, on } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
 import { Icon } from '../../components/Icon';
-import { CallAvatar } from '../calls/parts';
+import { CallAvatar } from '../../components/CallKit';
 import { playTone, ringVolume } from '../calls/tones';
 import { openMeeting } from './api';
 import { BrandMark } from '../../components/BrandMark';

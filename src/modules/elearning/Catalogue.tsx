@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Select } from '../../components/Select';
 import { Button, ErrorNote, OfflineNote, Spinner } from '../../components/ui';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { eGet, eGetMeta, K, type CatalogCard, type Category, type Paged } from './api';
 import { CourseTile, input, useEl } from './parts';
 

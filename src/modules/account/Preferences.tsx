@@ -9,7 +9,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, Switch } from '../../components/ui';
 import { K, useHasApp } from './api';
-import { Note } from './parts';
+import { Note } from '../../components/CardKit';
 import { computerZone, FROM, useRegional, useSaveRegional, useZones } from './regional';
 import { SectionHeader, SettingRow, SettingRowFrame, SettingsGroup } from '../../components/SettingsKit';
 

@@ -10,7 +10,7 @@ import { cx } from '../../components/ui';
 import { formatClock, VoiceRecorder } from '../chat/parts';
 import { Thread } from '../chat/Thread';
 import { openChatWindow } from '../chat/window';
-import { CallAvatar, Pill, useNow } from './parts';
+import { CallAvatar, Pill, useNow } from '../../components/CallKit';
 import { ScreenPicker } from './ScreenPicker';
 import { session, statusLine, type CallParams } from './session';
 import { CallWorkspace } from './ui/CallWorkspace';

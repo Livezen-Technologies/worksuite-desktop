@@ -15,7 +15,7 @@ import { CorrectAttendance, type CorrectableDay } from './Correct';
 import { dayLong, dayShort, minutesLabel, monthLabel, shiftMonth, ymd } from './dates';
 import { EditEmployee } from './EditEmployee';
 import MyDocuments from './MyDocuments';
-import { btn, btnBad, btnGood, btnPrimary, btnSmall, Cell, Empty, Facts, Field, Grid, humanise, input, Kpi, Panel, row, Seg, Sheet, StatusChip, THead } from './parts';
+import { btn, btnBad, btnGood, btnPrimary, btnSmall, Cell, Empty, Facts, Field, Grid, humanise, input, Kpi, Panel, row, Seg, Sheet, StatusChip, THead } from '../../components/PageKit';
 import { can } from './Rail';
 import { NewRequestSheet } from './Requests';
 import { SheetDetail } from './TimesheetApprovals';

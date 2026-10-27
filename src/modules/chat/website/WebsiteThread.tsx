@@ -30,7 +30,7 @@ import type { MessageHandlers } from '../kit/MessageActions';
 import { MessageList, PendingBubble, TypingLine } from '../kit/MessageList';
 import { byTime, dwell, eventsForThread, fromWebsiteMessage, fromWidgetEvent, pathOf } from '../kit/model';
 import { sharedFilesOf, type SharedFile } from '../kit/SharedFiles';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { openWebsiteChatWindow } from '../window';
 import { DeclinedNotice, InThisChat, InviteDialog, LeaveChat, MessageTypeTabs, TeamFaces, TransferDialog, useDeclined } from './Team';
 import { CallBar, CallNotes, callNotice } from './CallBar';

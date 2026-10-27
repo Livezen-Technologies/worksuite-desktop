@@ -6,8 +6,8 @@ import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal } from '../finance/api';
-import { ReasonSheet } from '../finance/parts';
-import { humanise } from '../hr/parts';
+import { ReasonSheet } from '../../components/RecordKit';
+import { humanise } from '../../components/PageKit';
 import { ATTACHMENT_MAX, attachmentName, ATTACHMENT_TYPES, cancelInput, csvRows, fetchClaimable, fetchGroups, fetchInputs, fetchPeriods, importInputs, sendExpenses, uploadInputAttachment, type ImportResult } from './api';
 import { Badge, Card, NotYet, Table, amt, td, tdr, useReadOnly } from './parts';
 

@@ -9,7 +9,7 @@ import { call } from '../../core/bridge';
 import { parseTs } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Button, Modal } from '../../components/ui';
-import { useNow } from '../calls/parts';
+import { useNow } from '../../components/CallKit';
 import { ScreenPicker } from '../calls/ScreenPicker';
 import { CallWorkspace } from '../calls/ui/CallWorkspace';
 import type { ControlButton } from '../calls/ui/CoreCallControls';

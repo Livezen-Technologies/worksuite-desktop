@@ -3,10 +3,10 @@ import { useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
 import { shortDate } from '../finance/api';
-import { Notice } from '../finance/parts';
+import { Notice } from '../../components/RecordKit';
 import { ReadFailed } from '../finance/ReportBar';
-import { Empty, Kpi, PageHead, Panel } from '../hr/parts';
-import { HeadLink } from '../inventory/parts';
+import { Empty, Kpi, PageHead, Panel } from '../../components/PageKit';
+import { HeadLink } from '../../components/ListKit';
 import { fetchDashboard, K, money } from './api';
 import {
   andList,

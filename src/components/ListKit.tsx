@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
-import { Icon } from '../../components/Icon';
-import { cx } from '../../components/ui';
-import { Empty, Panel } from '../hr/parts';
+import { Icon } from './Icon';
+import { cx } from './ui';
+import { Empty, Panel } from './PageKit';
+
+/** List panels, lines, links and pills first drawn for Inventory (it was `inventory/parts`), shared by Purchase, Finance,
+ * Garage and the hotel desk (audit D-G08). */
 
 /** A dashboard panel of rows, or a line saying there are none. */
 export function ListPanel({ title, empty, action, children }: { title: string; empty: string; action?: ReactNode; children: ReactNode[] }) {

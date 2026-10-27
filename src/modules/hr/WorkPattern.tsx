@@ -4,7 +4,7 @@ import { apiGet } from '../../core/api';
 import { useStore } from '../../core/store';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { dayLong } from './dates';
-import { Cell, Empty, PageHead, Panel, row, THead } from './parts';
+import { Cell, Empty, PageHead, Panel, row, THead } from '../../components/PageKit';
 import { can } from './Rail';
 
 /**

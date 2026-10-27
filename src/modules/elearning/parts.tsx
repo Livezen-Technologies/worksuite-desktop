@@ -4,7 +4,7 @@ import { Icon } from '../../components/Icon';
 import { Modal, cx } from '../../components/ui';
 import { call } from '../../core/bridge';
 import { sanitizeHtml } from '../../core/rich';
-import { Pill } from '../inventory/parts';
+import { Pill } from '../../components/ListKit';
 import { minutes, pct, when, type CatalogCard, type CourseCard, type Options } from './api';
 import { StatCard, type StatTone } from '../../components/StatCard';
 

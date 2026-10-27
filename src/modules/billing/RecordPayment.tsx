@@ -7,7 +7,7 @@ import { todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, Field, input, SidePanel } from '../../components/PageKit';
 import { amount, fetchBankAccounts, K, METHODS, recordPayment, searchCustomers, useBillingOrgs, type Customer, type InvoiceDetail } from './api';
 import { Checkbox } from '../../components/Checkbox';
 import { allocateFx, converted, fetchModes, KB, oldestFirst, openInvoicesOf, uploadSlip } from './more';

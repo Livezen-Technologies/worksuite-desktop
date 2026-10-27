@@ -7,10 +7,10 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnSmall, Empty, Facts, input, PageHead, Seg, SidePanel } from '../hr/parts';
+import { btn, btnSmall, Empty, Facts, input, PageHead, Seg, SidePanel } from '../../components/PageKit';
 import { can, cost, qty, stampFull, whole } from './api';
 import { fetchBatches, fetchExpiring, fetchSerials, fetchUnit, KC, scanCode, SERIAL_STATUS, tagsOf, tagUnit } from './control';
-import { minWidth, Pill } from './parts';
+import { minWidth, Pill } from '../../components/ListKit';
 import { pick } from './pickers';
 
 /**

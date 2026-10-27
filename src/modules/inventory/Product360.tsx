@@ -6,9 +6,9 @@ import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, input } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, input } from '../../components/PageKit';
 import { costingLabel, kindLabel, num, pictureSrc, PICTURE_MAX, PICTURE_TYPES, qty, shrinkPicture, trackingLabel, whole } from './api';
-import { Pill } from './parts';
+import { Pill } from '../../components/ListKit';
 import {
   altMissing,
   bulkVariants,

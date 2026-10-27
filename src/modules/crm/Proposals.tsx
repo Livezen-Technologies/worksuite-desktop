@@ -9,7 +9,7 @@ import { dateLabel, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Field, input, Sheet } from '../../components/PageKit';
 import { ApprovalsPanel, DecideSheet, type Decision } from './Approvals';
 import { BarRow, Chips, crmCan, money, moneyFull, StatusBar } from './parts';
 import {

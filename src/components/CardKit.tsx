@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { cx } from '../../components/ui';
+import { cx } from './ui';
 
 /**
  * My account's building blocks, in the designs' form: white cards with a
  * 14.5 px heading, round pills, and label-and-value grids. Buttons, fields
- * and sheets are People's (hr/parts), so the two areas look the same.
+ * and sheets are the page kit's (PageKit), so the two areas look the same. It was
+ * `account/parts`; Chat and Notifications draw the same cards (audit D-G08).
  */
 
 export function Card({ title, action, children, className, icon }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; icon?: ReactNode }) {

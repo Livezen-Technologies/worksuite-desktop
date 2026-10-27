@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { gGet, K, nice, type VehicleBrief } from './api';
 import { input, useGarage } from './parts';
 import { NewVehicle } from './WalkIn';

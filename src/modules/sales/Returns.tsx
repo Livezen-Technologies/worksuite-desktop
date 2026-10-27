@@ -6,7 +6,7 @@ import { useStore } from '../../core/store';
 import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Empty, PageHead, Panel, Seg, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Empty, PageHead, Panel, Seg, Sheet } from '../../components/PageKit';
 import { OFFLINE_WRITE, useSalesOffline } from './offline';
 import { approveReturn, creditReturn, K, receiveReturn, type ReturnRow, type Returns as Board } from './api';
 import { moneyFull } from './parts';

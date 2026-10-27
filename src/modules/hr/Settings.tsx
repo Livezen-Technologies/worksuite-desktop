@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import type { LeaveType } from './api';
 import { dayLong } from './dates';
-import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Seg, Sheet } from './parts';
+import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Seg, Sheet } from '../../components/PageKit';
 import { can } from './Rail';
 import { ModuleSettingsForm } from '../../components/ModuleSettingsForm';
 import { Select } from '../../components/Select';

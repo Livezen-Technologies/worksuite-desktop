@@ -9,7 +9,7 @@ import type { ApprovalsResponse } from './api';
 import { useApproveLeave, useCoverFirst, WaitingForCover } from './coverRule';
 import { dayLong, rangeLabel } from './dates';
 import { ReviewLeave } from './Leave';
-import { Cell, Empty, humanise, PageHead, Panel, row, StatusChip, THead } from './parts';
+import { Cell, Empty, humanise, PageHead, Panel, row, StatusChip, THead } from '../../components/PageKit';
 import type { HrView } from './Rail';
 
 /**

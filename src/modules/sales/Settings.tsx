@@ -6,7 +6,7 @@ import { Icon } from '../../components/Icon';
 import { ModuleSettingsForm, type ModuleSettings } from '../../components/ModuleSettingsForm';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
-import { input, PageHead } from '../hr/parts';
+import { input, PageHead } from '../../components/PageKit';
 import { warehouses } from './api';
 import Channels from './Channels';
 import Printers from './Printers';

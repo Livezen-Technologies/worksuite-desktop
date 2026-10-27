@@ -32,4 +32,4 @@ export function PaymentPill({ status }: { status: string | null | undefined }) {
   return <span className={cx('inline-flex h-[22px] items-center rounded-[11px] px-2 text-[11.5px] font-bold whitespace-nowrap', PAY[status] ?? 'bg-subtle text-ink-2')}>{status.replace(/_/g, ' ')}</span>;
 }
 
-export { money, moneyFull } from '../crm/parts';
+export { money, moneyFull } from '../../components/ReportKit';

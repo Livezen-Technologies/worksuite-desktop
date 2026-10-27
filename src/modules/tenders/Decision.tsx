@@ -5,7 +5,7 @@ import { dateLabel, timeLabel, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
-import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, Panel, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, Panel, Sheet } from '../../components/PageKit';
 import { K, money, refusalOf, wallParts, type Workspace as Data } from './api';
 import { addEvaluation, EVALUATION_KINDS, evaluationBody, labelOf, METHODS, recordSubmission, submissionBody } from './work';
 

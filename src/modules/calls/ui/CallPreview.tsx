@@ -4,7 +4,7 @@ import { isE2E } from '../../../core/bridge';
 import { useTab } from '../../../core/tab-context';
 import { Empty } from '../../../components/ui';
 import { Whiteboard } from '../../meet/Whiteboard';
-import { useNow } from '../parts';
+import { useNow } from '../../../components/CallKit';
 import { CallWorkspace } from './CallWorkspace';
 import type { ControlButton } from './CoreCallControls';
 import type { CallPerson } from './people';

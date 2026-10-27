@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Modal, Spinner, cx } from '../../components/ui';
-import { btn, btnBad, btnGood, btnPrimary, btnSmall, input, PageHead } from '../hr/parts';
+import { btn, btnBad, btnGood, btnPrimary, btnSmall, input, PageHead } from '../../components/PageKit';
 import { approvalRoute, decide, K, type Approval, type ApprovalKind, type Decision } from './api';
 
 /**

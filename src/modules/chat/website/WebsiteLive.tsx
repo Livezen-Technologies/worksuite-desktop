@@ -9,7 +9,7 @@ import { Icon } from '../../../components/Icon';
 import { avatarTone, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
 import { Composer, type ComposerChannel, type ComposerHandle } from '../Composer';
 import { dwell } from '../kit/model';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { useCanned, visitorStatus, WEBSITE, type Section } from './api';
 import { Select } from '../../../components/Select';
 import { LiveDashboard, NO_LIVE_PARAMS, type LiveParams, type WallOptions } from './live/LiveDashboard';

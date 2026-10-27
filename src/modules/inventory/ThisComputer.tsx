@@ -8,8 +8,8 @@ import { useStore } from '../../core/store';
 import { bytes, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { cx } from '../../components/ui';
-import { btn, btnSmall, PageHead, Panel } from '../hr/parts';
-import { Pill } from './parts';
+import { btn, btnSmall, PageHead, Panel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 
 /**
  * This computer, for Inventory (the dashboard's card, and the rail's Desktop section): the barcode scanner (heard

@@ -1,7 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { dateLabel } from '../../core/time';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { Empty, Kpi, PageHead, Panel } from '../hr/parts';
+import { Empty, Kpi, PageHead, Panel } from '../../components/PageKit';
 import { MOVING, SOURCE, statusOf, type Overview } from './api';
 import { money, PriorityPill, StatusPill } from './parts';
 import type { SalesView } from './Rail';

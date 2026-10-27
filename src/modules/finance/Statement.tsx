@@ -6,8 +6,8 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, PageHead, Seg } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, PageHead, Seg } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, isNegative, K, money, refusal, shortDate, type Company } from './api';
 import {
   batchLine,
@@ -24,7 +24,7 @@ import {
   TXN_TONE,
   type Txn,
 } from './banking';
-import { LoadFailed, Notice, ReasonSheet } from './parts';
+import { LoadFailed, Notice, ReasonSheet } from '../../components/RecordKit';
 import type { FinanceView } from './Rail';
 import { Checkbox } from '../../components/Checkbox';
 

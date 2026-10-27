@@ -8,9 +8,9 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Sheet } from '../../components/PageKit';
 import { clientLabel, K, useMfa, usePasskeys, useSessions, useSignIns, useTrustedDevices, type PasswordPolicy, type Passkey, type SessionRow, type SignIn, type TrustedDevice } from './api';
-import { Card, daysAgo, Head, Note, Pill } from './parts';
+import { Card, daysAgo, Head, Note, Pill } from '../../components/CardKit';
 import { BackupCodes, CodeBoxes, TwoFactorSheet } from './TwoFactor';
 
 /**

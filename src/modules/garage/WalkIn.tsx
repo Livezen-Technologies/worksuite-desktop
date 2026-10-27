@@ -4,7 +4,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Button, IconButton, Modal, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { errorData, errorText, gGet, gPost, K, newKey, nice, type Customer, type VehicleBrief } from './api';
 import { Field, input, useGarage } from './parts';
 

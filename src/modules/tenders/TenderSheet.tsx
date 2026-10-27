@@ -4,7 +4,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { Spinner } from '../../components/ui';
-import { btn, btnPrimary, Field, input, Seg, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Seg, Sheet } from '../../components/PageKit';
 import { createBody, createTender, draftOf, editChanges, fetchTender, importCsv, K, PRIORITIES, updateTender, useOwners, type Company, type Draft, type ImportResult } from './api';
 
 /**

@@ -10,10 +10,10 @@ import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
 import { shortDate } from '../finance/api';
 import { monthShort } from '../finance/insight';
-import { Notice } from '../finance/parts';
+import { Notice } from '../../components/RecordKit';
 import { RangeFields, ReadFailed } from '../finance/ReportBar';
-import { btnSmall, Empty, Field, Kpi, PageHead, Panel, Seg } from '../hr/parts';
-import { HeadLink, minWidth } from '../inventory/parts';
+import { btnSmall, Empty, Field, Kpi, PageHead, Panel, Seg } from '../../components/PageKit';
+import { HeadLink, minWidth } from '../../components/ListKit';
 import { can, canAct, money, type Org } from './api';
 import {
   andList,

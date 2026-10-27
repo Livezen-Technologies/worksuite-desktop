@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Kpi, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Kpi, PageHead, Seg, Sheet, SidePanel } from '../../components/PageKit';
 import { amount, can, fetchTaxes, K, searchCustomers, useBillingOrgs, type Customer } from './api';
 import { Lines, blankLine, toSend, type EditLine } from './Lines';
 import { createProfile, deleteProfile, fetchProfile, fetchProfiles, FREQUENCIES, frequencyLabel, KB, profileState, runProfile, updateProfile, type Profile } from './more';

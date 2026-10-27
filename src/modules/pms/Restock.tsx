@@ -4,7 +4,7 @@ import { Button, Modal } from '../../components/ui';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
-import { input } from '../garage/parts';
+import { input } from '../../components/FormKit';
 import type { Pickable } from '../inventory/control';
 import { ProductPick } from '../inventory/pickers';
 import { errorText, newKey, pPost } from './api';

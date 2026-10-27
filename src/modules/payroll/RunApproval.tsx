@@ -7,8 +7,8 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { money, refusal, shortDate } from '../finance/api';
-import { Notice, ReasonSheet } from '../finance/parts';
-import { PageHead, Panel, THead, Cell, btnBad, btnPrimary, row } from '../hr/parts';
+import { Notice, ReasonSheet } from '../../components/RecordKit';
+import { PageHead, Panel, THead, Cell, btnBad, btnPrimary, row } from '../../components/PageKit';
 import { approvalBlock, approveRun, fetchPosting, fetchRun, fetchVariance, K, pendingStep, percent, preparerOf, rejectBlock, rejectRun, runTitle } from './api';
 
 /**

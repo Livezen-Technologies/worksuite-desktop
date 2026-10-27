@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Icon } from '../../../components/Icon';
 import { Button, ErrorNote, Spinner, cx } from '../../../components/ui';
 import { toast } from '../../../core/toasts';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { eGet, ePost, errorText, K, type SetupStatus } from '../api';
 import { Refusal, useEl, type ElView } from '../parts';
 

@@ -8,7 +8,7 @@ import { conversationStamp, listStamp, parseTs, timeLabel } from '../../../core/
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
 import { UserAvatar } from '../../../components/UserAvatar';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { lastSaid, ratedLine, waitingSince, waitTone, type WebsiteRow } from './api';
 import { clock, waited } from './Ringing';
 

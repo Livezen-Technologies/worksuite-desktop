@@ -3,7 +3,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnPrimary, btnSmall, Empty, input } from '../hr/parts';
+import { btnPrimary, btnSmall, Empty, input } from '../../components/PageKit';
 import { num, qty } from '../inventory/api';
 import { pick } from '../inventory/pickers';
 import { fetchOrderFull, OFFLINE_WRITE, refreshPurchase, usePurchaseCan, usePurchaseOffline } from './api';

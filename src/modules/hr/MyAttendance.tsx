@@ -6,7 +6,7 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { attendanceTime, dayPhase, useAttendance } from './attendance';
 import { dayStatus, type AttDay, type AttTotals, type Profile } from './api';
 import { dayShort, minutesLabel, monthLabel, shiftMonth, ymd } from './dates';
-import { btn, btnPrimary, Cell, Empty, Kpi, PageHead, row, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Kpi, PageHead, row, StatusChip, THead } from '../../components/PageKit';
 import type { HrView } from './Rail';
 import { NewRequestSheet } from './Requests';
 import { Select } from '../../components/Select';

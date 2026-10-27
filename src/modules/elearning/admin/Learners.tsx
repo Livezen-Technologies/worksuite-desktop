@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button, ErrorNote, Spinner } from '../../../components/ui';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { eGet, K, type LearnerRow, type Paged } from '../api';
 import { input, useEl } from '../parts';
 import { clickOnKey } from '../../../components/press';

@@ -6,11 +6,11 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, fetchCurrencies, K, refusal } from './api';
 import { BK, fetchBankAccounts, setBankAccount, type BankAccount, type Candidate } from './banking';
-import { ConfirmSheet, LoadFailed, Notice } from './parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import Statement from './Statement';
 

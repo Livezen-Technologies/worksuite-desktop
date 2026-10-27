@@ -8,7 +8,7 @@ import { Checkbox } from '../../../components/Checkbox';
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
 import { Avatar, Button, Chip, Modal, cx, initials } from '../../../components/ui';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { PRESENCE } from '../Details';
 import { usePresence } from '../presence';
 import { ROLE_LABEL, team, useAgents, type Colleague, type WebsiteConversation, type WebsitePending, type WebsitePerson, type WebsiteTeam } from './api';

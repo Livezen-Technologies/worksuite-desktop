@@ -1,14 +1,35 @@
-import { MAX_CONCURRENT } from '../transfers';
-import { DARK_PROFILE_IDS, MAX_CUSTOM_PROFILES } from '../theme-profiles';
-import { localProfileInput, type LocalOverview, type LocalProfile, type LocalStatus, type MoveOffer, type MoveResult, type RestorePreview } from '../local-workspace';
-import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
-import type { DataFolder, ImportProgress, MailFileHandle, MailFileView } from '../mail-files';
-import type { SmimeVerdict } from '../smime';
-import type { ConnectionDetails, SpeedTestResult } from '../connection';
-import type { MeetPermissionRow } from '../meet-permissions';
-import type { ShareBarState } from '../share-bar';
+import { z } from 'zod';
+import { localRequestSchema, type LocalAIStatus, type LocalModelView } from '../local-ai';
+import { ocrRequestSchema, type OcrResult, type OcrStatus } from '../ocr';
+import { projectsContract, type ProjectsOutputs } from '../projects';
+import { elearningDownloadInput, elearningCourseRef, type OfflineCourse, type OfflineValidation } from '../elearning-offline';
+import { pmsDownloadInput } from '../pms-files';
+import { SETTING_KEY_PATTERN, type DesktopSettingsView } from '../desktop-settings';
+import { posContract, type PosOutputs } from '../pos';
+import { phoneContract, type PhoneOutputs } from '../phone';
+import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
+import { contactSyncContract, type ContactSyncOutputs } from '../contact-sync';
+import { boardContract, type BoardOutputs } from '../board';
+import { salesContract, type SalesOutputs } from '../sales';
+import { labelContract, type LabelOutputs } from '../label';
+import { chequeContract, type ChequeOutputs } from '../cheque';
+import { sinhalaContract, type SinhalaOutputs } from '../sinhala';
+import { accountsContract, type AccountsOutputs, type ServiceHealthState } from '../accounts';
+import type { InvokeChannel } from './channels';
 import type { ButtonLayout } from '../window-controls';
-import type { MailAlertCard, MailAlertState } from '../mail-alerts';
+import type { AppInfo, AuthState, ScreenSources, DiagnosticCheck, Bootstrap, AiRules, AiUpload, Transfer, Preferences, PreferenceLock, NotificationItem, NotificationPermission, WallDisplay, DeviceInfo, UpdateStatus, BusyReport, UpdateDiagnostics, StatusSnapshot, ServiceHealth } from '../types';
+import type { MeetPermissionRow } from '../meet-permissions';
+import type { ConnectionDetails, SpeedTestResult } from '../connection';
+import { ch, none, route, localModelId, tabRecordSchema, idString, preferencesPatchSchema, launcherAppId, hexColour, type ChannelSpec, type TabRecord } from './contract-kit';
+import { transfersContract, type TransfersOutputs } from './contract-transfers';
+import { documentsContract, type DocumentsOutputs } from './contract-documents';
+import { remoteControlContract, type RemoteControlOutputs } from './contract-remote-control';
+import { meetContract, type MeetOutputs } from './contract-meet';
+import { desksContract, type DesksOutputs } from './contract-desks';
+import { offlineContract, type OfflineOutputs } from './contract-offline';
+import { ringingContract, type RingingOutputs } from './contract-ringing';
+import { mailContract, type MailOutputs } from './contract-mail';
+
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
  *
@@ -23,384 +44,9 @@ import type { MailAlertCard, MailAlertState } from '../mail-alerts';
  *  - `sensitive`: emits an audit event (§9.1).
  *  - `rate`: calls per second allowed from one window before it is throttled.
  */
-import { z } from 'zod';
-import { garageDocSchema } from '../garage-docs';
-import { pmsDownloadInput } from '../pms-files';
-import { ELEARNING_MEDIA_TOKEN, elearningCourseRef, elearningDownloadInput, type OfflineCourse, type OfflineValidation } from '../elearning-offline';
-import {
-  deskEventRef,
-  deskForgetInput,
-  deskPrintJobsInput,
-  deskPrintSettingsPatch,
-  deskQueueAction,
-  deskRegisterInput,
-  deskScanInput,
-  deskSearchInput,
-  deskWalkInInput,
-  type DeskPrintOutcome,
-  type DeskPrintSettings,
-  type DeskQueueItem,
-  type DeskRegistration,
-  type DeskScanOutcome,
-  type DeskSearchHit,
-  type DeskStatus,
-} from '../event-desk';
-import { localRequestSchema, type LocalAIStatus, type LocalModelView } from '../local-ai';
-import { ocrRequestSchema, type OcrResult, type OcrStatus } from '../ocr';
-import {
-  restaurantOutboxAction,
-  restaurantOutboxAdd,
-  restaurantPairInput,
-  restaurantPrintPatch,
-  restaurantPrintTest,
-  restaurantPrintText,
-  restaurantUnpairInput,
-  type RestaurantCopy,
-  type RestaurantOutboxItem,
-  type RestaurantPairing,
-  type RestaurantPrintJobLog,
-  type RestaurantPrintOutcome,
-  type RestaurantPrintSettings,
-  type RestaurantStatus,
-} from '../restaurant';
-import { MAX_OFFICE_LOCAL_BYTES, OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy, type OfficeLocalPick } from '../office';
-import { OFFICE_APP_SRC, type OfficeAppStatus } from '../office-open';
-import { contactSyncContract, type ContactSyncOutputs } from '../contact-sync';
-import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
-import { posContract, type PosOutputs } from '../pos';
-import { boardContract, type BoardOutputs } from '../board';
-import { projectReportSchema, projectsContract, projectsReportSchema, type ProjectsOutputs } from '../projects';
-import { purchaseExportSchema } from '../purchase';
-import { salesContract, type SalesOutputs } from '../sales';
-import { labelContract, type LabelOutputs } from '../label';
-import { chequeContract, type ChequeOutputs } from '../cheque';
-import { sinhalaContract, type SinhalaOutputs } from '../sinhala';
-import { SETTING_KEY_PATTERN, type DesktopSettingsView } from '../desktop-settings';
-import { phoneContract, type PhoneOutputs } from '../phone';
-import { accountsContract, type AccountsOutputs, type ServiceHealthState } from '../accounts';
-import { pdfComposeSchema, pdfDeriveSchema, pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView, type PdfToolResult } from '../pdf';
-import type { InvokeChannel } from './channels';
-import type {
-  ActiveCall,
-  LocalRecording,
-  ScreenRecordingAccess,
-  SpeechSegment,
-  SpeechCatalog,
-  SpeechStatus,
-  AiRules,
-  AiUpload,
-  AppInfo,
-  AuthState,
-  Bootstrap,
-  BusyReport,
-  DeviceInfo,
-  DiagnosticCheck,
-  Draft,
-  NotificationItem,
-  NotificationPermission,
-  RingTestStep,
-  OfflineMutation,
-  Preferences,
-  PreferenceLock,
-  RemoteControlConsent,
-  RemoteControlView,
-  SalonDeskInfo,
-  SalonDeskPairing,
-  SalonPrintOutcome,
-  SalonSyncStatus,
-  SalonCopy,
-  SalonCopyClient,
-  SalonOutboxItem,
-  SalonPrintSettings,
-  ScreenSources,
-  ServiceHealth,
-  StatusSnapshot,
-  SyncDevice,
-  SyncLookup,
-  SyncPolicy,
-  SyncStatus,
-  DriveConflict,
-  LocalImageInfo,
-  WebchatRingState,
-  LiveDeskInfo,
-  WallDisplay,
-  QuickAskContext,
-  Transfer,
-  UpdateStatus,
-  UpdateDiagnostics,
-  MailStoreStats,
-  MailRepairResult,
-} from '../types';
 
-const none = z.undefined().or(z.null()).optional();
-const salonPaper = z.enum(['80mm', '58mm', 'a4', 'letter']);
-const idString = z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/);
-const route = z
-  .string()
-  .max(512)
-  .regex(/^\/[A-Za-z0-9/_\-.:?=&%]*$/, 'route must be an app path');
-
-export const tabRecordSchema = z.object({
-  id: idString,
-  route,
-  title: z.string().max(200),
-  pinned: z.boolean(),
-  organizationId: z.string().max(64).nullable(),
-  app: z.string().max(64),
-});
-export type TabRecord = z.infer<typeof tabRecordSchema>;
-
-const hexColour = z.string().regex(/^#[0-9a-fA-F]{6}$/);
-const appearanceProfileId = z.string().regex(/^(purple|red|green|blue|orange|teal|gray|org|c-[a-z0-9]{4,16})$/);
-const customProfileSchema = z.object({
-  id: z.string().regex(/^c-[a-z0-9]{4,16}$/),
-  name: z.string().max(40),
-  accent: hexColour,
-  tint: z.enum(['neutral', 'accent', 'custom']),
-  tintColor: hexColour.nullable().optional(),
-});
-
-const supportNoticeChoice = z.object({ banner: z.boolean(), sound: z.boolean() });
-const officeOpenChoice = z.enum(['builtin', 'worksuite-office', 'ask', 'system']);
-
-const bandwidthLimitSchema = z.object({ on: z.boolean(), value: z.number().positive().max(1_000_000), unit: z.enum(['KB', 'MB']) });
-
-export const preferencesPatchSchema = z
-  .object({
-    startWithOs: z.boolean(),
-    startMinimized: z.boolean(),
-    minimizeToTray: z.boolean(),
-    restoreTabs: z.boolean(),
-    theme: z.enum(['system', 'light', 'dark']),
-    darkColorProfile: z.enum(DARK_PROFILE_IDS),
-    // Colour profiles (worksuite-desktop#234). The mode is `theme`; a profile id is a built-in one, `org`, or one of
-    // the custom ones (`c-…`), which the settings service checks against the list.
-    appearance: z
-      .object({
-        mode: z.enum(['system', 'light', 'dark']),
-        lightProfile: appearanceProfileId,
-        darkProfile: appearanceProfileId,
-        custom: z.array(customProfileSchema).max(MAX_CUSTOM_PROFILES),
-        chosen: z.boolean(),
-      })
-      .partial(),
-    density: z.enum(['comfortable', 'compact']),
-    hardwareAcceleration: z.boolean(),
-    spellcheck: z.boolean(),
-    notificationSounds: z.boolean(),
-    notificationPrivacy: z.enum(['FULL', 'SENDER_ONLY', 'GENERIC']),
-    notificationsEnabled: z.boolean(),
-    badgeCount: z.boolean(),
-    statusConnectionStrength: z.boolean(),
-    statusResponseTime: z.boolean(),
-    moduleNotifications: z.record(z.string().max(64), z.boolean()),
-    dndEnabled: z.boolean(),
-    dndFrom: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-    dndTo: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-    appLockMinutes: z.number().int().min(0).max(1440),
-    appLockEnabled: z.boolean(),
-    lockOnSleep: z.boolean(),
-    lockedChatNotifications: z.boolean(),
-    lockedCallNotifications: z.boolean(),
-    lockedNotificationSounds: z.boolean(),
-    lockOnSystemLock: z.boolean(),
-    lockedAnswerCalls: z.boolean(),
-    lockedShowCallerDetails: z.boolean(),
-    lockedAllowChat: z.boolean(),
-    lockedNotificationSender: z.boolean(),
-    lockedNotificationPreview: z.boolean(),
-    openFilesLocally: z.enum(['ask', 'always', 'never']),
-    mailCacheDays: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)]),
-    mailtoHandler: z.boolean(),
-    links: z.object({ openInApp: z.boolean(), mailLinks: z.enum(['new-tab', 'current-tab']), confirmActions: z.boolean() }).partial(),
-    // Settings › Files › Open Office files in (worksuite-desktop#322).
-    officeOpen: z.object({ doc: officeOpenChoice, sheet: officeOpenChoice, slides: officeOpenChoice }).partial(),
-    mailCacheDaysByMailbox: z.record(z.string().regex(/^\d{1,12}$/), z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)])).refine((r) => Object.keys(r).length <= 200),
-    mailFolderOffline: z.record(z.string().regex(/^(\d{1,12}|local):[A-Za-z0-9._\-/ :]{1,128}$/), z.enum(['all', 'recent', 'headers', 'online'])).refine((r) => Object.keys(r).length <= 500),
-    mailAlerts: z.enum(['all', 'focused', 'vip', 'none']),
-    mailVipBreakthrough: z.boolean(),
-    // New-mail alerts (ENH-MAIL-05): the preview level and Mail sound. The pause has its own channel.
-    mailAlertPreview: z.enum(['full', 'sender', 'hidden']),
-    mailAlertSound: z.boolean(),
-    // Settings › Mail › Images & media, this computer's part (worksuite-desktop#163).
-    mailMedia: z
-      .object({
-        autoDownload: z.enum(['off', '5', '25', 'all']),
-        network: z.enum(['any', 'unmetered']),
-        types: z.array(z.enum(['images', 'pdf', 'office', 'all'])).min(1).max(4),
-        saveTo: z.enum(['local', 'files']),
-        filesFolder: z.object({ id: z.number().int().positive(), name: z.string().max(255) }).nullable(),
-      })
-      .partial(),
-    highContrast: z.boolean(),
-    tabSuspendMinutes: z.number().int().min(5).max(480),
-    language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),
-    updateChannel: z.enum(['stable', 'beta', 'dev', 'org']),
-    autoUpdate: z.boolean(),
-    updateNotifications: z.boolean(),
-    updateInstallOnQuit: z.boolean(),
-    updateShowWhatsNew: z.boolean(),
-    updateInstallWhenIdle: z.boolean(),
-    sidebarMode: z.enum(['expanded', 'collapsed', 'auto-hide']),
-    pinnedApps: z.array(z.string().max(64)).max(64),
-    shortcuts: z.record(z.string().max(64), z.string().max(64)),
-    backgroundServices: z.object({ notifications: z.boolean(), realtime: z.boolean() }),
-    webchatRinging: z.object({ window: z.boolean(), duringDnd: z.enum(['card', 'at_risk', 'ring']), shortcut: z.boolean(), volume: z.number().int().min(0).max(100), ringOn: z.enum(['both', 'default']).optional(), liveShortcuts: z.boolean().optional() }),
-    // Notification settings › Support (WS-SUPPORT-SRS-001 D-03): each kind's banner and sound here.
-    supportNotices: z
-      .object({
-        assigned: supportNoticeChoice,
-        reply: supportNoticeChoice,
-        mention: supportNoticeChoice,
-        sla: supportNoticeChoice,
-        slaPersistent: z.boolean(),
-        lowPriority: z.enum(['banner', 'digest']),
-        quickShortcut: z.boolean(),
-        urgentPopup: z.boolean(),
-      })
-      .partial(),
-    webchatFollowUps: z.object({ card: z.boolean(), desktop: z.boolean(), sound: z.boolean(), idleMinutes: z.union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)]) }),
-    // Settings › Chat: the chat drawer docked beside the page or floating over it (worksuite-desktop#264).
-    chatDrawer: z.enum(['docked', 'floating']),
-    ai: z.object({
-      quickAsk: z.boolean(),
-      shortcut: z.enum(['Alt+Space', 'Control+Alt+Space', 'CommandOrControl+Shift+Space']),
-      insert: z.boolean(),
-      dockAtStart: z.boolean(),
-      language: z.string().regex(/^[A-Za-z ]{2,40}$/),
-      display: z.enum(['drawer', 'widget', 'hidden']),
-      sound: z.boolean(),
-      moduleAccess: z.object({
-        worksuite: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.object({ read: z.boolean(), write: z.boolean() })),
-        local: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.object({ read: z.boolean(), write: z.boolean() })),
-      }),
-      onlineFallback: z.boolean(),
-      autoMinimize: z.boolean(),
-      autoMinimizeWhenWorking: z.boolean(),
-    }),
-    // The local folder is not here: only the main process's folder dialog sets it.
-    meetRecording: z.object({
-      method: z.enum(['cloud', 'local']),
-      quality: z.enum(['720p', '1080p']),
-      layout: z.enum(['grid', 'speaker', 'screen']),
-      folder: z.string().min(1).max(120).regex(/^[^\\/\p{C}]+$/u),
-      keepLocal: z.enum(['keep', 'delete', '7', '30']),
-    }).partial(),
-    // Settings › Meet › Behaviour (WS-MEET-ENH-01 D05).
-    meetBehaviour: z.object({
-      popOutOnSwitch: z.boolean(),
-      globalKeys: z.boolean(),
-      shareComputerSound: z.boolean(),
-      qualityOnBattery: z.enum(['auto', '720p', '360p']),
-    }).partial(),
-    // Drive › Settings (worksuite-desktop#95). The download folder is not here either: only its dialog sets it.
-    drive: z.object({
-      maxConcurrent: z.number().int().min(1).max(MAX_CONCURRENT),
-      maxUploads: z.number().int().min(1).max(MAX_CONCURRENT).nullable(),
-      maxDownloads: z.number().int().min(1).max(MAX_CONCURRENT).nullable(),
-      uploadLimit: bandwidthLimitSchema,
-      downloadLimit: bandwidthLimitSchema,
-      autoRetry: z.boolean(),
-      autoResume: z.boolean(),
-      metered: z.enum(['normal', 'limit', 'pause']),
-      meteredConnection: z.boolean(),
-      askWhereToSave: z.boolean(),
-      conflict: z.enum(['ask', 'both', 'skip', 'replace']),
-      notifyComplete: z.boolean(),
-      notifyFailed: z.boolean(),
-    }).partial(),
-    // Connection & Startup: the workspace chooser at every start, the desktop cache limit, other accounts' banners.
-    chooserAlways: z.boolean(),
-    desktopCacheLimitMb: z.union([z.literal('auto'), z.number().int().min(256).max(1_048_576)]),
-    otherAccountNotifications: z.boolean(),
-  })
-  .partial();
-
-export const mutationInputSchema = z.object({
-  module: z.string().max(64),
-  entity: z.string().max(64),
-  entityId: z.string().max(128).nullable(),
-  label: z.string().max(200),
-  method: z.enum(['POST', 'PUT', 'PATCH', 'DELETE']),
-  path: z.string().regex(/^\/api\/[A-Za-z0-9/_\-.]+$/).max(256),
-  body: z.unknown().optional(),
-  baseEtag: z.string().max(128).nullable().optional(),
-  /** Only queue if the request cannot be delivered now. */
-  queueIfOffline: z.boolean(),
-});
-export type MutationInput = z.infer<typeof mutationInputSchema>;
-
-export const uploadTargetSchema = z.discriminatedUnion('kind', [
-  /**
-   * Into Drive. `replaceFileId`: the upload becomes a new version of that file (the answer to "a file with
-   * this name is already here"); `name`: the name to give it instead of the file's own (keeping both).
-   */
-  z.object({
-    kind: z.literal('files'),
-    folderId: z.string().max(64).nullable(),
-    replaceFileId: z.string().regex(/^\d{1,12}$/).optional(),
-    name: z.string().min(1).max(255).regex(/^[^/\\]+$/).optional(),
-  }),
-  /**
-   * A chat attachment; the caption and the reply go with it (the first of several files carries them). A voice
-   * message carries its length and its loudness, 64 steps of 0–100, as they were measured while recording (#285).
-   */
-  z.object({ kind: z.literal('chat'), roomId: z.string().max(64), caption: z.string().max(4000).optional(), replyTo: z.number().int().positive().optional(), clientMessageId: z.string().regex(/^desktop-[a-zA-Z0-9-]{1,80}$/).optional(), voice: z.boolean().optional(), durationMs: z.number().int().min(0).max(86400000).optional(), waveform: z.array(z.number().int().min(0).max(100)).max(256).optional(), submittedAt: z.string().datetime().optional() }),
-  /** A task's attachment (or a comment's, with its id): stored in Drive, then linked to the task. */
-  z.object({ kind: z.literal('task'), taskId: z.number().int().positive(), commentId: z.number().int().positive().optional() }),
-  /**
-   * A tender's file: stored in Drive, then filed on the tender — as a new document (`docKind`), on a
-   * checklist line (`id` = the line), as the new version of a document (`id` = the document), or as a
-   * bond's copy (`id` = the security). The server checks the tender and the permission at the filing.
-   */
-  z.object({
-    kind: z.literal('tender'),
-    tenderId: z.number().int().positive(),
-    into: z.enum(['document', 'line', 'replace', 'security']),
-    id: z.number().int().positive().optional(),
-    docKind: z.string().regex(/^[a-z_]{1,60}$/).optional(),
-  }),
-  /** A mail attachment (worksuite-desktop#249): sent in parts like any upload, then staged for the message — not kept in Drive. */
-  z.object({ kind: z.literal('mail') }),
-  /** Offered to the other end of a remote-control session (RC06): they accept or decline it there. */
-  z.object({ kind: z.literal('remote'), sessionId: z.number().int().positive() }),
-  // To a website visitor (ENH-WCHAT-02, RDC-04/14): one request to the conversation's attach, the widget's own store.
-  z.object({ kind: z.literal('website'), conversationId: z.number().int().positive(), caption: z.string().max(400).optional() }),
-]);
-export type UploadTarget = z.infer<typeof uploadTargetSchema>;
-
-const syncMode = z.enum(['two_way', 'upload_only', 'download_only']);
-const pdfSession = z.string().regex(/^[0-9a-f-]{36}$/);
-const pdfPage = z.number().int().min(0).max(1_000_000);
-const pdfTicket = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
-const driveId = z.number().int().positive().max(2 ** 31);
-
-interface ChannelSpec {
-  input: z.ZodType;
-  permission?: string;
-  session?: boolean;
-  whileLocked?: boolean;
-  sensitive?: boolean;
-  rate?: number;
-}
-
-function ch<S extends z.ZodType>(input: S, opts: Omit<ChannelSpec, 'input'> = {}): ChannelSpec & { input: S } {
-  return { input, ...opts };
-}
-
-const launcherAppId = z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/);
-
-const localModelId = z.string().regex(/^[a-z0-9][a-z0-9._-]{1,63}$/);
-
-/** A Drive file's cover in the thumbnail cache: `drive:<file id>:<version or change time>`. */
-const coverId = z.string().regex(/^drive:\d{1,12}:[A-Za-z0-9:.-]{1,40}$/);
-
-/** An Office document's bytes from the editor (a ZIP package, an OLE file, RTF or CSV), at most the local limit. */
-/** A rendered picture: at most the server's render limit and a little over (60 MB). */
-const imageBytes = z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 64 * 1024 * 1024, 'The picture is empty or too large.');
-const officeBytes = z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= MAX_OFFICE_LOCAL_BYTES, 'The document is empty or too large.');
-
-const mailFileHandle = z.string().uuid();
+// The shared schemas and `ch` are in contract-kit.ts, the channels by area in contract-*.ts (audit D-G13).
+export { tabRecordSchema, type TabRecord, preferencesPatchSchema, mutationInputSchema, type MutationInput, uploadTargetSchema, type UploadTarget } from './contract-kit';
 
 export const contract = {
   'app:info': ch(none, { whileLocked: true }),
@@ -425,31 +71,7 @@ export const contract = {
   'app:setDockIcon': ch(z.object({ png: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(4_000_000) }), { whileLocked: true, rate: 30 }),
   /** Windows: the taskbar's overlay icon with the unread count (MNA-TRY-03), painted by the renderer; null clears it. */
   'app:setOverlayIcon': ch(z.object({ png: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(200_000).nullable(), description: z.string().max(120) }), { whileLocked: true, rate: 30 }),
-
-  // Guest mode runs in the main window (#149): entering it is refused while an account is signed in.
-  'local:enter': ch(none, { rate: 4 }),
-  'local:leave': ch(none),
-  'local:status': ch(none),
-  'local:profile': ch(localProfileInput, { rate: 2 }),
-  'local:unlock': ch(z.object({ pin: z.string().max(8) }), { rate: 1 }),
-  // The module screens' requests, answered from the Local Profile (electron/services/local-api.ts).
-  'local:api': ch(z.object({ method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), path: z.string().regex(/^\/api\/[^\s#\\]*$/).max(1024), query: z.record(z.string().max(64), z.union([z.string().max(2048), z.number(), z.boolean()])).optional(), body: z.unknown().optional() }), { rate: 60 }),
-  'local:overview': ch(none),
-  'local:export': ch(none, { rate: 2 }),
-  'local:restorePreview': ch(none, { rate: 2 }),
-  'local:restore': ch(z.object({ token: z.string().uuid() }), { rate: 2 }),
-  'local:deleteAll': ch(z.object({ confirmation: z.literal('DELETE LOCAL DATA') }), { rate: 1 }),
-  'local:meeting': ch(z.object({ input: z.string().max(2048), server: z.string().max(512) })),
-  'local:joinMeeting': ch(z.object({ input: z.string().trim().min(1).max(2048), server: z.string().max(512).optional() }), { rate: 2 }),
-  // Signing in from guest mode: what may move into this account, moving it, or keeping it on the device.
-  'local:moveOffer': ch(none, { session: true }),
-  'local:move': ch(none, { session: true, rate: 1 }),
-  'local:keep': ch(none, { session: true }),
-  'guest:pending': ch(none),
-  'guest:open': ch(z.object({ input: z.string().trim().min(1).max(2048), server: z.string().max(512).optional() }), { rate: 2 }),
-  'guest:info': ch(none, { rate: 2 }),
-  'guest:join': ch(z.object({ name: z.string().trim().min(1).max(40).regex(/^[^\p{C}]+$/u), pass: z.string().max(128).optional() }), { rate: 2 }),
-  'guest:signIn': ch(none),
+  ...offlineContract,
   'auth:state': ch(none, { whileLocked: true }),
   'auth:setServer': ch(z.object({ url: z.string().min(3).max(512) }), { rate: 2 }),
   'auth:signIn': ch(z.object({ email: z.string().min(1).max(254), password: z.string().min(1).max(512) }), { rate: 2 }),
@@ -501,12 +123,7 @@ export const contract = {
   'windows:toggleMaximize': ch(none, { whileLocked: true }),
   'windows:close': ch(none, { whileLocked: true }),
   'windows:state': ch(none, { whileLocked: true }),
-  // Quick Ask (AI Assistant): what it was opened with, Insert back into that app, and handing a result to WorkSuite.
-  'quickask:context': ch(none, { session: true }),
-  'quickask:open': ch(none, { session: true, rate: 2 }),
-  'quickask:insert': ch(z.object({ text: z.string().min(1).max(20_000) }), { session: true, rate: 2 }),
-  'quickask:close': ch(none, { session: true }),
-  'quickask:handoff': ch(z.object({ to: z.enum(['dock', 'task', 'search', 'changes']), text: z.string().max(8000), result: z.string().max(20_000).nullable() }), { session: true, rate: 2 }),
+  ...ringingContract,
   // The assistant (WS-AI-SRS-001 DSK-3): its rules here, confirming a proposal (the main window only, audited),
   // and a file picked on this computer as context.
   'ai:rules': ch(z.object({ refresh: z.boolean().optional() }).optional(), { session: true }),
@@ -543,54 +160,6 @@ export const contract = {
   // An online question, streamed in the main process (G-22): deltas come as `ai:askDelta` {id, text}.
   'ai:ask': ch(z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{6,64}$/), body: z.record(z.string(), z.unknown()) }), { session: true, rate: 30 }),
   'ai:answerReady': ch(z.strictObject({ kind: z.enum(['ready', 'input', 'failed']), preview: z.string().max(300) }), { session: true, rate: 20 }),
-  // Website chats ringing like calls (WS-WCHAT ENH-01, RING-49): the call window, the main window's bar.
-  'ring:state': ch(none, { session: true, whileLocked: true }),
-  // `then: 'transfer'`: the ringing card's Transfer opens the chat with the transfer dialog (#225).
-  'ring:join': ch(z.object({ id: z.number().int().positive(), then: z.enum(['transfer']).optional(), visitor: z.string().max(200).optional() }), { session: true, rate: 4 }),
-  'ring:silence': ch(z.object({ id: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 10 }),
-  'ring:pass': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
-  /** Settings › Ringing › Send a test chat notification (#251): routed, received, notification shown. */
-  'ring:test': ch(none, { session: true, rate: 2 }),
-  // The card's Join chat and Join & send, then the mini chat's replies, Open full chat or minimise, and its height (#225).
-  // `open`: the native call window's Send & join and Join chat open the thread (R-05, UX-ALR-01; RING-41); `cannedId`: the
-  // saved reply it was written from, counted once it is sent (RDC-03).
-  'ring:joinSend': ch(z.object({ id: z.number().int().positive(), message: z.string().max(4000).optional(), open: z.boolean().optional(), cannedId: z.number().int().positive().optional(), visitor: z.string().max(200).optional() }), { session: true, rate: 4 }),
-  // What is typed to a ringing visitor (R-05, R-06; UX-ALR-04): kept in main, so it survives a colleague joining first.
-  'ring:draft': ch(z.object({ id: z.number().int().positive(), text: z.string().max(4000) }), { session: true, rate: 30 }),
-  'ring:reply': ch(z.object({ message: z.string().min(1).max(4000) }), { session: true, rate: 10 }),
-  'ring:closeJoined': ch(z.object({ open: z.boolean() }), { session: true, rate: 10 }),
-  'ring:minimise': ch(none, { session: true, whileLocked: true, rate: 10 }),
-  'ring:fit': ch(z.object({ height: z.number().int().min(80).max(1200) }), { session: true, whileLocked: true, rate: 30 }),
-  'ring:openInbox': ch(none, { session: true, rate: 4 }),
-  // How the ring ended (R-03): View a chat a colleague joined, Open in Missed for a visitor who left, or Dismiss.
-  // `participant`: a colleague joined while I was typing — send my words to the chat anyway, as a participant (UX-ALR-04).
-  'ring:outcome': ch(z.object({ action: z.enum(['view', 'missed', 'dismiss', 'participant']) }), { session: true, rate: 10 }),
-  // The tray's ringing menu (R-06, RING-UI-07; UX-ALR-02): its height, and its plain items.
-  'ring:trayFit': ch(z.object({ height: z.number().int().min(80).max(1200) }), { session: true, rate: 30 }),
-  // The tray's mini-dashboard (L-05, MAP-22): Open Live dashboard, Show Live map window, Wall mode on a display and
-  // Silence for 15 minutes too.
-  'ring:tray': ch(z.object({ action: z.enum(['inbox', 'settings', 'quit', 'close', 'dashboard', 'liveMap', 'wall', 'silence']) }), { session: true, rate: 10 }),
-  // The Live map window and the Live dashboard on this computer (L-04, MAP-21, MAP-24): pop the map out (or show or
-  // hide it, ⌘⇧M), open the dashboard, wall mode on a display, or a chat in the main window.
-  // `wallSheet` asks first which screen and how (L-06, MAP-UI-06); `wallClose` takes the wall down.
-  'live:open': ch(z.object({ to: z.enum(['map', 'toggleMap', 'dashboard', 'wall', 'wallSheet', 'wallClose', 'chat']), id: z.number().int().positive().optional() }), { session: true, rate: 10 }),
-  'live:info': ch(none, { session: true }),
-  // The Wall mode sheet's Open on Display 2 (L-06, MAP-24): saves its choices and opens the wall on that screen.
-  'live:wall': ch(z.object({ displayId: z.number().int(), keepAwake: z.boolean(), cycle: z.boolean(), openAtStart: z.boolean() }), { session: true, rate: 10 }),
-  // A visitor who wrote again in my chat (worksuite-desktop#230): reply from the card, open the chat, snooze it for
-  // five minutes, or take it over (the team step); and which conversation is in front in the main window.
-  'ring:followUp': ch(z.object({ id: z.number().int().positive(), action: z.enum(['reply', 'open', 'snooze', 'takeOver']), message: z.string().min(1).max(4000).optional() }), { session: true, rate: 10 }),
-  'ring:viewing': ch(z.object({ id: z.number().int().positive().nullable() }), { session: true, whileLocked: true, rate: 60 }),
-  // An invitation or transfer into a website chat (ENH-WCHAT-03): Join chat / Accept, or Decline.
-  'ring:handoff': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
-  // A visitor's voice call (ENH-WCHAT-05): Answer or Decline; whether this computer has a microphone; the call it is on.
-  'ring:call': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
-  // With the microphone's name and whether it is a headset, for the incoming call's device line (V-04, VOICE-14).
-  'ring:mic': ch(z.object({ has: z.boolean(), label: z.string().max(120).nullable().optional(), headset: z.boolean().optional() }), { session: true, rate: 10 }),
-  'ring:onCall': ch(
-    z.object({ conversationId: z.number().int().positive(), visitor: z.string().max(120), since: z.number().int().nonnegative(), held: z.boolean() }).nullable(),
-    { session: true, rate: 20 },
-  ),
   // Website chats over realtime (plan 2.7, 2.9): a thread a window shows is heard on its own channels; what it has and
   // shows is acknowledged by seq, in batches.
   'realtime:watch': ch(z.strictObject({ conversationId: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 60 }),
@@ -615,19 +184,7 @@ export const contract = {
     { session: true, rate: 10 },
   ),
   'tabs:restore': ch(none, { session: true }),
-
-  'files:pickFiles': ch(z.object({ multiple: z.boolean(), title: z.string().max(100).optional(), only: z.enum(['gif', 'document', 'image', 'video', 'audio']).optional() }), { session: true, rate: 2 }),
-  // The dialog runs in the main process, which stores the chosen folder itself.
-  'files:chooseDownloadFolder': ch(none, { rate: 2 }),
-  /** A text the page made (backup codes, a CSV export), saved where the person chooses in a save dialog. */
-  'files:saveText': ch(
-    z.union([
-      z.object({ name: z.string().regex(/^[A-Za-z0-9 ._-]{1,80}\.txt$/), text: z.string().max(64_000) }),
-      // An export the page built (the Phone's call history, extensions): larger, and saved as CSV.
-      z.object({ name: z.string().regex(/^[A-Za-z0-9 ._-]{1,80}\.csv$/), text: z.string().max(8_000_000) }),
-    ]),
-    { session: true, rate: 2 },
-  ),
+  ...transfersContract,
   /** Payroll (docs/payroll-api.md): the OS's own check (Touch ID) before approving a run, where there is one (D07). */
   'payroll:verify': ch(z.strictObject({ reason: z.string().min(1).max(120) }), { session: true, rate: 2, sensitive: true }),
   /**
@@ -643,9 +200,6 @@ export const contract = {
    * until the person imports. CSV or tab-separated text only, at most 5 MB; null when the person cancelled.
    */
   'assets:openFile': ch(z.strictObject({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
-  'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
-  /** A folder, with everything in it: each file carries its path inside the folder. */
-  'files:pickFolder': ch(z.object({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
 
   'media:access': ch(z.object({ kind: z.enum(['microphone', 'camera']) }), { session: true, rate: 5 }),
   'media:screenIndicator': ch(z.object({ active: z.boolean() }), { session: true, rate: 12 }),
@@ -654,162 +208,11 @@ export const contract = {
   // Whether this computer runs on its battery (WS-MEET-ENH-01 D05): what the
   // camera sends while it does is a preference.
   'media:power': ch(none, { session: true, rate: 6 }),
-  /*
-   * The sharing bar (WS-MEET-ENH-01 D03). The meeting's own window says what
-   * the bar should show; the bar's window asks for the current state when it
-   * opens and sends back what was pressed, which main hands to the meeting.
-   */
-  'meet:barState': ch(
-    z.object({
-      label: z.string().max(200),
-      paused: z.boolean(),
-      micOn: z.boolean(),
-      cameraOn: z.boolean(),
-      unreadChat: z.number().int().min(0).max(999),
-      since: z.number().int().min(0),
-    }),
-    { session: true, rate: 8 },
-  ),
-  'meet:barRead': ch(none, { session: true, rate: 8 }),
-  'meet:barAction': ch(z.object({ id: z.enum(['meet-mute', 'meet-camera', 'meet-chat', 'meet-pause-share', 'meet-stop-share']) }), { session: true, rate: 12 }),
+  ...meetContract,
   // The five rows of Settings › Meet › System permissions (WS-MEET-ENH-01 D05).
   'media:permissions': ch(none, { session: true, whileLocked: true, rate: 6 }),
   'media:privacySettings': ch(z.object({ pane: z.enum(['microphone', 'camera', 'screen', 'accessibility']) }), { session: true, rate: 2 }),
-  'calls:active': ch(
-    z.object({
-      uuid: z.string().regex(/^[A-Za-z0-9-]{8,64}$/).nullable(),
-      /** A chat call (hung up on the server when its window closes) or a meeting. */
-      kind: z.enum(['call', 'meet']).optional(),
-      title: z.string().max(200).optional(),
-    }),
-    { session: true, rate: 10 },
-  ),
-  'calls:list': ch(none, { session: true }),
-
-  /*
-   * Meetings recorded on this computer (worksuite-desktop#68). The meeting's window records and hands the pieces
-   * over; this process writes, finishes and uploads them. A page never names a path: the folder is chosen with the
-   * dialog here, and recordings are named by their id.
-   */
-  'meetrec:preflight': ch(none, { session: true, rate: 10 }),
-  'meetrec:start': ch(
-    z.object({
-      meeting: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
-      title: z.string().max(190),
-      layout: z.enum(['grid', 'speaker', 'screen']),
-      mime: z.string().regex(/^video\/(webm|mp4)(;[A-Za-z0-9=,.\s-]{0,80})?$/),
-    }),
-    { session: true, rate: 4 },
-  ),
-  'meetrec:chunk': ch(z.object({ id: z.string().uuid(), data: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 16 * 1024 * 1024, 'A piece is at most 16 MB.') }), { session: true, whileLocked: true, rate: 120 }),
-  'meetrec:active': ch(z.object({ id: z.string().uuid() }), { session: true, whileLocked: true, rate: 10 }),
-  'meetrec:abort': ch(z.object({ id: z.string().uuid() }), { session: true, whileLocked: true, rate: 10 }),
-  'meetrec:stop': ch(z.object({ id: z.string().uuid(), durationMs: z.number().int().min(0).max(24 * 3600 * 1000) }), { session: true, whileLocked: true, rate: 10 }),
-  'meetrec:list': ch(none, { session: true }),
-  'meetrec:retry': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
-  'meetrec:discard': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
-  'meetrec:reveal': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
-  'meetrec:chooseFolder': ch(none, { session: true, rate: 3 }),
-  /** Play the copy on this computer in the system's player (worksuite-desktop#89). */
-  'meetrec:open': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10, permission: 'desktop.files.open_external' }),
-  /** Downloads of Meet recordings, by the recording's id: the transfer that has (or is getting) each one. */
-  'meetrec:downloads': ch(none, { session: true }),
-
-  /*
-   * Speech to text on this computer (worksuite-desktop#81). A meeting's window asks; the hidden speech page, loaded
-   * with the person's whisper.cpp model, answers through the main process. Pieces are 16 kHz mono WAV.
-   */
-  'stt:status': ch(none, { session: true }),
-  'stt:chooseModel': ch(none, { session: true, rate: 3 }),
-  /** The server's speech models (G-11) and the company's local-speech setting; one is downloaded and SHA-256 checked. */
-  'stt:catalog': ch(none, { session: true, rate: 10 }),
-  'stt:install': ch(z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/i) }), { session: true, rate: 3 }),
-  'stt:removeModel': ch(none, { session: true, rate: 3 }),
-  'stt:transcribe': ch(
-    z.object({ wav: z.instanceof(Uint8Array).refine((b) => b.byteLength > 44 && b.byteLength <= 12 * 1024 * 1024, 'A piece is at most 12 MB.'), language: z.enum(['en', 'si', 'ta', 'auto']) }),
-    { session: true, rate: 120 },
-  ),
-  'speech:ready': ch(z.object({ ok: z.boolean(), error: z.string().max(500).optional() }), { session: true, rate: 10 }),
-  'speech:result': ch(
-    z.object({
-      id: z.string().uuid(),
-      segments: z.array(z.object({ start_ms: z.number().int().min(0), end_ms: z.number().int().min(0), text: z.string().max(4000), uncertain: z.boolean() })).max(1000).optional(),
-      error: z.string().max(500).optional(),
-    }),
-    { session: true, rate: 240 },
-  ),
-
-  /*
-   * Meet remote control on this computer (WS-MEET-ENH-01). The meeting window
-   * says when it shares and relays what arrives on the data channel; it never
-   * holds a key. Answering a request comes only from the consent window, and
-   * resuming only from the control bar, each with a real click there. Stopping
-   * works while WorkSuite is locked: stopping is never harder than starting.
-   */
-  'rc:state': ch(none, { session: true, whileLocked: true }),
-  /** Asks macOS again whether WorkSuite may take input (Check again; back from System Settings — worksuite-desktop#47). */
-  'rc:recheck': ch(none, { session: true, rate: 20 }),
-  /**
-   * The checks under Settings › Remote control (WS-MEET-ENH-01 RC09): what can
-   * be captured, the displays, whether input can reach this computer, the
-   * clipboard policy. Reads only — it never opens a capture or asks macOS for
-   * a permission, so pressing Run checks again puts no prompt on screen.
-   */
-  'rc:checks': ch(none, { session: true, rate: 20 }),
-  /** Restart WorkSuite after Accessibility was granted (worksuite-desktop#147): the app and its input helper start again. */
-  'rc:restart': ch(none, { session: true, rate: 1 }),
-  'rc:setAllowRequests': ch(z.object({ value: z.boolean() }), { session: true, rate: 5 }),
-  /**
-   * The emergency chord this computer uses (RC09), where the organisation has
-   * not set one of its own. `null` puts it back to the default. Refused in the
-   * main process when a policy has chosen — the renderer's own check is for
-   * the person's benefit, not the rule's.
-   */
-  'rc:setStopChord': ch(z.object({ chord: z.string().max(64).nullable() }), { session: true, rate: 5 }),
-  'rc:shareStarted': ch(
-    z.object({
-      uuid: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
-      identity: z.string().min(1).max(64),
-      quality: z.enum(['auto', 'quality', 'balanced', 'performance']).optional(),
-      allowRequests: z.boolean().optional(),
-    }),
-    { session: true, rate: 4 },
-  ),
-  'rc:shareChanged': ch(z.object({ uuid: z.string().regex(/^[A-Za-z0-9-]{8,64}$/) }), { session: true, whileLocked: true, rate: 4 }),
-  'rc:shareStopped': ch(z.object({ uuid: z.string().regex(/^[A-Za-z0-9-]{8,64}$/) }), { session: true, whileLocked: true, rate: 4 }),
-  'rc:sharePaused': ch(z.object({ uuid: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), paused: z.boolean() }), { session: true, whileLocked: true, rate: 4 }),
-  'rc:packet': ch(
-    z.object({ sender: z.string().min(1).max(128), topic: z.enum(['rc.ctl', 'rc.ctl.move']), data: z.string().min(2).max(16_384) }),
-    { session: true, whileLocked: true, rate: 250 },
-  ),
-  'rc:consent': ch(none, { session: true, whileLocked: true, rate: 5 }),
-  'rc:answer': ch(
-    z.object({
-      decision: z.enum(['allow', 'allow_5', 'deny', 'transfer']),
-      caps: z
-        .object({
-          mouse: z.boolean(),
-          keyboard: z.boolean(),
-          clipboard: z.enum(['off', 'text', 'text_files']),
-          file_transfer: z.boolean(),
-          monitor_switch: z.boolean(),
-        })
-        .partial()
-        .optional(),
-      duration: z.enum(['until_stopped', '5', '15', '30', 'meeting_end']).optional(),
-    }),
-    { session: true, whileLocked: true, sensitive: true, rate: 3 },
-  ),
-  'rc:pause': ch(z.object({ sessionId: z.number().int().positive() }), { session: true, whileLocked: true, rate: 3 }),
-  'rc:resume': ch(z.object({ sessionId: z.number().int().positive() }), { session: true, sensitive: true, rate: 3 }),
-  'rc:stop': ch(z.object({ sessionId: z.number().int().positive().optional() }), { session: true, whileLocked: true, sensitive: true, rate: 3 }),
-  /** A file the controller offered this computer (RC06), answered on the control bar; accepting needs a real click there. */
-  'rc:fileAnswer': ch(z.object({ id: z.number().int().positive(), accept: z.boolean(), confirmExecutable: z.boolean().optional() }), { session: true, whileLocked: true, sensitive: true, rate: 5 }),
-  /** Offer the controller a file from this computer, chosen in the system's dialog (nothing is injected while it is open). */
-  'rc:sendFile': ch(z.object({ sessionId: z.number().int().positive() }), { session: true, sensitive: true, rate: 2 }),
-  /** As the controller, take a file the shared computer offered (only files sent to the controller). */
-  'rc:takeFile': ch(z.object({ sessionId: z.number().int().positive(), id: z.number().int().positive(), confirmExecutable: z.boolean().optional() }), { session: true, sensitive: true, rate: 5 }),
-  'calls:focus': ch(z.object({ windowId: z.number().int().positive() }), { session: true }),
+  ...remoteControlContract,
   'hr:clock': ch(
     z.object({
       direction: z.enum(['in', 'out']),
@@ -824,272 +227,12 @@ export const contract = {
     { session: true, rate: 3 },
   ),
   'hr:break': ch(z.object({ action: z.enum(['start', 'end']) }), { session: true, rate: 3 }),
-  'transfers:list': ch(none, { session: true }),
-  'transfers:download': ch(
-    z
-      .object({
-        fileId: idString.optional(),
-        // A mail attachment: the main process builds the request from these
-        // parts; the renderer never supplies a path.
-        mail: z
-          .object({
-            uid: z.string().regex(/^\d{1,20}$/),
-            ref: z.string().min(1).max(512),
-            folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/),
-            mailbox: z.string().regex(/^\d{1,20}$/).nullable(),
-          })
-          .optional(),
-        /** A message's original as the server holds it (.eml): the main process builds the request from these parts. */
-        mailSource: z
-          .object({
-            uid: z.string().regex(/^\d{1,20}$/),
-            folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/),
-            mailbox: z.string().regex(/^\d{1,20}$/).nullable(),
-          })
-          .optional(),
-        /** A Meet recording (the owner's own; the server checks). */
-        recording: z.number().int().positive().optional(),
-        /** With a file id: the Meet recording it is, so the download shows on that recording (worksuite-desktop#89). */
-        forRecording: z.number().int().positive().optional(),
-        /** One of the fixed exports: your calendar (.ics) or your contacts (.csv / .vcf). */
-        export: z.enum(['calendar', 'contacts-csv', 'contacts-vcf', 'contacts-template']).optional(),
-        /** The rows an import could not take, as a CSV (a data job's errors). */
-        importErrors: z.number().int().positive().optional(),
-        /** An earlier version of a Drive file. */
-        version: z.object({ fileId: z.number().int().positive(), versionId: z.number().int().positive() }).optional(),
-        /** My payslip as a PDF, by its reference. */
-        payslip: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/).optional(),
-        /** A payroll document: my annual tax certificate by its reference, or one payslip of a run by id (payroll staff; the server checks). */
-        payrollDoc: z.object({ kind: z.enum(['tax-certificate', 'run-payslip', 'input-attachment']), id: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/) }).optional(),
-        /** An HR document (the main process asks for its one-time link) — mine, or with `hrEmployee` that employee's. */
-        hrDocument: z.number().int().positive().optional(),
-        hrEmployee: z.number().int().positive().optional(),
-        /** A resignation letter: one being reviewed, by its resignation id, or my own. */
-        hrLetter: z.union([z.number().int().positive(), z.literal('mine')]).optional(),
-        /** An HR attendance report as a CSV, as the Reports screen filtered it. */
-        hrReport: z
-          .object({
-            type: z.enum(['summary', 'late', 'early', 'overtime', 'absence', 'missing', 'remote']),
-            from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-            to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-            department_id: z.number().int().positive().optional(),
-            employee_id: z.number().int().positive().optional(),
-          })
-          .optional(),
-        /** One of my profile pictures, as it was kept (My account › Profile pictures). */
-        picture: z.number().int().positive().optional(),
-        /** A sales order as its PDF (the server's share of it). */
-        orderPdf: z.number().int().positive().optional(),
-        /** A meeting's minutes as PDF or Word (worksuite-desktop#80); the server checks who may read them. */
-        minutesExport: z.object({ meeting: z.number().int().positive(), format: z.enum(['pdf', 'docx']) }).optional(),
-        /** A meeting transcript as TXT or PDF (worksuite-desktop#81); the server checks who may read it. */
-        transcriptExport: z.object({ id: z.number().int().positive(), format: z.enum(['txt', 'pdf']) }).optional(),
-        /** An invoice as its PDF, on its company's letterhead (the server's share of it). */
-        invoicePdf: z.number().int().positive().optional(),
-        /**
-         * A Billing export (SRS-BIL-001 G-13): a list or a report as CSV, XLSX or PDF, filtered as the screen was; or a
-         * customer's statement as a PDF. The main process builds `/api/billing/{what}/export?…` (or the statement's).
-         */
-        billingExport: z
-          .object({
-            what: z.enum(['invoices', 'payments', 'credit-notes', 'customers', 'report', 'statement']),
-            report: z.enum(['aging', 'revenue', 'tax', 'customers', 'payments', 'products', 'numbering-gaps']).optional(),
-            customer: z.number().int().positive().optional(),
-            format: z.enum(['csv', 'xlsx', 'pdf']),
-            org: z.string().regex(/^(\d+(,\d+)*)?$/).optional(),
-            q: z.string().max(100).optional(),
-            status: z.string().regex(/^[a-z_,]{1,100}$/).optional(),
-            from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-            to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-          })
-          .refine((v) => (v.what === 'report') === !!v.report && (v.what === 'statement') === !!v.customer, 'a report names its report, a statement its customer')
-          .optional(),
-        /** The one file a Billing bulk act made (`file_url` of `invoices/bulk` with `pdf`): a path on the server's own Billing API or a /d/ grant. */
-        billingFile: z
-          .string()
-          .regex(/^\/(?:api\/billing\/|d\/)[A-Za-z0-9._~/?=&%-]{1,400}$/)
-          .refine((v) => !v.includes('..'), 'no parent paths')
-          .optional(),
-        /** A bank slip attached to a payment (Billing › Payments). */
-        paymentSlip: z.object({ payment: z.number().int().positive(), slip: z.number().int().positive() }).optional(),
-        /** A tender's document, a checklist line's file (or an earlier version of it), or a generated letter. */
-        tenderDocument: z.number().int().positive().optional(),
-        /** With `tenderDocument`: one of its earlier versions (`…/versions/{v}/file`). */
-        tenderDocumentVersion: z.number().int().positive().optional(),
-        tenderLine: z.object({ line: z.number().int().positive(), version: z.number().int().positive().optional() }).optional(),
-        tenderLetter: z.object({ tender: z.number().int().positive(), letter: z.number().int().positive() }).optional(),
-        /** A company document's file from the tender library. */
-        tenderLibrary: z.number().int().positive().optional(),
-        /** The order list as a CSV, as the Orders screen filtered it. */
-        ordersCsv: z
-          .object({
-            org: z.string().regex(/^(\d+(,\d+)*)?$/).optional(),
-            status: z.string().regex(/^[a-z_,]{1,200}$/).optional(),
-            source: z.string().regex(/^[a-z_,]{1,100}$/).optional(),
-            priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
-            q: z.string().max(100).optional(),
-            mine: z.boolean().optional(),
-          })
-          .optional(),
-        /** Website chat Insights as a CSV (L-07, UX-INS-02 Export CSV): its period, and one widget or all. */
-        websiteInsights: z.object({ period: z.enum(['7d', '30d', 'all']), widget: z.number().int().positive().optional() }).optional(),
-        /** An Orders report as a CSV, as the Reports screen set it. */
-        omsReport: z
-          .object({
-            report: z.enum(['summary', 'sales', 'status', 'payment', 'aging', 'returns', 'coupons']),
-            from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-            to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-            org: z.string().regex(/^(\d+(,\d+)*)?$/).optional(),
-            group: z.enum(['month', 'day', 'client', 'user', 'assignee', 'org', 'source', 'product', 'category', 'status', 'type', 'priority']).optional(),
-          })
-          .optional(),
-        /** An own-fleet route's sheet as the server's PDF, for a driver without the app (FR-DLV-06). */
-        omsRouteSheet: z.number().int().positive().optional(),
-        /** A Finance report as a CSV: its summary rows, or (`lines`) every journal line in the window. */
-        financeCsv: z
-          .object({
-            report: z.enum(['financial-overview', 'cash-flow', 'budget-variance', 'profit-and-loss']),
-            lines: z.boolean().optional(),
-            company: z.number().int().positive(),
-            from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-            to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-            currency: z.string().regex(/^[A-Z]{3}$/).optional(),
-          })
-          .optional(),
-        /**
-         * An Expenses file: a claim's receipt, a receipt by its token (petty cash), a subscription's
-         * document, a payment run's bank file, an accounting export, or a report as a CSV. The main
-         * process builds the address; a report's query is short keys and values, nothing else.
-         */
-        expenseFile: z
-          .discriminatedUnion('kind', [
-            z.object({ kind: z.literal('claim-receipt'), claim: z.number().int().positive() }),
-            z.object({ kind: z.literal('receipt'), token: z.string().regex(/^[A-Za-z0-9._-]{6,128}$/) }),
-            z.object({ kind: z.literal('sub-document'), sub: z.number().int().positive(), doc: z.number().int().positive() }),
-            z.object({ kind: z.literal('run-csv'), run: z.number().int().positive(), org: z.number().int().positive().optional() }),
-            z.object({ kind: z.literal('posting'), posting: z.number().int().positive(), org: z.number().int().positive().optional() }),
-            z.object({
-              kind: z.literal('report'),
-              which: z.enum(['insights', 'classic']),
-              query: z.record(z.string().regex(/^[a-z_]{1,32}$/), z.string().max(200)).refine((q) => Object.keys(q).length <= 12, 'too many parameters'),
-            }),
-          ])
-          .optional(),
-        /**
-         * A Garage document — a job's check-in sheet, an estimate version, a work order's sheet, the
-         * delivery note — or a Garage report as a CSV (`shared/garage-docs.ts`). The main process builds
-         * the address.
-         */
-        garageDoc: garageDocSchema.optional(),
-        /** Cheque Manager's PDFs (Cheque 1.2): a cheque's preview or voucher, a deposit slip, a return letter, a version's calibration sheet. */
-        chequeDoc: z.object({ kind: z.enum(['preview', 'voucher', 'deposit-slip', 'return-letter', 'calibration-sheet']), id: z.string().regex(/^\d{1,12}$/) }).optional(),
-        /** A Projects report as CSV, Excel or PDF, as the Reports screen filtered it (`shared/projects.ts`). */
-        projectsReport: projectsReportSchema.optional(),
-        /** One project's whole report as PDF or Excel (`GET /api/projects/{id}/report`, `shared/projects.ts`). */
-        projectReport: projectReportSchema.optional(),
-        /**
-         * An eLearning lesson's file where the lesson allows downloading: the signed token of the
-         * address the server gave with the lesson (`file.urls.download`). The main process builds
-         * `/media/{token}?download=1`; a protected lesson has no such address to give.
-         */
-        elearningMedia: z.string().regex(ELEARNING_MEDIA_TOKEN).optional(),
-        /** An Office export's signed download (`POST …/office/export` → `download_url`): its token; the main process fetches `/office/exports/{token}` from the server. */
-        officeExport: z.string().regex(OFFICE_EXPORT_TOKEN).optional(),
-        /** A chat attachment: the signed token of its `download_url` (`/media/{token}?download=1`). */
-        chatMedia: z.string().regex(ELEARNING_MEDIA_TOKEN).optional(),
-        /** A task's attachment: the main process asks for its short-lived link (`POST /api/tasks/{task}/attachments/{id}/link`). */
-        taskAttachment: z.object({ task: z.number().int().positive(), id: z.number().int().positive() }).optional(),
-        /** A chat conversation exported as text, or as a zip with or without its media (worksuite-desktop#183); the server checks the policy and audits it. */
-        chatExport: z.object({ room: z.number().int().positive(), format: z.enum(['txt', 'zip']), media: z.boolean() }).optional(),
-        /** A Purchasing export (SRS-PUR-001 G-20, G-27): a report as CSV, XLSX or PDF, or a payment run's bank file (`shared/purchase.ts`). */
-        purchaseExport: purchaseExportSchema.optional(),
-        name: z.string().min(1).max(255),
-        open: z.boolean().optional(),
-      })
-      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.payrollDoc, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.billingExport, v.billingFile, v.paymentSlip, v.ordersCsv, v.omsReport, v.omsRouteSheet, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.chequeDoc, v.projectsReport, v.projectReport, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment, v.chatExport, v.purchaseExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined) && (v.tenderDocumentVersion === undefined || v.tenderDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, a payroll document, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a Billing export or file, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a route sheet, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, a Cheque Manager PDF, a Projects report, a whole project report, an eLearning lesson file, an Office export, a chat attachment, a task attachment, a chat export or a Purchasing export'),
-    { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
-  ),
   /**
    * Hotel PMS: a guest's document or a report's export through the download manager (shared/pms-files.ts). The
    * main process builds the address, refuses without `desktop.downloads` (here and in the handler) and audits it.
    */
   'pms:download': ch(pmsDownloadInput, { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 }),
-  'transfers:prepareMedia': ch(
-    z.strictObject({ handle: idString.optional(), data: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 100 * 1024 * 1024).optional(), name: z.string().min(1).max(255).regex(/^[^/\\]+$/), originalQuality: z.boolean() }).refine((v) => !!v.handle !== !!v.data, 'Give a picked handle or recorded bytes.'),
-    { session: true, rate: 30 },
-  ),
-  'transfers:upload': ch(
-    z.object({ handles: z.array(idString).min(1).max(200), target: uploadTargetSchema }),
-    { session: true, rate: 5 },
-  ),
-  'transfers:pause': ch(z.object({ id: idString }), { session: true }),
-  'transfers:resume': ch(z.object({ id: idString }), { session: true }),
-  'transfers:cancel': ch(z.object({ id: idString }), { session: true }),
-  'transfers:retry': ch(z.object({ id: idString }), { session: true }),
-  'transfers:open': ch(z.object({ id: idString }), { session: true, permission: 'desktop.files.open_external' }),
-  'transfers:reveal': ch(z.object({ id: idString }), { session: true }),
-  'transfers:clearFinished': ch(none, { session: true }),
-  'transfers:pauseAll': ch(none, { session: true }),
-  'transfers:resumeAll': ch(none, { session: true }),
-  'transfers:resetSettings': ch(none, { session: true }),
-
-  /*
-   * Drive sync. The renderer names Drive folders and this app's own ids; a
-   * place on this computer is only ever chosen in the main process's dialog.
-   */
-  'sync:status': ch(none, { session: true }),
-  'sync:devices': ch(none, { session: true, rate: 5 }),
-  /** Another of my devices: rename it, sign it out of sync, wipe its synced copy, or remove it. Never this computer. */
-  'sync:deviceAction': ch(z.object({ id: driveId, action: z.enum(['rename', 'sign-out', 'wipe', 'remove']), name: z.string().trim().min(1).max(160).optional() }), { session: true, sensitive: true, rate: 5 }),
-  /** Sync a Drive folder (null: all of My Drive) — into ~/WorkSuite Drive, or, with `choose`, a folder picked in a dialog. */
-  'sync:add': ch(z.object({ folderId: driveId.nullable(), mode: syncMode, choose: z.boolean() }), { session: true, permission: 'desktop.files.sync', sensitive: true, rate: 3 }),
-  'sync:remove': ch(z.object({ id: idString }), { session: true, sensitive: true }),
-  'sync:setMode': ch(z.object({ id: idString, mode: syncMode }), { session: true, permission: 'desktop.files.sync' }),
-  /** One folder, or with `id` null every folder on this computer. */
-  'sync:pause': ch(z.object({ id: idString.nullable(), paused: z.boolean() }), { session: true }),
-  'sync:now': ch(none, { session: true, rate: 2 }),
-  /** Deletions held back by the guard: carry them out, or bring the files back. */
-  'sync:resolve': ch(z.object({ id: idString, choice: z.enum(['apply', 'restore']) }), { session: true, sensitive: true }),
-  'sync:reveal': ch(
-    z.object({ fileId: driveId.optional(), folderId: driveId.optional(), syncFolderId: idString.optional() }).refine((v) => [v.fileId, v.folderId, v.syncFolderId].filter((x) => x !== undefined).length === 1, 'name one file, folder or synced folder'),
-    { session: true, rate: 5 },
-  ),
-  'sync:lookup': ch(z.object({ files: z.array(driveId).max(500), folders: z.array(driveId).max(500), context: driveId.nullable() }), { session: true, rate: 30 }),
-  /** Registers this computer for sync again after it was signed out from elsewhere. */
-  'sync:reconnect': ch(none, { session: true, permission: 'desktop.files.sync', sensitive: true, rate: 1 }),
-  /** The sync conflicts the server holds open for me (Drive ENH-03 DSK-03), and deciding one. */
-  'sync:conflicts': ch(none, { session: true, rate: 5 }),
-  'sync:resolveConflict': ch(z.object({ id: driveId, resolution: z.enum(['keep_mine', 'keep_server', 'keep_both', 'dismiss']) }), { session: true, sensitive: true, rate: 5 }),
-
-  /*
-   * The image editor on this computer (Drive ENH-03). A synced picture is named by its Drive id; where it is on disk
-   * is the main process's to know. Edits saved offline wait beside it until sync sends them.
-   */
-  'image:localInfo': ch(z.object({ fileId: driveId }), { session: true, rate: 20 }),
-  'image:localRead': ch(z.object({ fileId: driveId }), { session: true, rate: 5 }),
-  'image:localSave': ch(
-    z.strictObject({
-      fileId: driveId,
-      bytes: imageBytes,
-      recipe: z.string().max(24 * 1024 * 1024),
-      summary: z.string().max(500),
-      note: z.string().max(500),
-      width: z.number().int().positive().max(100_000).nullable(),
-      height: z.number().int().positive().max(100_000).nullable(),
-      copyName: z.string().trim().min(1).max(200).regex(/^[^/\\]+$/).nullable().optional(),
-    }),
-    { session: true, sensitive: true, rate: 5 },
-  ),
-  /** Open with › System editor: the synced copy in the computer's default app. */
-  'image:openSystem': ch(z.object({ fileId: driveId }), { session: true, permission: 'desktop.files.open_external', rate: 3 }),
-  /** Dragging the canvas out as a PNG: written first, then handed to the system's drag from inside dragstart. */
-  'image:prepareDrag': ch(z.strictObject({ bytes: imageBytes, name: z.string().min(1).max(255) }), { session: true, rate: 10 }),
-  'image:startDrag': ch(z.object({ token: z.string().uuid() }), { session: true, rate: 10 }),
-  /** Brand libraries and fonts kept for offline use (DSK-04). */
-  'image:cacheGet': ch(z.object({ key: z.string().min(1).max(300) }), { session: true, rate: 200 }),
-  'image:cachePut': ch(z.strictObject({ key: z.string().min(1).max(300), bytes: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 32 * 1024 * 1024, 'A library item is at most 32 MB.'), type: z.string().min(1).max(100) }), { session: true, rate: 100 }),
-  /** Download only / Export: the rendered picture where the person chooses in the save dialog. */
-  'image:saveAs': ch(z.strictObject({ name: z.string().min(1).max(255).regex(/^[^/\\]+$/), bytes: imageBytes }), { session: true, rate: 10, sensitive: true }),
+  ...documentsContract,
 
   'notifications:context': ch(z.object({ viewing: z.string().max(160) }), { session: true, rate: 30 }),
   'notifications:list': ch(none, { session: true }),
@@ -1113,163 +256,10 @@ export const contract = {
   'notifications:openSettings': ch(none, { session: true, rate: 4 }),
   /** The bell's count again, now: after the notification centre read, snoozed or archived something. */
   'notifications:refresh': ch(none, { session: true, rate: 10 }),
-  // New-mail alerts (ENH-MAIL-05): what the main window shows (MNA-EVT-05 decides by it), a card's buttons and quick
-  // reply, a message opened here (its alert goes), the pause, and the state the tray and the settings show.
-  'mailAlert:view': ch(z.object({ module: z.string().max(64).nullable(), box: z.string().regex(/^(unified|\d{1,12})$/).nullable(), folder: z.string().max(128).nullable() }), { session: true, rate: 20 }),
-  'mailAlert:action': ch(
-    z.object({
-      id: z.string().max(80).nullable().optional(),
-      key: z.string().regex(/^\d{1,15}:[A-Za-z0-9._\-/ :]{1,128}:\d{1,15}$/).max(180).nullable().optional(),
-      action: z.enum(['open', 'reply', 'read', 'archive', 'flag', 'read-all', 'open-inbox', 'dismiss', 'undo']),
-      text: z.string().max(20_000).nullable().optional(),
-    }),
-    { session: true, rate: 10 },
-  ),
-  'mailAlert:clear': ch(z.object({ mailbox: z.number().int().positive(), folder: z.string().max(128), uid: z.number().int().positive() }), { session: true, rate: 30 }),
-  'mailAlert:pause': ch(z.object({ mode: z.enum(['1h', 'tomorrow', 'outside_hours', 'manual']).nullable() }), { session: true, rate: 4 }),
-  'mailAlert:state': ch(none, { session: true }),
-  'mailAlert:latest': ch(none, { session: true }),
-  'mailAlert:prefs': ch(z.object({ preview: z.enum(['full', 'sender', 'hidden']).optional(), sound: z.boolean().optional() }), { session: true, rate: 4 }),
+  ...mailContract,
 
   'clipboard:readForPaste': ch(none, { session: true, rate: 5 }),
-
-  'print:print': ch(z.object({ html: z.string().max(5_000_000), title: z.string().max(200), silent: z.boolean().optional(), deviceName: z.string().max(200).optional() }), { session: true, rate: 2 }),
-  'print:printers': ch(none, { session: true }),
-  'print:toPdf': ch(z.object({ html: z.string().max(5_000_000), title: z.string().max(200) }), { session: true, rate: 2 }),
-
-  /*
-   * PDF Studio (WorkSuite PDF Studio SRS §23.1). Unknown fields are refused,
-   * not stripped (PDF-API-003). The renderer names a session it opened, pages
-   * and tickets; files arrive as a Drive id, a mail attachment's parts or a
-   * handle the main process issued — never a path (PDF-API-001).
-   */
-  'pdf:open': ch(z.strictObject({ source: pdfSourceSchema }), { session: true, rate: 5 }),
-  'pdf:state': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
-  // The password goes to the engine and is kept, if asked, in memory for this session only (PDF-OPEN-008, PDF-SEC-013/014).
-  'pdf:unlock': ch(z.strictObject({ session: pdfSession, password: z.string().min(1).max(1024), remember: z.boolean() }), { session: true, rate: 2, sensitive: true }),
-  'pdf:retry': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 2 }),
-  'pdf:close': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
-  'pdf:render': ch(
-    z.strictObject({
-      session: pdfSession,
-      page: pdfPage,
-      scale: z.number().positive().max(64),
-      tile: z.strictObject({ x: z.number().int().min(0).max(1_000_000), y: z.number().int().min(0).max(1_000_000), w: z.number().int().min(1).max(4096), h: z.number().int().min(1).max(4096) }).optional(),
-      ticket: pdfTicket,
-    }),
-    { session: true, rate: 400 },
-  ),
-  'pdf:thumbnail': ch(z.strictObject({ session: pdfSession, page: pdfPage, ticket: pdfTicket }), { session: true, rate: 400 }),
-  'pdf:cancel': ch(z.strictObject({ session: pdfSession, tickets: z.array(pdfTicket).max(1000) }), { session: true, rate: 60 }),
-  'pdf:search': ch(z.strictObject({ session: pdfSession, query: z.string().min(1).max(SEARCH_MAX_QUERY), options: pdfSearchOptionsSchema }), { session: true, rate: 10 }),
-  'pdf:searchCancel': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
-  'pdf:outline': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 10 }),
-  'pdf:links': ch(z.strictObject({ session: pdfSession, page: pdfPage }), { session: true, rate: 200 }),
-  'pdf:followLink': ch(z.strictObject({ session: pdfSession, page: pdfPage, index: z.number().int().min(0).max(10_000) }), { session: true, rate: 5 }),
-  'pdf:attachments': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 5 }),
-  'pdf:details': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 5 }),
-  /**
-   * A Drive file's cover (its first page, a PDF's or an Office file's, drawn by the window) in PDF Studio's sealed
-   * thumbnail cache, by the file and the version it shows: never a name, never readable without the database key.
-   */
-  'pdf:coverGet': ch(z.strictObject({ id: coverId }), { session: true, rate: 600 }),
-  'pdf:coverPut': ch(z.strictObject({ id: coverId, jpeg: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 512 * 1024, 'A cover is at most 512 KB.') }), { session: true, rate: 300 }),
-  'pdf:print': ch(pdfPrintSchema, { session: true, rate: 2 }),
-  // The main process's open dialog; the chosen PDFs come back as handles.
-  'pdf:pickLocal': ch(none, { session: true, rate: 2 }),
-  // Paths only from a real drop, turned into paths in the preload (as files:registerDropped).
-  'pdf:registerDropped': ch(z.strictObject({ paths: z.array(z.string().min(1).max(4096)).min(1).max(20) }), { session: true, rate: 5 }),
-  'pdf:diagnostics': ch(none, { session: true, rate: 1 }),
-  /*
-   * Stage D2. A change is one operation (shared/pdf.ts) the main process checks
-   * against the session's mode and the server's permissions before the engine
-   * sees it; saving goes to WorkSuite (or this computer's own file) from the
-   * main process, which alone holds the file.
-   */
-  'pdf:mode': ch(z.strictObject({ session: pdfSession, mode: z.enum(['VIEW', 'ANNOTATE', 'EDIT']), takeover: z.boolean().optional() }), { session: true, rate: 5 }),
-  'pdf:edit': ch(z.strictObject({ session: pdfSession, op: pdfEditOpSchema }), { session: true, rate: 30 }),
-  'pdf:undo': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
-  'pdf:redo': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 20 }),
-  'pdf:annotations': ch(z.strictObject({ session: pdfSession, page: pdfPage }), { session: true, rate: 200 }),
-  'pdf:textSpan': ch(
-    z.strictObject({ session: pdfSession, page: pdfPage, from: z.tuple([z.number().min(-20_000).max(20_000), z.number().min(-20_000).max(20_000)]), to: z.tuple([z.number().min(-20_000).max(20_000), z.number().min(-20_000).max(20_000)]) }),
-    { session: true, rate: 60 },
-  ),
-  'pdf:save': ch(z.strictObject({ session: pdfSession, target: z.enum(['version', 'copy']), note: z.string().max(200).optional() }), { session: true, rate: 3, sensitive: true }),
-  'pdf:resolve': ch(z.strictObject({ session: pdfSession, answer: z.enum(['keep_both', 'upload_as_new_version', 'use_cloud']) }), { session: true, rate: 3, sensitive: true }),
-  'pdf:discard': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 3 }),
-  'pdf:extract': ch(z.strictObject({ session: pdfSession, pages: z.array(pdfPage).min(1).max(10_000) }), { session: true, rate: 3 }),
-  // Tools on this computer (D-G12): a protected or unlocked copy, parts, page images or text from the open PDF; and a
-  // new PDF combined from PDFs, made from pictures or of blank pages. Passwords go to the engine and are never kept.
-  'pdf:derive': ch(z.strictObject({ session: pdfSession, req: pdfDeriveSchema }), { session: true, rate: 3, sensitive: true }),
-  'pdf:compose': ch(z.strictObject({ req: pdfComposeSchema }), { session: true, rate: 3 }),
-  // PDF Studio Pro (PRO-SIG-002): the person's own token signs the server's signed attributes; the PIN goes to the
-  // token library in the tool's environment, never on a command line, never kept.
-  'pdf:tokens': ch(z.strictObject({ module: z.string().min(1).max(400).nullable().optional() }), { session: true, rate: 2 }),
-  'pdf:tokenSign': ch(z.strictObject({
-    module: z.string().min(1).max(400), token: z.string().min(1).max(64), id: z.string().regex(/^[0-9a-fA-F]{1,64}$/), pin: z.string().min(1).max(64),
-    data: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 65536, 'Nothing to sign.'), ec: z.boolean(),
-  }), { session: true, sensitive: true, rate: 2 }),
-
-  // SalonMate's front desk: the key it is paired with stays in the main process.
-  'salon:deskPairing': ch(none, { session: true }),
-  'salon:deskPair': ch(
-    z.object({
-      location_id: z.number().int().positive(),
-      name: z.string().trim().min(1).max(80),
-      pos_register_id: z.number().int().positive().nullable().optional(),
-      warehouse_id: z.number().int().positive().nullable().optional(),
-      receipt_template: z.string().regex(/^[a-z0-9_]{1,40}$/).nullable().optional(),
-    }),
-    { session: true, rate: 3, sensitive: true },
-  ),
-  'salon:deskForget': ch(none, { session: true, rate: 3, sensitive: true }),
-  // Its receipts go to the desk's own printer without a dialog; the drawer opens through it (salon-print.ts).
-  'salon:printSettings': ch(none, { session: true }),
-  'salon:printSettingsSet': ch(
-    z
-      .object({
-        receipt_printer: z.string().trim().min(1).max(200).nullable(),
-        a4_printer: z.string().trim().min(1).max(200).nullable(),
-        paper: salonPaper,
-        copies: z.number().int().min(1).max(3),
-        auto_print: z.boolean(),
-        silent: z.boolean(),
-        drawer: z.enum(['off', 'printer']),
-        drawer_pin: z.union([z.literal(2), z.literal(5)]),
-      })
-      .partial(),
-    { session: true, rate: 5 },
-  ),
-  'salon:printReceipt': ch(z.object({ visit_id: z.number().int().positive(), paper: salonPaper.optional() }), { session: true, rate: 3 }),
-  'salon:printTest': ch(z.object({ paper: salonPaper.optional() }), { session: true, rate: 2 }),
-  'salon:printPage': ch(z.object({ html: z.string().max(500_000), paper: salonPaper.optional() }), { session: true, rate: 2 }),
-  'salon:openDrawer': ch(none, { session: true, rate: 1, sensitive: true }),
-  // Offline: the day's copy the screens fall back to, and what the counter did while WorkSuite was out of reach (salon-sync.ts).
-  'salon:syncStatus': ch(none, { session: true }),
-  'salon:syncNow': ch(none, { session: true, rate: 2 }),
-  'salon:copy': ch(none, { session: true }),
-  'salon:copyClients': ch(z.object({ q: z.string().max(120), limit: z.number().int().min(1).max(100).optional(), id: z.number().int().positive().optional() }), { session: true, rate: 20 }),
-  'salon:outbox': ch(none, { session: true }),
-  'salon:outboxAdd': ch(
-    z.object({
-      kind: z.enum(['client.create', 'visit.book', 'visit.check_in', 'visit.checkout']),
-      local_id: z.string().max(40).nullable().optional(),
-      payload: z.record(z.string(), z.unknown()),
-      label: z.string().trim().min(1).max(200),
-      detail: z.string().max(300).nullable().optional(),
-    }),
-    { session: true, rate: 10 },
-  ),
-  'salon:outboxResolve': ch(
-    z.union([
-      z.object({ id: z.string().uuid(), action: z.enum(['drop', 'retry', 'take_next']) }),
-      z.object({ id: z.string().uuid(), action: z.literal('time'), starts_at: z.string().regex(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/) }),
-      z.object({ id: z.string().uuid(), action: z.literal('client'), client_id: z.number().int().positive() }),
-      z.object({ id: z.string().uuid(), action: z.literal('edit'), changes: z.record(z.string().max(40), z.union([z.string().max(2000), z.boolean(), z.null()])) }),
-    ]),
-    { session: true, rate: 5 },
-  ),
+  ...desksContract,
 
   /*
    * eLearning's offline copies (shared/elearning-offline.ts): the course's files, as the server's download
@@ -1280,248 +270,12 @@ export const contract = {
   'elearning:offlineDownload': ch(elearningDownloadInput, { session: true, rate: 2 }),
   'elearning:offlineRemove': ch(elearningCourseRef, { session: true, rate: 5 }),
   'elearning:offlineValidate': ch(none, { session: true, rate: 1 }),
-
-  /*
-   * WorkSuite Events' desk (shared/event-desk.ts, electron/services/event-desk.ts): this computer as a check-in
-   * device. The key the server hands over when it is registered stays in the main process, which also matches
-   * scans against the offline copy and keeps what was done offline for the server.
-   */
-  'eventdesk:list': ch(none, { session: true }),
-  'eventdesk:status': ch(deskEventRef, { session: true, rate: 20 }),
-  'eventdesk:register': ch(deskRegisterInput, { session: true, rate: 2, sensitive: true }),
-  'eventdesk:rotateKey': ch(deskEventRef, { session: true, rate: 1, sensitive: true }),
-  'eventdesk:forget': ch(deskForgetInput, { session: true, rate: 2, sensitive: true }),
-  'eventdesk:sync': ch(deskEventRef, { session: true, rate: 2 }),
-  'eventdesk:scan': ch(deskScanInput, { session: true, rate: 20 }),
-  'eventdesk:search': ch(deskSearchInput, { session: true, rate: 30 }),
-  'eventdesk:queue': ch(deskEventRef, { session: true, rate: 10 }),
-  'eventdesk:queueResolve': ch(deskQueueAction, { session: true, rate: 10 }),
-  'eventdesk:walkIn': ch(deskWalkInInput, { session: true, rate: 5 }),
-  // Badges go to the desk's own printer, silently when it says so; the page is the server's (event-desk-print.ts).
-  'eventdesk:printSettings': ch(none, { session: true }),
-  'eventdesk:printSettingsSet': ch(deskPrintSettingsPatch, { session: true, rate: 5 }),
-  'eventdesk:printJobs': ch(deskPrintJobsInput, { session: true, rate: 5 }),
-
-  /*
-   * Restaurant Manager (shared/restaurant.ts, electron/services/restaurant): this computer as a paired terminal.
-   * The device key the server hands over at pairing stays in the main process, which also plays the offline
-   * outbox back, beats, keeps the menu and floor copy, and runs the print agent for the printers plugged in here.
-   */
-  'restaurant:pairing': ch(none, { session: true }),
-  'restaurant:pair': ch(restaurantPairInput, { session: true, rate: 2, sensitive: true }),
-  'restaurant:unpair': ch(restaurantUnpairInput, { session: true, rate: 2, sensitive: true }),
-  'restaurant:status': ch(none, { session: true, rate: 20 }),
-  'restaurant:syncNow': ch(none, { session: true, rate: 2 }),
-  'restaurant:copy': ch(none, { session: true, rate: 10 }),
-  'restaurant:outbox': ch(none, { session: true, rate: 10 }),
-  'restaurant:outboxAdd': ch(restaurantOutboxAdd, { session: true, rate: 20 }),
-  'restaurant:outboxResolve': ch(restaurantOutboxAction, { session: true, rate: 10 }),
-  'restaurant:printSettings': ch(none, { session: true }),
-  'restaurant:printSettingsSet': ch(restaurantPrintPatch, { session: true, rate: 5 }),
-  'restaurant:printJobs': ch(none, { session: true, rate: 10 }),
-  'restaurant:printNow': ch(none, { session: true, rate: 2 }),
-  'restaurant:printTest': ch(restaurantPrintTest, { session: true, rate: 2 }),
-  'restaurant:printText': ch(restaurantPrintText, { session: true, rate: 3 }),
-  'restaurant:openDrawer': ch(none, { session: true, rate: 1, sensitive: true }),
-
-  /*
-   * Office documents (shared/office.ts, electron/services/office-editor.ts): a tab lays the editor's
-   * isolated view over its placeholder and talks to it; the session itself is the tab's, over the API.
-   * The configuration is the server's signed one, passed through untouched; the main process loads an
-   * editor only from a Document Server address it accepts (`documentServerOrigin`).
-   */
-  'office:open': ch(
-    z.object({
-      key: idString,
-      fileId: driveId,
-      sessionId: z.string().regex(/^[0-9a-f-]{36}$/),
-      organizationId: z.string().max(64).nullable(),
-      documentServerUrl: z.string().min(8).max(512),
-      apiUrl: z.string().min(8).max(1024),
-      config: z.record(z.string(), z.unknown()),
-      events: z.array(z.enum(OFFICE_EDITOR_EVENTS)).max(OFFICE_EDITOR_EVENTS.length),
-    }),
-    { session: true, rate: 5 },
-  ),
-  'office:place': ch(
-    z.object({
-      viewId: z.string().uuid(),
-      bounds: z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().finite().min(0).max(20_000), height: z.number().finite().min(0).max(20_000) }),
-      visible: z.boolean(),
-    }),
-    { session: true, rate: 120 },
-  ),
-  /** A picture of the editor, shown in its place while a menu over it is open (worksuite-desktop#39). */
-  'office:snapshot': ch(z.object({ viewId: z.string().uuid() }), { session: true, rate: 30 }),
-  'office:command': ch(
-    z.object({
-      viewId: z.string().uuid(),
-      command: officeCommandSchema,
-      events: z.array(z.enum(OFFICE_EDITOR_EVENTS)).max(OFFICE_EDITOR_EVENTS.length).optional(),
-      /** A reload on a new session (reopened, or a newer version): the view's session is that one now. */
-      sessionId: z.string().regex(/^[0-9a-f-]{36}$/).optional(),
-    }),
-    { session: true, rate: 20 },
-  ),
-  'office:close': ch(z.object({ viewId: z.string().uuid() }), { session: true, rate: 20 }),
-  'office:focusFile': ch(z.object({ fileId: driveId }), { session: true, rate: 10 }),
-  'office:externalApps': ch(z.object({ extension: z.string().regex(/^[A-Za-z0-9]{0,10}$/) }), { session: true, rate: 10 }),
-  'office:openExternal': ch(
-    z.object({
-      fileId: driveId,
-      name: z.string().min(1).max(255),
-      folderId: driveId.nullable(),
-      version: z.number().int().min(0).max(2 ** 31),
-      app: z.enum(['default', 'word', 'excel', 'powerpoint']),
-    }),
-    { session: true, rate: 3, sensitive: true },
-  ),
-  // WorkSuite Office, the desktop editor (worksuite-desktop#322): whether it is here, and a file handed to it. The
-  // main process builds the link itself (shared/office-open.ts) from the signed-in server and user; the page names
-  // only the file.
-  'office:desktopApp': ch(none, { session: true, rate: 20 }),
-  'office:openInDesktopApp': ch(
-    z.discriminatedUnion('kind', [
-      z.strictObject({ kind: z.literal('drive'), fileId: driveId, name: z.string().min(1).max(255), mode: z.enum(['edit', 'view']).optional(), organizationId: z.string().regex(/^\d{1,12}$/).nullable().optional() }),
-      z.strictObject({ kind: z.literal('copy'), path: z.string().regex(OFFICE_APP_SRC).refine((p) => !p.includes('..')), name: z.string().min(1).max(255), organizationId: z.string().regex(/^\d{1,12}$/).nullable().optional() }),
-    ]),
-    { session: true, rate: 5, sensitive: true },
-  ),
-  'office:localCopies': ch(none, { session: true }),
-  'office:uploadLocal': ch(z.object({ id: z.string().uuid(), how: z.enum(['version', 'new_version', 'keep_both']) }), { session: true, rate: 3, sensitive: true }),
-  'office:forgetLocal': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
-  'office:revealLocal': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 5 }),
-  /** Offline (OO-OFF-020): is this file on this computer — kept by Drive sync, or a copy opened in another app. */
-  'office:localAvailable': ch(z.object({ fileId: driveId }), { session: true, rate: 10 }),
-  'office:openLocal': ch(z.object({ fileId: driveId, preview: z.boolean().optional() }), { session: true, rate: 3 }),
-  // WorkSuite DOC / Sheet / Slides on files from this computer (office-local.ts): handles only, never paths.
-  'office:pickFile': ch(none, { session: true, rate: 5 }),
-  'office:readFile': ch(z.strictObject({ handle: z.string().uuid() }), { session: true, rate: 20 }),
-  'office:writeFile': ch(z.strictObject({ handle: z.string().uuid(), bytes: officeBytes }), { session: true, rate: 20, sensitive: true }),
-  /**
-   * A Drive file's copy on this computer (synced, or opened in another app) for editing offline in the built-in
-   * editor; what is written there goes back to the Drive when WorkSuite is online again (sync, or the copy's upload).
-   */
-  'office:readOffline': ch(z.strictObject({ fileId: driveId }), { session: true, rate: 20 }),
-  'office:writeOffline': ch(z.strictObject({ fileId: driveId, bytes: officeBytes }), { session: true, rate: 20, sensitive: true }),
-  /** "Save a copy on this computer": the main process's save dialog, then the bytes where the person chose. */
-  'office:saveCopy': ch(z.strictObject({ name: z.string().min(1).max(255).regex(/^[^/\\]+$/), bytes: officeBytes }), { session: true, rate: 10, sensitive: true }),
-
-  'offline:status': ch(none, { session: true }),
-  'offline:pending': ch(none, { session: true }),
-  /** How much one app's saved answers take on this computer. */
-  'offline:moduleBytes': ch(z.object({ module: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }), { session: true }),
-  /** Remove one app's saved answers from this computer (Mail › Clear). */
-  'offline:clearModule': ch(z.object({ module: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }), { session: true, sensitive: true, rate: 1 }),
-  /** What Mail keeps on this computer, by kind and by mailbox (Settings › Mail). */
-  'offline:mailStats': ch(none, { session: true }),
-  /**
-   * Mail's saved answers for these GET paths, read from this computer without asking the server: the page shows
-   * them at once and refreshes from the server behind them (worksuite-desktop#162). Null where nothing is saved.
-   */
-  'offline:peek': ch(z.strictObject({ paths: z.array(z.string().regex(/^\/api\/mail\/[A-Za-z0-9/_\-.,:@~]*(\?[^\s]*)?$/).max(2048)).min(1).max(12) }), { session: true, rate: 60 }),
-  /**
-   * Repair local mail data (worksuite-desktop#338): check the database; clear Mail's copy to be downloaded again, or
-   * — the check failed — rebuild it on restart. Unsent mail, drafts and settings are kept either way.
-   */
-  'offline:repairMail': ch(none, { session: true, sensitive: true, rate: 1 }),
-  /** Remove one mailbox's saved mail from this computer (the mailbox was removed from the account). */
-  'offline:clearMailbox': ch(z.strictObject({ mailbox: z.string().regex(/^\d{1,12}$/) }), { session: true, sensitive: true, rate: 5 }),
-  /** Mail search over what this computer keeps (lists and opened messages), for when the server cannot be reached. */
-  'offline:mailSearch': ch(z.strictObject({ q: z.string().min(1).max(200) }), { session: true, rate: 30 }),
-  /**
-   * A folder's list from what this computer keeps (worksuite-desktop#208): every saved page of it, one row per
-   * message, newest first, `limit` from `offset`. `mailbox` null is every account (All Accounts, with `role`).
-   */
-  'offline:mailList': ch(
-    z.strictObject({
-      mailbox: z.string().regex(/^\d{1,12}$/).nullable(),
-      folder: z.string().min(1).max(500),
-      role: z.enum(['inbox', 'drafts', 'archive', 'sent', 'trash', 'junk']).nullable().optional(),
-      limit: z.number().int().min(1).max(500),
-      offset: z.number().int().min(0).max(100_000).optional(),
-    }),
-    { session: true, rate: 60 },
-  ),
-  // Mail data files (ENH-MAIL-03 DMO-DAT-01…04): the main process picks, the worker reads, the server receives.
-  'mailfile:pick': ch(z.strictObject({ mode: z.enum(['file', 'folder', 'view']) }), { session: true, rate: 2 }),
-  'mailfile:scan': ch(z.strictObject({ handle: mailFileHandle }), { session: true, rate: 5 }),
-  'mailfile:import': ch(
-    z.strictObject({
-      handle: mailFileHandle,
-      importId: z.number().int().positive(),
-      plan: z.array(z.strictObject({ folder: z.number().int().positive(), source: z.string().max(500), destination: z.string().min(1).max(500).regex(/^[\x20-\x7e]+$/) })).max(5000),
-    }),
-    { session: true, sensitive: true, rate: 2 },
-  ),
-  'mailfile:progress': ch(z.strictObject({ handle: mailFileHandle }), { session: true }),
-  'mailfile:cancel': ch(z.strictObject({ handle: mailFileHandle }), { session: true }),
-  'mailfile:view': ch(z.strictObject({ handle: mailFileHandle }), { session: true, rate: 5 }),
-  'mailfile:saveAttachment': ch(z.strictObject({ handle: mailFileHandle, index: z.number().int().min(0).max(10_000) }), { session: true, rate: 3 }),
-  'mailfile:close': ch(z.strictObject({ handle: mailFileHandle }), { session: true }),
-  // Export a folder or search result (DMO-DAT-03): only when the organisation allows it, and audited.
-  'mail:export': ch(
-    z.strictObject({
-      mailbox: z.string().regex(/^\d{1,20}$/).nullable(),
-      folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/),
-      folderName: z.string().max(200),
-      format: z.enum(['mbox', 'eml']),
-      items: z.array(z.strictObject({ uid: z.string().regex(/^\d{1,20}$/), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), mailbox: z.string().regex(/^\d{1,20}$/).nullable() })).max(10_000).optional(),
-    }),
-    { session: true, sensitive: true, rate: 1 },
-  ),
-  'mail:exportCancel': ch(none, { session: true }),
-  // A link in a message, after the safe-link check (DMO-SEC-03): `confirmed` when the person chose to go on past a warning.
-  'mail:openLink': ch(z.strictObject({ url: z.string().url().max(4096), confirmed: z.boolean() }), { session: true, rate: 5 }),
-  // Spell check's languages (worksuite-desktop#188): what this computer has, and the choice.
-  'mail:spellLanguages': ch(none, { session: true }),
-  /**
-   * A message's allowed pictures as data: URLs (worksuite-desktop#163): those kept in the local mail store at once;
-   * with `fetch`, the rest through WorkSuite's image proxy, then kept. Never fetched from the sender directly.
-   */
-  'mail:images': ch(z.strictObject({ urls: z.array(z.string().regex(/^https?:\/\/\S+$/i).max(2000)).max(60), mailbox: z.string().regex(/^\d{1,12}$/).nullable(), fetch: z.boolean() }), { session: true, rate: 30 }),
-  /**
-   * Which of a message's attachments are kept in the local mail store (they open at once, also offline); with
-   * `auto`, those Settings › Mail › Images & media downloads ahead are downloaded first (#163).
-   */
-  'mail:keptAttachments': ch(
-    z.strictObject({
-      uid: z.string().regex(/^\d{1,20}$/),
-      folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/),
-      mailbox: z.string().regex(/^\d{1,20}$/).nullable(),
-      items: z.array(z.strictObject({ ref: z.string().min(1).max(512), name: z.string().max(512), mime: z.string().max(255), size: z.number().int().min(0) })).max(50),
-      auto: z.boolean(),
-    }),
-    { session: true, rate: 30 },
-  ),
-  'mail:setSpellLanguages': ch(z.strictObject({ languages: z.array(z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/)).max(4) }), { session: true, rate: 5 }),
-  // S/MIME (DMO-SEC-05): a signed message checked against its own bytes, in the main process.
-  'smime:verify': ch(z.strictObject({ uid: z.string().regex(/^\d{1,20}$/), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), mailbox: z.string().regex(/^\d{1,20}$/).nullable() }), { session: true, rate: 5 }),
   // Contact Support (D-11): a picture of the asking window, and the last day's redacted log — shown before they go.
   'support:displays': ch(none, { session: true }),
   'support:wall': ch(z.object({ displayId: z.number().int().nullable() }), { session: true, rate: 10 }),
   'support:wallClose': ch(none, { session: true }),
-  'slides:present': ch(z.object({ id: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), presenter: z.boolean().optional() }), { session: true, rate: 5 }),
-  'slides:close': ch(none, { session: true }),
   'help:capture': ch(none, { session: true, rate: 5 }),
   'help:logs': ch(none, { session: true, rate: 10 }),
-  'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
-  'offline:retry': ch(z.object({ id: idString }), { session: true }),
-  'offline:discard': ch(z.object({ id: idString }), { session: true }),
-  // A module's outbox (Support's D-09): a queued change's words and the server's answer, edited before it goes, and
-  // the queue sent now.
-  'offline:detail': ch(z.object({ id: idString }), { session: true }),
-  'offline:edit': ch(z.object({ id: idString, body: z.unknown() }), { session: true, rate: 10 }),
-  'offline:replay': ch(none, { session: true, rate: 2 }),
-  'offline:saveDraft': ch(
-    z.object({ module: z.string().max(64), context: z.string().max(256), content: z.unknown() }),
-    { session: true, rate: 20 },
-  ),
-  'offline:getDraft': ch(z.object({ module: z.string().max(64), context: z.string().max(256) }), { session: true }),
-  'offline:listDrafts': ch(z.object({ module: z.string().max(64).optional() }).optional(), { session: true }),
-  'offline:deleteDraft': ch(z.object({ module: z.string().max(64), context: z.string().max(256) }), { session: true }),
-  'offline:clearCache': ch(none, { session: true, sensitive: true, rate: 1 }),
-  'offline:search': ch(z.object({ q: z.string().min(1).max(200) }), { session: true, rate: 10 }),
 
   'security:lock': ch(none, { session: true, whileLocked: true }),
   'security:unlockPassword': ch(z.object({ password: z.string().min(1).max(512) }), { whileLocked: true, rate: 1 }),
@@ -1722,7 +476,7 @@ export interface WindowState {
   buttonLayout?: ButtonLayout;
 }
 
-export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, BoardOutputs, SalesOutputs, LabelOutputs, SinhalaOutputs, AccountsOutputs, ChequeOutputs {
+export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, BoardOutputs, SalesOutputs, LabelOutputs, SinhalaOutputs, AccountsOutputs, ChequeOutputs, MailOutputs, RingingOutputs, OfflineOutputs, DesksOutputs, MeetOutputs, RemoteControlOutputs, DocumentsOutputs, TransfersOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;
@@ -1731,27 +485,6 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'links:audit': void;
   'app:setDockIcon': boolean;
   'app:setOverlayIcon': boolean;
-  'local:enter': LocalStatus;
-  'local:leave': void;
-  'local:status': LocalStatus;
-  'local:profile': LocalProfile;
-  'local:unlock': { unlocked: boolean; retryAfter: number };
-  'local:api': { status: number; data: unknown; message: string | null };
-  'local:overview': LocalOverview;
-  'local:export': { saved: boolean };
-  'local:restorePreview': RestorePreview | null;
-  'local:restore': { added: number; skipped: number };
-  'local:deleteAll': void;
-  'local:meeting': void;
-  'local:joinMeeting': { id: number };
-  'local:moveOffer': MoveOffer | null;
-  'local:move': MoveResult;
-  'local:keep': void;
-  'guest:pending': { input: string; server?: string } | null;
-  'guest:open': { id: number };
-  'guest:info': GuestMeetInfo;
-  'guest:join': GuestMeetToken;
-  'guest:signIn': void;
   'auth:state': AuthState;
   'auth:setServer': AuthState;
   'auth:signIn': AuthState;
@@ -1771,56 +504,10 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'media:access': { granted: boolean };
   'media:permissions': { rows: MeetPermissionRow[] };
   'media:power': { onBattery: boolean };
-  'meet:barState': void;
-  'meet:barRead': { state: ShareBarState | null };
-  'meet:barAction': void;
   'media:screenIndicator': void;
   'media:screenSources': ScreenSources;
   'media:screenPick': void;
   'media:privacySettings': void;
-  'calls:active': void;
-  'calls:list': ActiveCall[];
-  'meetrec:preflight': { folder: string; free: number | null; ok: boolean; why: string | null; screen?: ScreenRecordingAccess; fix?: 'screen-permission' | null };
-  'meetrec:start': { id: string };
-  'meetrec:active': void;
-  'meetrec:abort': void;
-  'meetrec:chunk': void;
-  'meetrec:stop': void;
-  'meetrec:list': LocalRecording[];
-  'meetrec:retry': void;
-  'meetrec:discard': void;
-  'meetrec:reveal': void;
-  'meetrec:chooseFolder': string | null;
-  'meetrec:open': boolean;
-  'meetrec:downloads': Record<string, string>;
-  'stt:status': SpeechStatus;
-  'stt:chooseModel': SpeechStatus;
-  'stt:catalog': SpeechCatalog;
-  'stt:install': SpeechStatus;
-  'stt:removeModel': SpeechStatus;
-  'stt:transcribe': { segments: SpeechSegment[] };
-  'speech:ready': void;
-  'speech:result': void;
-  'rc:state': RemoteControlView;
-  'rc:recheck': RemoteControlView;
-  'rc:checks': { checks: DiagnosticCheck[] };
-  'rc:restart': void;
-  'rc:setAllowRequests': RemoteControlView;
-  'rc:setStopChord': RemoteControlView;
-  'rc:shareStarted': { shareId: number; controlOffered: boolean; why: string | null };
-  'rc:shareChanged': void;
-  'rc:shareStopped': void;
-  'rc:sharePaused': void;
-  'rc:packet': void;
-  'rc:consent': RemoteControlConsent;
-  'rc:answer': { status: string; stepUp?: boolean; message?: string };
-  'rc:pause': void;
-  'rc:resume': void;
-  'rc:stop': void;
-  'rc:fileAnswer': { status: string; confirmExecutable?: boolean; message?: string };
-  'rc:sendFile': { sent: number };
-  'rc:takeFile': { status: string; confirmExecutable?: boolean; message?: string };
-  'calls:focus': boolean;
   'auth:signOut': AuthState;
   'auth:completeSetup': AuthState;
   'auth:sessionId': { sid: number | null };
@@ -1838,11 +525,6 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'windows:toggleMaximize': boolean;
   'windows:close': void;
   'windows:state': WindowState;
-  'quickask:context': QuickAskContext & { shortcut: string | null };
-  'quickask:open': void;
-  'quickask:insert': boolean;
-  'quickask:close': void;
-  'quickask:handoff': void;
   'ai:rules': AiRules;
   'ai:localStatus': LocalAIStatus;
   'ai:localModels': LocalModelView[];
@@ -1866,30 +548,6 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'ai:upload': AiUpload | null;
   'ai:answerReady': boolean;
   'ai:ask': unknown;
-  'ring:state': WebchatRingState;
-  'ring:join': boolean;
-  'ring:silence': void;
-  'ring:pass': boolean;
-  'ring:test': RingTestStep[];
-  'ring:joinSend': { ok: boolean; why: string | null };
-  'ring:reply': { ok: boolean; why: string | null };
-  'ring:closeJoined': void;
-  'ring:minimise': void;
-  'ring:fit': void;
-  'ring:openInbox': void;
-  'ring:outcome': void;
-  'ring:draft': void;
-  'ring:trayFit': void;
-  'ring:tray': void;
-  'live:open': void;
-  'live:info': LiveDeskInfo;
-  'live:wall': void;
-  'ring:followUp': { ok: boolean; why: string | null };
-  'ring:viewing': void;
-  'ring:handoff': boolean;
-  'ring:call': boolean;
-  'ring:mic': void;
-  'ring:onCall': void;
   'realtime:watch': void;
   'realtime:receipt': void;
   'windows:detach': { id: number };
@@ -1900,55 +558,12 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'windows:restoreDetached': number;
   'tabs:save': void;
   'tabs:restore': { tabs: TabRecord[]; activeId: string | null; side: { id: string; split: number } | null; restored: boolean };
-  'files:pickFiles': PickedFile[];
-  'files:registerDropped': PickedFile[];
-  'files:pickFolder': PickedFile[];
-  'files:chooseDownloadFolder': string | null;
-  'files:saveText': string | null;
   'payroll:verify': { verified: boolean; method: 'touch-id' | 'none' };
   /** The path written, or null when the person cancelled. */
   'payroll:saveFile': string | null;
   /** The chosen file's name, folder and text, or null when cancelled. */
   'assets:openFile': { name: string; folder: string; text: string } | null;
-  'transfers:list': Transfer[];
-  'transfers:download': Transfer;
   'pms:download': Transfer;
-  'transfers:upload': Transfer[];
-  'transfers:prepareMedia': PickedFile & { preview?: string; mime?: string };
-  'transfers:pause': void;
-  'transfers:resume': void;
-  'transfers:cancel': void;
-  'transfers:retry': void;
-  'transfers:open': boolean;
-  'transfers:reveal': boolean;
-  'transfers:clearFinished': void;
-  'transfers:pauseAll': void;
-  'transfers:resumeAll': void;
-  'transfers:resetSettings': { preferences: Preferences; locks: PreferenceLock[] };
-  'sync:status': SyncStatus;
-  'sync:devices': { devices: SyncDevice[]; policy: SyncPolicy | null; thisDevice: number | null };
-  'sync:deviceAction': void;
-  /** null: the dialog was cancelled. */
-  'sync:add': SyncStatus | null;
-  'sync:remove': SyncStatus;
-  'sync:setMode': SyncStatus;
-  'sync:pause': SyncStatus;
-  'sync:now': SyncStatus;
-  'sync:resolve': SyncStatus;
-  'sync:reveal': boolean;
-  'sync:lookup': SyncLookup;
-  'sync:reconnect': SyncStatus;
-  'sync:conflicts': DriveConflict[];
-  'sync:resolveConflict': { message: string };
-  'image:localInfo': LocalImageInfo;
-  'image:localRead': Uint8Array;
-  'image:localSave': { willBe: number; name: string };
-  'image:openSystem': boolean;
-  'image:prepareDrag': { token: string };
-  'image:startDrag': boolean;
-  'image:cacheGet': { bytes: Uint8Array; type: string; savedAt: string } | null;
-  'image:cachePut': void;
-  'image:saveAs': { name: string } | null;
   'notifications:context': void;
   'notifications:list': { items: NotificationItem[]; unread: number };
   'notifications:markRead': void;
@@ -1959,170 +574,16 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'notifications:permission': NotificationPermission;
   'notifications:openSettings': boolean;
   'notifications:refresh': void;
-  'mailAlert:view': void;
-  'mailAlert:action': { ok: boolean; sending?: { id: string; at: number } | null };
-  'mailAlert:clear': void;
-  'mailAlert:pause': MailAlertState;
-  'mailAlert:state': MailAlertState;
-  'mailAlert:latest': MailAlertCard | null;
-  'mailAlert:prefs': MailAlertState;
   'clipboard:readForPaste': { text: string | null; image: string | null; files: PickedFile[] };
-  'print:print': boolean;
-  'print:printers': Array<{ name: string; displayName: string; isDefault: boolean }>;
-  'print:toPdf': string | null;
-  'pdf:open': PdfSessionView;
-  'pdf:state': PdfSessionView;
-  'pdf:unlock': PdfSessionView;
-  'pdf:retry': PdfSessionView;
-  'pdf:close': void;
-  'pdf:render': PdfBitmap;
-  'pdf:thumbnail': PdfBitmap;
-  'pdf:cancel': number;
-  'pdf:search': { searchId: string };
-  'pdf:searchCancel': void;
-  'pdf:outline': PdfOutlineNode[];
-  'pdf:links': PdfLinkView[];
-  'pdf:followLink': { opened: boolean; reason: string | null };
-  'pdf:attachments': PdfAttachmentView[];
-  'pdf:details': PdfDriveDetails | null;
-  'pdf:coverGet': Uint8Array | null;
-  'pdf:coverPut': void;
-  'pdf:print': { printed: boolean; pages: number; reason: string | null };
-  'pdf:pickLocal': PdfLocalPick[];
-  'pdf:registerDropped': { files: PdfLocalPick[]; rejected: Array<{ name: string; reason: string }> };
-  'pdf:diagnostics': { checks: PdfDiagnosticCheck[]; failures: PdfFailureReport[] };
-  'pdf:mode': PdfSessionView;
-  'pdf:edit': PdfSessionView;
-  'pdf:undo': PdfSessionView;
-  'pdf:redo': PdfSessionView;
-  'pdf:annotations': PdfAnnotView[];
-  'pdf:textSpan': { rects: PdfRect[]; text: string };
-  'pdf:save': PdfSessionView;
-  'pdf:resolve': PdfSessionView;
-  'pdf:discard': PdfSessionView;
-  'pdf:extract': { saved: boolean; name: string | null };
-  'pdf:derive': PdfToolResult;
-  'pdf:compose': PdfToolResult;
-  'pdf:tokens': { available: boolean; reason: string | null; tokens: Array<{ module: string; token: string; manufacturer: string; certs: Array<{ module: string; token: string; id: string; label: string; der: string }> }> };
-  'pdf:tokenSign': Uint8Array;
-  'salon:deskPairing': SalonDeskPairing | null;
-  'salon:deskPair': { desk: SalonDeskInfo; message: string | null };
-  'salon:deskForget': void;
-  'salon:printSettings': SalonPrintSettings;
-  'salon:printSettingsSet': SalonPrintSettings;
-  'salon:printReceipt': SalonPrintOutcome;
-  'salon:printTest': SalonPrintOutcome;
-  'salon:printPage': SalonPrintOutcome;
-  'salon:openDrawer': SalonPrintOutcome;
-  'salon:syncStatus': SalonSyncStatus;
-  'salon:syncNow': SalonSyncStatus;
-  'salon:copy': SalonCopy | null;
-  'salon:copyClients': SalonCopyClient[];
-  'salon:outbox': SalonOutboxItem[];
-  'salon:outboxAdd': SalonOutboxItem;
-  'salon:outboxResolve': SalonOutboxItem[];
   'elearning:offlineList': OfflineCourse[];
   'elearning:offlineDownload': OfflineCourse;
   'elearning:offlineRemove': void;
   'elearning:offlineValidate': OfflineValidation;
-  'eventdesk:list': DeskRegistration[];
-  'eventdesk:status': DeskStatus;
-  'eventdesk:register': { registration: DeskRegistration; message: string; reregistered: boolean };
-  'eventdesk:rotateKey': { message: string };
-  'eventdesk:forget': number;
-  'eventdesk:sync': DeskStatus;
-  'eventdesk:scan': DeskScanOutcome;
-  'eventdesk:search': DeskSearchHit[];
-  'eventdesk:queue': DeskQueueItem[];
-  'eventdesk:queueResolve': DeskQueueItem[];
-  'eventdesk:walkIn': { provisional_number: string; message: string };
-  'eventdesk:printSettings': DeskPrintSettings;
-  'eventdesk:printSettingsSet': DeskPrintSettings;
-  'eventdesk:printJobs': DeskPrintOutcome;
-  'restaurant:pairing': RestaurantPairing | null;
-  'restaurant:pair': { pairing: RestaurantPairing; message: string };
-  'restaurant:unpair': { revoked: boolean; message: string | null; dropped: number };
-  'restaurant:status': RestaurantStatus;
-  'restaurant:syncNow': RestaurantStatus;
-  'restaurant:copy': RestaurantCopy | null;
-  'restaurant:outbox': RestaurantOutboxItem[];
-  'restaurant:outboxAdd': RestaurantOutboxItem;
-  'restaurant:outboxResolve': RestaurantOutboxItem[];
-  'restaurant:printSettings': RestaurantPrintSettings;
-  'restaurant:printSettingsSet': RestaurantPrintSettings;
-  'restaurant:printJobs': RestaurantPrintJobLog[];
-  'restaurant:printNow': number;
-  'restaurant:printTest': RestaurantPrintOutcome;
-  'restaurant:printText': RestaurantPrintOutcome;
-  'restaurant:openDrawer': RestaurantPrintOutcome;
-  'office:open': { viewId: string };
-  'office:place': boolean;
-  'office:snapshot': string | null;
-  'office:command': boolean;
-  'office:close': boolean;
-  'office:focusFile': boolean;
-  'office:externalApps': ExternalApp[];
-  'office:openExternal': OfficeLocalCopy;
-  'office:desktopApp': OfficeAppStatus;
-  'office:openInDesktopApp': boolean;
-  'office:localCopies': OfficeLocalCopy[];
-  'office:uploadLocal': { state: 'uploaded'; version: number | null } | { state: 'conflict'; conflict: NonNullable<OfficeLocalCopy['conflict']> } | { state: 'queued' };
-  'office:forgetLocal': boolean;
-  'office:revealLocal': boolean;
-  'office:localAvailable': { available: boolean; synced: boolean; preview: boolean; openInApp: boolean };
-  'office:openLocal': boolean;
-  'office:pickFile': OfficeLocalPick[];
-  'office:readFile': Uint8Array;
-  'office:writeFile': { size: number };
-  'office:readOffline': Uint8Array;
-  'office:writeOffline': { size: number; synced: boolean };
-  /** null: the dialog was cancelled. */
-  'office:saveCopy': { name: string } | null;
-  'offline:status': OfflineStatus;
-  'offline:pending': OfflineMutation[];
-  'offline:moduleBytes': number;
-  'offline:clearModule': number;
-  'offline:mailStats': MailStoreStats;
-  'offline:peek': Array<{ body: string; cachedAt: string } | null>;
-  'offline:clearMailbox': number;
-  'offline:repairMail': MailRepairResult;
-  'offline:mailSearch': Array<Record<string, unknown>>;
-  'offline:mailList': { messages: Array<Record<string, unknown>>; total: number };
-  'mailfile:pick': MailFileHandle | null;
-  'mailfile:scan': { folders: DataFolder[]; unreadable: string[] };
-  'mailfile:import': ImportProgress;
-  'mailfile:progress': ImportProgress | null;
-  'mailfile:cancel': void;
-  'mailfile:view': MailFileView;
-  'mailfile:saveAttachment': boolean;
-  'mailfile:close': void;
-  'mail:export': { count: number; failed: number; cancelled: boolean; name: string } | null;
-  'mail:exportCancel': void;
-  'mail:openLink': boolean;
-  'mail:spellLanguages': { choices: Array<{ code: string; label: string; available: boolean; reason?: string }>; current: string[]; system: boolean };
-  'mail:setSpellLanguages': string[];
-  'mail:images': { enabled: boolean; images: Record<string, string> };
-  'mail:keptAttachments': string[];
-  'smime:verify': SmimeVerdict;
   'support:displays': { displays: WallDisplay[]; open: boolean };
   'support:wall': void;
   'support:wallClose': void;
-  'slides:present': { presenter: boolean };
-  'slides:close': void;
   'help:capture': { name: string; data: string; width: number; height: number };
   'help:logs': { text: string; lines: number; bytes: number };
-  'offline:submit': SubmitResult;
-  'offline:retry': void;
-  'offline:discard': void;
-  'offline:detail': { body: unknown; response: unknown } | null;
-  'offline:edit': void;
-  'offline:replay': { done: number; conflicts: number; failed: number; remaining: number };
-  'offline:saveDraft': Draft;
-  'offline:getDraft': Draft | null;
-  'offline:listDrafts': Draft[];
-  'offline:deleteDraft': void;
-  'offline:search': OfflineSearchResult[];
-  'offline:clearCache': number;
   'security:lock': LockState;
   'security:unlockPassword': { ok: boolean; message: string | null };
   'security:unlockBiometric': { ok: boolean; message: string | null };

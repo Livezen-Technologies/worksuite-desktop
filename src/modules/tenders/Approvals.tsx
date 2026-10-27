@@ -4,8 +4,8 @@ import { errorMessage } from '../../core/bridge';
 import { relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { K, useOwners, type Workspace } from './api';
 import { addApproval, decideApproval } from './work';
 

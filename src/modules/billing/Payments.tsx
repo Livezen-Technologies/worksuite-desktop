@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../../components/PageKit';
 import { amount, can, K, METHODS, methodLabel, unallocate } from './api';
 import { allocateFx, allocatePayment, converted, deletePayment, fetchPayment, fetchPayments, fetchSlips, KB, oldestFirst, openInvoicesOf, PER_PAGE, receiptPdf, refundable, refundPayment, removeSlip, uploadSlip, type PaymentDetail } from './more';
 import { money, StatusChip } from './parts';

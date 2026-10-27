@@ -9,10 +9,10 @@ import { Icon } from '../../components/Icon';
 import { ModuleSettingsForm } from '../../components/ModuleSettingsForm';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Sheet, THead } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Sheet, THead } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { MONTHS, problemsOf, refusal, shortDate } from '../finance/api';
-import { ConfirmSheet, LoadFailed, Notice } from '../finance/parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
 import { can, canAct, K, money, type Org } from './api';
 import {
   addFx,

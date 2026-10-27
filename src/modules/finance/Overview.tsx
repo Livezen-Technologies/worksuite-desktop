@@ -5,9 +5,9 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { StatCard, type StatTone } from '../../components/StatCard';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Field, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, Sheet } from '../../components/PageKit';
 import { fetchCurrencies, isNegative, isZero, K, longDate, money, MONTHS, openBooks, refusal, type Company, type Dashboard, type Owed } from './api';
-import { Caps, GoRow, LoadFailed, Notice } from './parts';
+import { Caps, GoRow, LoadFailed, Notice } from '../../components/RecordKit';
 import type { FinanceView } from './Rail';
 
 /**

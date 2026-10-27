@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Seg, Sheet, SidePanel } from '../../components/PageKit';
 import { amount, can, fetchBankAccounts, fetchInvoice, K, searchCustomers, useBillingOrgs, type Customer } from './api';
 import { applyNote, createNote, deleteNote, fetchModes, fetchNote, fetchNotes, issueNote, KB, notePdf, notesTotal, openInvoicesOf, PER_PAGE, refundCredit, unapplyNote, type NoteDetail } from './more';
 import { exportRequest } from './actions';

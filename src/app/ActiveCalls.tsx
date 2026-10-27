@@ -3,7 +3,7 @@ import type { ActiveCall } from '@shared/types';
 import { call, on } from '../core/bridge';
 import { navigate } from '../core/tabs';
 import { Icon } from '../components/Icon';
-import { useNow } from '../modules/calls/parts';
+import { useNow } from '../components/CallKit';
 import { useWebsiteCall } from '../modules/chat/website/call';
 
 /**

@@ -13,7 +13,7 @@ import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { downloadStatus, localRecordingStatus, serverRecordingStatus } from '@shared/recording-status';
 import type { Room } from '../chat/types';
-import { useNow } from '../calls/parts';
+import { useNow } from '../../components/CallKit';
 import { PopMenu, below, type MenuAt, type MenuItem } from '../files/Menu';
 import { ScheduleDialog } from '../meetings/ScheduleDialog';
 import { createMeeting, formatCode, invitation, openMeeting, resolveCode, type Created, type HistoryRow, type Recording, type UpcomingRow } from './api';

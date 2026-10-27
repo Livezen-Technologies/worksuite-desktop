@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { call } from '../../core/bridge';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { humanise } from '../hr/parts';
+import { humanise } from '../../components/PageKit';
 import { fetchEnrolments, type Enrolment } from './api';
 import { Badge, Card, Pills, Table, amt, td, tdr, useReadOnly } from './parts';
 import { AssignmentCsv } from './PayrollExtras';

@@ -4,7 +4,7 @@ import { apiGet } from '../../core/api';
 import { relative } from '../../core/time';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { StatGrid } from '../../components/StatCard';
-import { btn, btnPrimary, PageHead, Panel, Seg, StatusChip } from '../hr/parts';
+import { btn, btnPrimary, PageHead, Panel, Seg, StatusChip } from '../../components/PageKit';
 import { useDashboard, type DashboardDetail } from './api';
 import { BarRow, Kpi, ListLine, money, stageColour } from './parts';
 import type { CrmView } from './Rail';

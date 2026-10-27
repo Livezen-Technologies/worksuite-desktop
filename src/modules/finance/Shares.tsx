@@ -5,10 +5,10 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner } from '../../components/ui';
-import { btnBad, Cell, PageHead, row, THead } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btnBad, Cell, PageHead, row, THead } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, refusal, shortDate } from './api';
-import { ConfirmSheet, LoadFailed, Notice } from './parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { calendarDay, fetchShares, forbiddenWhy, KS, revokeShare, type ShareRow } from './setup';
 

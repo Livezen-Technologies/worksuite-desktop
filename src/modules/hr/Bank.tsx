@@ -5,7 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
 import type { BankInfo } from './api';
-import { btn, btnPrimary, Field, input, Panel, Sheet, StatusChip } from './parts';
+import { btn, btnPrimary, Field, input, Panel, Sheet, StatusChip } from '../../components/PageKit';
 
 /**
  * The bank card (HrProfileSheet "Bank"): where the salary goes, masked.

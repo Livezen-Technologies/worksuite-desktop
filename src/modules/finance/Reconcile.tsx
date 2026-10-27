@@ -6,11 +6,11 @@ import { todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, isZero, K, money, problemsOf, shortDate, type Company } from './api';
 import { BK, fetchBankAccounts, fetchRecs, fetchStatements, lastMonth, openRec, periodProblems, provedStatement, type BankAccount, type Batch } from './banking';
-import { LoadFailed, Notice } from './parts';
+import { LoadFailed, Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import ReconcileWorkspace from './ReconcileWorkspace';
 

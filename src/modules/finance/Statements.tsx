@@ -6,9 +6,9 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnSmall, Field, input, PageHead } from '../hr/parts';
+import { btn, btnSmall, Field, input, PageHead } from '../../components/PageKit';
 import { can, isNegative, longDate, money, shortDate, type Company } from './api';
-import { Notice } from './parts';
+import { Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import {
   backwards,

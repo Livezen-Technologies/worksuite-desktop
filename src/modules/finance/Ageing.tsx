@@ -5,10 +5,10 @@ import { useStore } from '../../core/store';
 import { todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnSmall, Empty, input, PageHead } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnSmall, Empty, input, PageHead } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { isZero, longDate, money, shortDate } from './api';
-import { Notice } from './parts';
+import { Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { ageLabel, ageingKey, BUCKETS, docsFor, endOfLastMonth, fetchAgeing, partyKey, refusedRead, sideWords, tieSentences, type AgeingDoc, type Side, type TieOut } from './owed';
 

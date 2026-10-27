@@ -5,8 +5,8 @@ import { useStore } from '../../core/store';
 import { todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
-import { Cell, Empty, Kpi, PageHead, Panel, Seg, THead, row } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { Cell, Empty, Kpi, PageHead, Panel, Seg, THead, row } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { isNegative, isZero, money, problemsOf, shortDate } from './api';
 import { CurrencyPicker, FxNotice } from './Currency';
 import {
@@ -24,7 +24,7 @@ import {
   type CashOverview as CashData,
   type Forecast as ForecastData,
 } from './insight';
-import { Notice } from './parts';
+import { Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { NotGranted, RangeFields, ReadFailed, ReportBar } from './ReportBar';
 import { ShareBar, TrendChart } from './Trend';

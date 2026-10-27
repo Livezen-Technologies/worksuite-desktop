@@ -7,7 +7,7 @@ import { toast } from '../../../core/toasts';
 import { useStore } from '../../../core/store';
 import { Icon } from '../../../components/Icon';
 import { Button, Modal, TextField, cx } from '../../../components/ui';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import type { CallPerson } from '../../calls/ui/people';
 import { offerFor, pauseText, type ControlSession, type RemoteFile, type Share } from './api';
 import { remote, type Prompts, type Waiting } from './controller';

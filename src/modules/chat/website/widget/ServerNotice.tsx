@@ -3,7 +3,7 @@ import type { ServerCapabilities } from '../../../../core/capabilities';
 import { call, errorMessage } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
 import { toast } from '../../../../core/toasts';
-import { Note } from '../../../account/parts';
+import { Note } from '../../../../components/CardKit';
 import { versionNotice, type CommFeature } from './serverSupport';
 
 /**

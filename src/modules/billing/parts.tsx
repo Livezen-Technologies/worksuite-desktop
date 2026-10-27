@@ -12,4 +12,4 @@ export function StatusChip({ status, late }: { status: string; late?: number }) 
   );
 }
 
-export { money, moneyFull } from '../crm/parts';
+export { money, moneyFull } from '../../components/ReportKit';

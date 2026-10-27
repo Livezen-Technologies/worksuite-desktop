@@ -1,13 +1,16 @@
 import type { ReactNode } from 'react';
-import { Icon } from '../../components/Icon';
-import { cx } from '../../components/ui';
-import { topBarPaddingRight } from '../../core/window-chrome';
-import { StatCard, type StatTone } from '../../components/StatCard';
+import { Icon } from './Icon';
+import { cx } from './ui';
+import { topBarPaddingRight } from '../core/window-chrome';
+import { StatCard, type StatTone } from './StatCard';
 
 /**
  * The HR designs' shared pieces: the status chip (one colour per meaning,
  * matched on the words the server uses), KPI cards, panels, the segmented
  * control, page headings, table headings and the form controls.
+ *
+ * First drawn for People (it was `hr/parts`), now the page kit of the business modules — Finance, Inventory,
+ * Purchase, Sales, Tenders and the rest — so no module borrows another's parts (audit D-G08).
  */
 const TONES: Array<[RegExp, string]> = [
   // Neutral first: "Non-working day" must not read as "working".

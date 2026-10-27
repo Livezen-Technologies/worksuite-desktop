@@ -7,7 +7,7 @@ import { addDays, todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, PageHead, Panel, Seg } from '../hr/parts';
+import { btn, PageHead, Panel, Seg } from '../../components/PageKit';
 import type { CrmReports } from './api';
 import { exportCrmCsv } from './exportCsv';
 import { isMissing } from './logic';

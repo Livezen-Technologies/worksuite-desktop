@@ -5,7 +5,7 @@ import { dateLabel, dayWords, relative, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { btnPrimary, btnSmall, Empty, Facts, Field, input, Panel } from '../hr/parts';
+import { btnPrimary, btnSmall, Empty, Facts, Field, input, Panel } from '../../components/PageKit';
 import { money } from './api';
 import { saveTenderFile } from './files';
 import { fetchLetters, fetchNotice, generateLetter, INSTRUMENTS, K2, labelOf, NOTICE_FIELDS, noticeBody, noticeDraft, saveNotice } from './work';

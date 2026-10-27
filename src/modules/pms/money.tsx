@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Select } from '../../components/Select';
 import { Button, Modal } from '../../components/ui';
-import { Field, input } from '../garage/parts';
+import { Field, input } from '../../components/FormKit';
 import { errorText, K, money, pGet, type Shift } from './api';
 import { device } from './devices';
 import { Refusal, usePms } from './parts';

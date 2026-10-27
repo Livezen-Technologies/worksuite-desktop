@@ -10,7 +10,7 @@ import { Icon } from '../../components/Icon';
 import { ErrorNote, FileBadge, Spinner, cx } from '../../components/ui';
 import type { DocList, EmployeeDoc } from './api';
 import { dayLong } from './dates';
-import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, row, Seg, Sheet, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, row, Seg, Sheet, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 
 /**

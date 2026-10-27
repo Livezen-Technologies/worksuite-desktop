@@ -3,7 +3,7 @@ import { Button, Spinner } from '../../components/ui';
 import { call } from '../../core/bridge';
 import { bytes } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { errorText, when } from './api';
 import { useOfflineCourses } from './offline';
 import { Bar, Pill, useEl } from './parts';

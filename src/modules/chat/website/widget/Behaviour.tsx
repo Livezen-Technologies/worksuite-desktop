@@ -7,7 +7,7 @@ import { toast } from '../../../../core/toasts';
 import { CollapsibleSection } from '../../../../components/Collapsible';
 import { Select } from '../../../../components/Select';
 import { Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
-import { Note, SettingRow } from '../../../account/parts';
+import { Note, SettingRow } from '../../../../components/CardKit';
 import {
   GUIDES,
   MAX_MINUTES,

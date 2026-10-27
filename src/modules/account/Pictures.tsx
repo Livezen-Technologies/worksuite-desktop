@@ -8,11 +8,11 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { pictureUrl, useMe, UserPicture } from '../../components/UserPicture';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
-import { btn, btnPrimary } from '../hr/parts';
+import { btn, btnPrimary } from '../../components/PageKit';
 import type { OpenEditor } from './AccountPage';
 import { abilities, K, usePictures, useRefreshMe, type Picture } from './api';
 import { BACKGROUNDS, LOOKS } from './avatarArt';
-import { Card, Head, Note, Pill } from './parts';
+import { Card, Head, Note, Pill } from '../../components/CardKit';
 import { VisibilityCards } from './visibility';
 
 /**

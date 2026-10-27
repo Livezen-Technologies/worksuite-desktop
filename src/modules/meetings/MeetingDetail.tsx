@@ -9,7 +9,7 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, dateLabel, relative, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Button, Chip, Empty, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
-import { useNow } from '../calls/parts';
+import { useNow } from '../../components/CallKit';
 import { openMeeting } from '../meet/api';
 import { RecordingProgress } from '../meet/RecordingProgress';
 import type { Stroke } from '../meet/session';

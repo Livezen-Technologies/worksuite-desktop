@@ -11,7 +11,7 @@ import { markdownLine } from '../../../../core/markdown';
 import { useStore } from '../../../../core/store';
 import { parseTs, timeLabel } from '../../../../core/time';
 import { toast } from '../../../../core/toasts';
-import { useNow } from '../../../calls/parts';
+import { useNow } from '../../../../components/CallKit';
 import { useWebsiteInbox, WEBSITE, type Section } from '../api';
 import { PaneNotice, RetryButton, useSlow } from '../ThreadPlaceholder';
 import { findCountry, flagOf } from './countries';

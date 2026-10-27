@@ -4,7 +4,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Empty, Field, input, Kpi, PageHead, Panel, Seg, Sheet, StatusChip } from './parts';
+import { btn, btnPrimary, Empty, Field, input, Kpi, PageHead, Panel, Seg, Sheet, StatusChip } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 import { StatGrid } from '../../components/StatCard';

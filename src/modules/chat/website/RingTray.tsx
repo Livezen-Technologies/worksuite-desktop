@@ -11,7 +11,7 @@ import { timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { cx, Spinner } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { ReplyBox, joinSend, useFit, useRingDraft } from './RingCard';
 import { useRingState, waited } from './Ringing';
 import { DASHBOARD_KEYS, homeOf, MAP_KEYS } from './live/LiveDashboard';

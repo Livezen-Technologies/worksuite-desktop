@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Icon } from '../../components/Icon';
-import { Empty, Panel, Seg } from '../hr/parts';
+import { Empty, Panel, Seg } from '../../components/PageKit';
 import { isNegative, isZero, money } from './api';
 import { magnitude, num, rankDimensions, type Dimension } from './insight';
-import { Notice } from './parts';
+import { Notice } from '../../components/RecordKit';
 import { ShareBar } from './Trend';
 
 /**

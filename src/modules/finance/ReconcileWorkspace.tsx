@@ -7,8 +7,8 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { StatCard } from '../../components/StatCard';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, input, Seg, SidePanel } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, input, Seg, SidePanel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, isNegative, K, money, refusal, shortDate, type Company } from './api';
 import {
   arithmetic,
@@ -35,7 +35,7 @@ import {
   type Kind,
   type Txn,
 } from './banking';
-import { Caps, ConfirmSheet, LoadFailed, Notice, ReasonSheet } from './parts';
+import { Caps, ConfirmSheet, LoadFailed, Notice, ReasonSheet } from '../../components/RecordKit';
 import type { FinanceView } from './Rail';
 
 /**

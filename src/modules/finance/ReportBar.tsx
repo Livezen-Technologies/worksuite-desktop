@@ -5,10 +5,10 @@ import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
-import { btn, btnPrimary, btnSmall, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Field, input, Sheet } from '../../components/PageKit';
 import { problemsOf, refusal, shortDate, type Company } from './api';
 import { createShareLink, printPath, reportGates, shareLink, type FinanceReport } from './insight';
-import { ConfirmSheet, LoadFailed, Notice } from './parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
 
 /**
  * Getting a report out, and the chrome every reading screen shares: the

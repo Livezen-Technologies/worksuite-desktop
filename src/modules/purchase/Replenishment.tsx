@@ -3,10 +3,10 @@ import { useState } from 'react';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnPrimary, Empty, PageHead } from '../hr/parts';
+import { btnPrimary, Empty, PageHead } from '../../components/PageKit';
 import { num, qty, type Warehouse } from '../inventory/api';
 import { fetchReplenishment, KI, raiseRequests } from '../inventory/insight';
-import { minWidth } from '../inventory/parts';
+import { minWidth } from '../../components/ListKit';
 import { Checkbox } from '../../components/Checkbox';
 import { refreshPurchase } from './api';
 

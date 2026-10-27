@@ -5,7 +5,7 @@ import { apiGet, apiPost } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
-import { useNow } from '../calls/parts';
+import { useNow } from '../../components/CallKit';
 import type { Recording } from './api';
 import { DownloadStatusView, RecordingStatusView } from './RecordingStatus';
 import { transferAct, useLocalRecordings, useRecordingDownloads, useTransfers } from './recordings';

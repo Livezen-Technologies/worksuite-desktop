@@ -7,7 +7,7 @@ import { useTab } from '../../core/tab-context';
 import { relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Empty, Field, input, PageHead, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Empty, Field, input, PageHead, Sheet } from '../../components/PageKit';
 import { approve, fetchApprovals, has, K, KV, reject, type ApprovalRow } from './api';
 import { moveFocus, useSalesKeys } from './keys';
 import { OFFLINE_WRITE, useSalesOffline } from './offline';

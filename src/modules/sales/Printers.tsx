@@ -7,7 +7,7 @@ import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { Field, input, Panel } from '../hr/parts';
+import { Field, input, Panel } from '../../components/PageKit';
 import { printers, printSettings, setPrintSettings } from './print';
 
 /**

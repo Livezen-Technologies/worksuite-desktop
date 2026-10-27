@@ -7,11 +7,11 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../../components/PageKit';
 import { can, fetchCategories, K, num, qty, signed, stampWords, treeOf, type Warehouse } from './api';
 import { DocChip } from './Adjustments';
 import { countAct, countedOf, countKind, COUNT_KINDS, createCount, deleteCount, fetchCount, fetchCounts, KC, PER, saveCountLines } from './control';
-import { minWidth, Signed } from './parts';
+import { minWidth, Signed } from '../../components/ListKit';
 import { pick, WarehousePick } from './pickers';
 import CountDesk, { countsHere } from './CountDesk';
 

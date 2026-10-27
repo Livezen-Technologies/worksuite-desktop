@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnPrimary, Field, input } from '../hr/parts';
+import { btnPrimary, Field, input } from '../../components/PageKit';
 import type { CrmSettings } from './api';
 import { crmCan } from './parts';
 import { PipelinesEditor } from './Pipelines';

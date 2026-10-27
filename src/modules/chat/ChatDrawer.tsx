@@ -17,7 +17,7 @@ import { UserAvatar } from '../../components/UserAvatar';
 import { APP_CATALOGUE } from '@shared/apps';
 import { appColour } from '../../core/app-look';
 import { AppTile } from '../../components/AppTile';
-import { useNow } from '../calls/parts';
+import { useNow } from '../../components/CallKit';
 import { startCall } from '../calls/start';
 import { CALL_FILTERS, CallLogList, useCallLog, type CallFilter } from './CallLog';
 import { PRESENCE } from './Details';

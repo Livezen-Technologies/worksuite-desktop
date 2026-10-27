@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, IconButton, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { errorText, gGet, gPost, K, money, nice, when, type CustomerRow, type CustomerView, type Vehicle360, type VehicleJob } from './api';
 import { Ask, input, Section, StatusPill, useGarage } from './parts';
 import { NewCustomer } from './WalkIn';

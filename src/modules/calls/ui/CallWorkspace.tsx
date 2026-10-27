@@ -3,7 +3,7 @@ import { call, isMac } from '../../../core/bridge';
 import { hideWindowBar } from '../../../app/windowChrome';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
-import { CallAvatar, VideoView } from '../parts';
+import { CallAvatar, VideoView } from '../../../components/CallKit';
 import { CallSidePanel, type PanelTab } from './CallSidePanel';
 import { CallVideoPip } from './CallVideoPip';
 import { CoreCallControls, type ControlButton, type MenuEntry } from './CoreCallControls';

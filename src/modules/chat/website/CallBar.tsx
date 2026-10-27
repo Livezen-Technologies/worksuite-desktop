@@ -7,7 +7,7 @@ import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Menu, type MenuSection } from '../../../components/Menu';
 import { Button, Modal, cx } from '../../../components/ui';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { callLive, WEBSITE, type WebsiteCall, type WebsiteConversation } from './api';
 import { clock } from './Ringing';
 import { PANEL_CARD, PANEL_HEADING } from './rowParts';

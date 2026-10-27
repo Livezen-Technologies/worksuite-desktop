@@ -5,9 +5,9 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner } from '../../components/ui';
-import { btn, btnGood, btnSmall, PageHead } from '../hr/parts';
+import { btn, btnGood, btnSmall, PageHead } from '../../components/PageKit';
 import { can, K, money, refusal, shortDate } from './api';
-import { Notice } from './parts';
+import { Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { docKey, fetchUnposted, kindLabel, postedSentence, refusedRead, retryPosting, unpostedHeadline, unpostedKey, type UnpostedDoc } from './owed';
 

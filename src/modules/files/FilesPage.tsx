@@ -7,7 +7,7 @@ import { call, errorMessage, on, registerDropped } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
-import { useNow } from '../calls/parts';
+import { useNow } from '../../components/CallKit';
 import type { ModuleProps } from '../registry';
 import { ALL_VIEWS, TITLES, TONE, can, kindOf, openWay, pathTo, splitKeys, tree as loadTree, type DriveFile, type DriveFolder, type Key, type TreeNode, type View } from './api';
 import { DriveCtx, keyOf, type Drive, type Item } from './ctx';

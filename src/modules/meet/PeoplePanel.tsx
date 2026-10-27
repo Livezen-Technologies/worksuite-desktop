@@ -2,7 +2,7 @@ import { useState, useSyncExternalStore } from 'react';
 import type { Participant } from 'livekit-client';
 import { cx } from '../../components/ui';
 import { Icon } from '../../components/Icon';
-import { CallAvatar } from '../calls/parts';
+import { CallAvatar } from '../../components/CallKit';
 import { HandQueue } from './Activities';
 import { AddPeopleDialog, Invitations } from './InvitePeople';
 import { badgeRole } from './invites';

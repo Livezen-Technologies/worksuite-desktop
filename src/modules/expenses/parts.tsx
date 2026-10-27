@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
-import { btnPrimary } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btnPrimary } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 
 /**
  * The pieces every Expenses screen shares: the status pill, the engines'

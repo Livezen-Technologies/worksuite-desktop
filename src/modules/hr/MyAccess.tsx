@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiGet } from '../../core/api';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { PageHead, Panel, Seg } from './parts';
+import { PageHead, Panel, Seg } from '../../components/PageKit';
 
 /**
  * My access (HrAdminSheet "My access"; the web's HrAdmin): whose HR records

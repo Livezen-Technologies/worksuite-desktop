@@ -6,11 +6,11 @@ import { todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btnSmall, Cell, Empty, Field, PageHead, THead, row } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btnSmall, Cell, Empty, Field, PageHead, THead, row } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, money, shortDate } from './api';
 import { companyRow, CONSOLIDATED_FIGURES, decimalsOf, fetchConsolidated, IK, missingSlugs, rangeProblem, SCREEN_SLUGS, type Consolidated as ConsolidatedData } from './insight';
-import { Notice } from './parts';
+import { Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { NotGranted, RangeFields, ReadFailed } from './ReportBar';
 

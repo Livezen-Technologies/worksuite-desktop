@@ -5,7 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Sheet } from '../../components/PageKit';
 import ProductPictures, { sendPictures } from './ProductPictures';
 import { bodyOf, copyDraft, COSTING, createProduct, draftOf, fetchBrands, fetchCategories, fetchProduct, fetchUnits, K, KINDS, TRACKING, treeOf, updateProduct, type Company, type ProductDraft } from './api';
 import { Checkbox } from '../../components/Checkbox';

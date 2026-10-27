@@ -6,7 +6,7 @@ import { text } from '../../../../core/i18n';
 import { toast } from '../../../../core/toasts';
 import { Select } from '../../../../components/Select';
 import { Button, Empty, ErrorNote, Spinner, TextField, cx } from '../../../../components/ui';
-import { Note } from '../../../account/parts';
+import { Note } from '../../../../components/CardKit';
 import {
   AUTO,
   REPLIES,

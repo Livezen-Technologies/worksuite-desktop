@@ -9,7 +9,7 @@ import { apiPost } from '../../core/api';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Sheet } from '../../components/PageKit';
 import { bulk, createOrder, customers, K, lookupProducts, orderDefaults, previewApproval, PRIORITIES, scanUnit, submit, useOrgs, warehouses, ymd, type PreviewStep, type ProductHit } from './api';
 import { OFFLINE_WRITE, useSalesOffline } from './offline';
 import { moneyFull } from './parts';

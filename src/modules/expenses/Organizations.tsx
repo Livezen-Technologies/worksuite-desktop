@@ -4,10 +4,10 @@ import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
-import { btnPrimary, Field, input, Panel } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btnPrimary, Field, input, Panel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { MONTHS, problemsOf } from '../finance/api';
-import { Notice } from '../finance/parts';
+import { Notice } from '../../components/RecordKit';
 import { can, canAct, fetchOrgs, K } from './api';
 import { createOrg, KA, orgDraft, orgProblems, type OrgDraft } from './admin';
 

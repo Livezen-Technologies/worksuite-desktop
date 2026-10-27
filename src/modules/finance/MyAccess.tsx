@@ -4,10 +4,10 @@ import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { PageHead, Panel, Seg } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { PageHead, Panel, Seg } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, fetchAccess, fetchModuleAccess, K } from './api';
-import { Notice } from './parts';
+import { Notice } from '../../components/RecordKit';
 
 /**
  * My access · Finance: whose books I can open, and — the reason this exists —

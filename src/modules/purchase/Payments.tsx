@@ -7,7 +7,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { btn, btnPrimary, Empty, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Empty, Field, input, Sheet } from '../../components/PageKit';
 import { whole } from '../inventory/api';
 import { pick } from '../inventory/pickers';
 import { allocateOldest, fetchPayments, KP, OFFLINE_WRITE, recordPayment, refreshPurchase, usePurchaseCan, usePurchaseOffline } from './api';

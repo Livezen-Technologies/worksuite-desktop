@@ -16,6 +16,24 @@ person who has to live with the change — what it does, and where it bites.
 The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G19, D-G21, D-G22, D-G24, D-G25), and
 its release and CI round (D-G01, D-G02, D-G06, D-G20), and its UX round (D-G09, D-G12, D-G14, D-G23).
 
+### Changed (structure round)
+
+Nothing a person sees changes: the same screens, the same behaviour. (D-G08, D-G13)
+
+- **Modules no longer borrow each other's parts.** The shared pieces that lived inside modules moved to
+  `src/components`: the page kit (was `hr/parts`, used by 20 modules), the list, record, form, card, call, console
+  and report kits (were `inventory/parts`, `finance/parts`, `garage/parts`, `account/parts`, `calls/parts`,
+  `assets/parts` and `crm/parts`). Imports from one module into another fell from 792 (119 module pairs) to 376
+  (93 pairs). A lint rule now refuses a module importing another module's files; the pairs that remain — an API
+  client or a whole screen of another module — are a reviewed allow-list, each with why, that may only shrink.
+- **The largest files are split by area.** The main process's composition root (`electron/main/index.ts`, 4,457
+  lines) hands navigation, status, presence, the tray, website-chat ringing, the Live desk, Quick Ask, Marketing,
+  access, the session, IPC, accounts side by side and the lifecycle to their own files in `electron/main/wiring/`
+  (now 1,588 lines, which create the services and accounts); Settings is one file
+  per section (`SettingsPage.tsx` 2,267 → 212 lines); the IPC contract (2,236 → 711), the shared types (1,976 → 644)
+  and the transfer queue (1,865 → 539, with the queue, uploads and helpers beside it) are split the same way. Every
+  import path still works.
+
 ### Added (UX round)
 
 - **PDF Studio tools on this computer.** With the PDF engine the app already ships: a PDF from pictures or blank
