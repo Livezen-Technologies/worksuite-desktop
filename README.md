@@ -36,6 +36,7 @@ accept `http://localhost:<port>`; packaged builds accept HTTPS only.
 | `npm run dist:dir` | An unpacked app for this machine in `release/` |
 | `npm run dist:mac` / `dist:win` / `dist:linux` | Installers (see [docs/RELEASING.md](docs/RELEASING.md)) |
 | `npm run dist:mac:unsigned` | A DMG for testing, with no Apple certificate (see [docs/RELEASING.md](docs/RELEASING.md)) |
+| `npm run dist:mas` | A signed Mac App Store `.pkg` for TestFlight (see [docs/TESTFLIGHT.md](docs/TESTFLIGHT.md)) |
 
 ### End-to-end smoke test
 
@@ -112,7 +113,7 @@ build/               electron-builder config, entitlements, app icon
 On **WorkSuite OS** the app signs in, enrols, updates and locks through the OS: see [docs/WORKSUITE_OS.md](docs/WORKSUITE_OS.md).
 
 More: [architecture](docs/ARCHITECTURE.md) · [security](docs/SECURITY.md) ·
-[backend contract](docs/BACKEND.md) · [releasing](docs/RELEASING.md) ·
+[backend contract](docs/BACKEND.md) · [releasing](docs/RELEASING.md) · [TestFlight](docs/TESTFLIGHT.md) ·
 [requirement traceability](docs/TRACEABILITY.md) · [changelog](CHANGELOG.md)
 
 **PDF Studio** (`src/modules/pdf`, `electron/services/pdf`) opens PDFs from Files, Mail, this computer and the

@@ -35,6 +35,7 @@ const macSigning = require('./mac-signing.cjs');
 /** The macOS zip and pkg: wanted on CI and on request, not on every local build. */
 const macExtraTargets = Boolean(process.env.CI) || process.env.WS_MAC_ALL === '1';
 const linuxRepo = require('./linux-repo.cjs');
+const masCleanup = require('./mas-cleanup.cjs');
 // Universal Links (worksuite-desktop#170): with a provisioning profile that grants Associated Domains for
 // app.worksuite.lk (Team ID + lk.worksuite.desktop), the app is signed with it and claims those links. Without one
 // the build is as before: worksuite:// still works, and the web fallback page hands links over through it.
@@ -103,7 +104,14 @@ module.exports = {
   beforePack: macSigning.beforePack,
   afterSign: macSigning.afterSign,
   // Linux, only with WORKSUITE_LINUX_REPO=1: the package repository's marker, key and helper (worksuite-desktop#351).
-  afterPack: linuxRepo.afterPack,
+  // Mac App Store: no Login Helper, which TestFlight refuses without its own profile (build/mas-cleanup.cjs).
+  afterPack: async (context) => {
+    await linuxRepo.afterPack(context);
+    await masCleanup.afterPack(context);
+  },
+  // Mac App Store: removes the signed .app copies left beside the .pkg, which take over worksuite:// links on the
+  // build Mac and cannot run there (build/mas-cleanup.cjs).
+  afterAllArtifactBuild: masCleanup.afterAllArtifactBuild,
 
   mac: {
     category: 'public.app-category.business',
@@ -142,6 +150,18 @@ module.exports = {
       NSAppleEventsUsageDescription: 'WorkSuite types text for someone you let control this Mac, and only while control lasts.',
       LSMultipleInstancesProhibited: true,
     },
+  },
+  // Mac App Store / TestFlight (docs/TESTFLIGHT.md): `npm run dist:mas`. Sandboxed, signed with the Apple Distribution
+  // and Mac Installer Distribution certificates of team 7KQULK6DSS, with a Mac App Store provisioning profile. No
+  // hardened runtime (the App Store does not use it) and no notarization (App Store Connect checks the upload).
+  mas: {
+    type: 'distribution',
+    hardenedRuntime: false,
+    notarize: false,
+    entitlements: 'build/entitlements.mas.plist',
+    entitlementsInherit: 'build/entitlements.mas.inherit.plist',
+    provisioningProfile: process.env.WS_MAS_PROVISIONING_PROFILE || 'build/embedded.provisionprofile',
+    ...(process.env.WS_MAS_BUILD_NUMBER ? { bundleVersion: process.env.WS_MAS_BUILD_NUMBER } : {}),
   },
   dmg: { sign: false, title: 'WorkSuite ${version}' },
   pkg: { isRelocatable: false, allowAnywhere: false, allowCurrentUserHome: false, installLocation: '/Applications' },

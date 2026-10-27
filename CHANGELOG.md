@@ -13,6 +13,13 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+### Added (Mac App Store)
+
+- **A Mac App Store build for TestFlight.** `npm run dist:mas` builds a sandboxed universal app signed for the App
+  Store and writes a `.pkg` to upload with Transporter (docs/TESTFLIGHT.md). That build has no Login Helper (the app
+  itself is the login item) and no self-updates, because the App Store updates it. The direct-download builds are
+  unchanged.
+
 ### Added (quality round)
 
 - **Line coverage, measured on every build.** `npm run test:coverage` runs the unit tests with v8 coverage; CI runs
