@@ -16,6 +16,18 @@ person who has to live with the change — what it does, and where it bites.
 The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G19, D-G21, D-G22, D-G24, D-G25), and
 its release and CI round (D-G01, D-G02, D-G06, D-G20), and its UX round (D-G09, D-G12, D-G14, D-G23).
 
+### Changed (localization round)
+
+- **Sinhala and Tamil cover far more of the app — as drafts.** 3,920 phrases were added to each of
+  `shared/locales/si.json` and `ta.json`: the shell and navigation, common actions, Settings, My account, and Home,
+  Mail, Chat, Calendar, Tasks, Files, Meet, Calls, Contacts and Notifications. Across those areas coverage rose from
+  19% (1,270 of 6,806 phrases) to 80% (5,465); across the whole app from 1,132 to 5,139 of 21,127 phrases (5% to
+  24%). The new phrases are machine-drafted: `docs/localization/review.json` lists every one of them under
+  `machineDrafted` as "needs native review", and the languages stay in preview until a fluent speaker has been
+  through them. Sentence fragments the code glues together, website chat, channels and the image editor were left
+  in English rather than guessed at. The checked-in coverage report (`docs/localization/coverage.json`), which still
+  showed 256 of 11,743, is regenerated. (D-G10)
+
 ### Changed (structure round)
 
 Nothing a person sees changes: the same screens, the same behaviour. (D-G08, D-G13)
