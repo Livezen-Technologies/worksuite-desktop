@@ -9,6 +9,7 @@ import { Icon } from '../../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../../components/ui';
 import { LinkPhone } from './LinkPhone';
 import { checkWa, confirmedWaPhone, formatWaPhone, isConnected, makeDefaultWa, moveWaEngine, numberState, unlinkWa, useWaEngines, type WaAccount } from './whatsapp';
+import { SettingsGroup } from '../../../components/SettingsKit';
 
 const ROLES: Record<string, string> = { owner: 'Owner', admin: 'Admin', agent: 'Agent', viewer: 'Viewer' };
 
@@ -73,24 +74,25 @@ export function WhatsappSettings({ accounts, loading, onConnect, onClose }: {
       }
     >
       <div className="flex flex-col gap-3 text-[12.5px]">
-        <div className="flex items-center gap-2">
-          <b className="flex-1 text-[13px] text-ink">{text('Your numbers')}</b>
-          {onConnect ? <Button size="sm" variant="primary" icon="plus" onClick={onConnect}>{text('Connect a number')}</Button> : null}
-        </div>
-        {loading ? <Spinner /> : null}
+        <SettingsGroup
+          title={text('Your numbers')}
+          className="!mb-0"
+          list={text('Your numbers')}
+          actions={onConnect ? <Button size="sm" variant="primary" icon="plus" onClick={onConnect}>{text('Connect a number')}</Button> : null}
+        >
+        {loading ? <li className="px-[18px] py-3"><Spinner /></li> : null}
         {!loading && !accounts.length ? (
-          <p className="rounded-[10px] border border-dashed border-line p-3 text-ink-3">
+          <li className="px-[18px] py-3 text-ink-3">
             {onConnect ? text('No number yet. Connect one to answer customers from Chat.') : text('No number is shared with you yet. Ask whoever manages WhatsApp numbers to share one with you.')}
-          </p>
+          </li>
         ) : null}
-        <ul className="flex flex-col gap-2" aria-label={text('Your numbers')}>
           {accounts.map((a) => {
             const up = isConnected(a);
             const where = numberState(a);
             const phone = confirmedWaPhone(a);
             const may = a.can_connect === true;
             return (
-              <li key={a.id} aria-label={a.name} className="flex flex-col gap-2 rounded-[10px] border border-line p-3">
+              <li key={a.id} aria-label={a.name} className="flex flex-col gap-2 px-[18px] py-3">
                 <div className="flex items-start gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-subtle text-ink-2"><Icon name="phone" size={17} /></span>
                   <span className="min-w-0 flex-1">
@@ -147,7 +149,7 @@ export function WhatsappSettings({ accounts, loading, onConnect, onClose }: {
               </li>
             );
           })}
-        </ul>
+        </SettingsGroup>
         <p className="text-ink-3">{text('Sharing a number, broadcasts, templates, labels and business hours are set on the web.')}</p>
       </div>
     </Modal>

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button, ErrorNote, Modal, Spinner } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { SignaturePad } from '../garage/parts';
+import { SignaturePad } from '../../components/FormKit';
 import { day, errorText, K, money, pGet, pPost, pUpload } from './api';
 import { device } from './devices';
 import { Facts, Refusal, usePms } from './parts';

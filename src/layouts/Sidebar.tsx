@@ -286,11 +286,11 @@ function OrgCard({ collapsed }: { collapsed: boolean }) {
         className={cx(
           'relative flex w-full items-center gap-2.5 rounded-[12px] text-start transition-colors',
           collapsed ? 'h-11 justify-center' : 'h-[54px] border px-2.5',
-          !collapsed && (open ? 'border-[#5B79F0] bg-white/10 shadow-[0_0_0_1px_#5B79F0]' : 'border-white/10 bg-white/6 hover:bg-white/10'),
+          !collapsed && (open ? 'border-blue bg-white/10 shadow-[0_0_0_1px_var(--ws-stage-primary-2)]' : 'border-white/10 bg-white/6 hover:bg-white/10'),
         )}
       >
         <OrgTile id={org?.id ?? 'all'} name={name} all={!org} size={collapsed ? 36 : 32} />
-        {collapsed && orgs.length > 1 ? <span className="absolute -end-0.5 -bottom-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-navy bg-[#5B79F0] px-0.5 text-[9.5px] font-bold text-white">{orgs.length}</span> : null}
+        {collapsed && orgs.length > 1 ? <span className="absolute -end-0.5 -bottom-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-navy bg-blue px-0.5 text-[9.5px] font-bold text-white">{orgs.length}</span> : null}
         {!collapsed ? (
           <>
             <span className="flex min-w-0 flex-1 flex-col">
@@ -396,7 +396,7 @@ function Item({ a, active, collapsed, badge, onClick, locked, custom }: { a: App
   return (
     <li onMouseLeave={peekable ? hide : undefined} className="relative" data-key={custom ? a.id : undefined}>
       {peek ? <CalendarPeek at={peek} onClose={hide} /> : null}
-      {custom?.indicator ? <span aria-hidden data-drop-indicator={custom.indicator} className={cx('pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-[#5B79F0]', custom.indicator === 'before' ? '-top-0.5' : '-bottom-0.5')} /> : null}
+      {custom?.indicator ? <span aria-hidden data-drop-indicator={custom.indicator} className={cx('pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-blue', custom.indicator === 'before' ? '-top-0.5' : '-bottom-0.5')} /> : null}
       <button
         type="button"
         {...custom?.drag}
@@ -465,7 +465,7 @@ function FilesCard() {
     // and Files is one of them.
     <button type="button" onClick={() => navigate('/files')} className="mx-2.5 mt-2 rounded-[10px] bg-white/6 px-3 py-2.5 text-start hover:bg-white/10 [@media(max-height:760px)]:hidden">
       <div className="flex items-center gap-2 text-[13px] font-semibold text-white">
-        <Icon name={offline ? 'cloud-off' : 'cloud'} size={15} className={offline ? 'text-[#8A90A2]' : 'text-[#43B581]'} />
+        <Icon name={offline ? 'cloud-off' : 'cloud'} size={15} className={offline ? 'text-ink-4' : 'text-green'} />
         {offline ? 'Files offline' : 'WorkSuite Drive'}
       </div>
       <div className="mt-1 text-[11.5px] leading-snug text-navy-ink/75">

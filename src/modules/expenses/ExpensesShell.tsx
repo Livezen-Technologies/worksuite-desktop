@@ -5,8 +5,8 @@ import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { Spinner } from '../../components/ui';
-import { btn, Sheet } from '../hr/parts';
-import { LoadFailed } from '../finance/parts';
+import { btn, Sheet } from '../../components/PageKit';
+import { LoadFailed } from '../../components/RecordKit';
 import { refusal } from '../finance/api';
 import type { ModuleProps } from '../registry';
 import { can, canAct, count, fetchAreas, fetchDashboard, fetchOrgs, fetchQueueTotal, K, resolveSelection, selectionParam, toggleFavourite, type Org } from './api';
@@ -15,6 +15,8 @@ import type { ClaimPreset } from './suppliers';
 import { ExpensesRail, GATED, ONE_COMPANY, TITLES, VIEWS, type ExpenseView } from './Rail';
 import { SidePanel } from '../../components/SidePanel';
 import { encodeSelection, recallOrgSelection, rememberOrgSelection } from '../../core/org-prefs';
+import { useOfflineReadOnly } from '../../core/offline-read';
+import { OfflineReadOnlyBanner } from '../../components/OfflineReadOnly';
 
 /**
  * Expenses: the rail, the quick bar, and the screen they point at. Addressed
@@ -77,6 +79,8 @@ export function viewFrom(q: URLSearchParams): ExpenseView {
 
 export default function ExpensesShell(_props: ModuleProps) {
   const { query, go } = useTab();
+  // Offline (D-G14): read-only from this computer's copy; filing an expense waits for the connection.
+  const { readOnly } = useOfflineReadOnly('expenses');
   const qc = useQueryClient();
   const uid = useStore(app, (s) => s.auth?.user?.id ?? '');
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
@@ -143,7 +147,7 @@ export default function ExpensesShell(_props: ModuleProps) {
   };
   const inScope = orgs.filter((o) => !selected.length || selected.includes(o.id));
   const actable = inScope.filter(canAct);
-  const filing = query.get('file') === '1' || filingOrg !== null || fromSub !== null;
+  const filing = !readOnly && (query.get('file') === '1' || filingOrg !== null || fromSub !== null);
   const fileIn = fromSub?.orgId ?? filingOrg ?? (orgId !== null && actable.some((o) => o.id === orgId) ? orgId : null);
   const startFiling = () => {
     if (orgId !== null && actable.some((o) => o.id === orgId)) go(route(view, selected, '&file=1'));
@@ -200,6 +204,7 @@ export default function ExpensesShell(_props: ModuleProps) {
         />
       </SidePanel>
       <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Expenses · ${TITLES[view]}`}>
+        <OfflineReadOnlyBanner module="expenses" className="sticky top-0 z-10" />
         {d ? <QuickBar counts={counts} onGo={(v) => onGo(v)} canApprove={shows('team')} canFinance={shows('reimburse')} /> : null}
         <Suspense fallback={<Spinner />}>{body}</Suspense>
         <Suspense fallback={null}>

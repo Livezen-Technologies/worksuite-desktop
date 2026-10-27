@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { input, Section } from '../garage/parts';
-import { PageHead } from '../hr/parts';
+import { input, Section } from '../../components/FormKit';
+import { PageHead } from '../../components/PageKit';
 import { day, K, labelled, money, pGet, type Kpi, type ReportCatalogue } from './api';
 import { NoAccess, usePms } from './parts';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Reports and KPIs (§13.6–13.7): the KPIs as the SRS defines them —
@@ -56,14 +57,8 @@ export default function Reports() {
   );
 }
 
-function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-[10px] border border-line bg-surface px-3 py-2">
-      <div className="text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">{label}</div>
-      <div className="text-[18px] font-bold tabular-nums">{value}</div>
-      {sub ? <div className="text-[11.5px] text-ink-3">{sub}</div> : null}
-    </div>
-  );
+function Tile({ label, value, sub, icon, tone }: { label: string; value: string; sub?: string; icon?: string; tone?: StatTone }) {
+  return <StatCard size="sm" label={label} value={value} sub={sub} icon={icon} tone={tone} />;
 }
 
 /** The KPIs over a period (at most the server's limit); a person with the dashboard alone sees today. */
@@ -96,15 +91,15 @@ function Kpis() {
         <ErrorNote error={q.error ?? new Error('The KPIs could not be read.')} />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
-            <Tile label="Occupancy" value={`${t.occupancy_pct}%`} sub={`${t.rooms_sold} of ${t.rooms_available} room nights`} />
-            <Tile label="ADR" value={money(t.adr, cur)} />
-            <Tile label="RevPAR" value={money(t.revpar, cur)} />
-            <Tile label="Room revenue" value={money(t.room_revenue, cur)} />
-            <Tile label="Complimentary" value={String(t.complimentary)} sub={`House use ${t.house_use}`} />
-            <Tile label="No-show rate" value={`${t.no_show_rate}%`} sub={`${t.no_shows} of ${t.arrivals_expected}`} />
-            <Tile label="Cancellation rate" value={`${t.cancellation_rate}%`} sub={`${t.cancellations} of ${t.created} made`} />
-          </div>
+          <StatGrid min={170}>
+            <Tile icon="bed" tone="blue" label="Occupancy" value={`${t.occupancy_pct}%`} sub={`${t.rooms_sold} of ${t.rooms_available} room nights`} />
+            <Tile icon="banknote" tone="violet" label="ADR" value={money(t.adr, cur)} />
+            <Tile icon="chart" tone="cyan" label="RevPAR" value={money(t.revpar, cur)} />
+            <Tile icon="coins" tone="green" label="Room revenue" value={money(t.room_revenue, cur)} />
+            <Tile icon="concierge" tone="neutral" label="Complimentary" value={String(t.complimentary)} sub={`House use ${t.house_use}`} />
+            <Tile icon="user-x" tone="amber" label="No-show rate" value={`${t.no_show_rate}%`} sub={`${t.no_shows} of ${t.arrivals_expected}`} />
+            <Tile icon="x-circle" tone="red" label="Cancellation rate" value={`${t.cancellation_rate}%`} sub={`${t.cancellations} of ${t.created} made`} />
+          </StatGrid>
           {(q.data?.days.length ?? 0) > 1 ? (
             <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[720px] text-[12.5px]">

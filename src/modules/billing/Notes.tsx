@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Seg, Sheet, SidePanel } from '../../components/PageKit';
 import { amount, can, fetchBankAccounts, fetchInvoice, K, searchCustomers, useBillingOrgs, type Customer } from './api';
 import { applyNote, createNote, deleteNote, fetchModes, fetchNote, fetchNotes, issueNote, KB, notePdf, notesTotal, openInvoicesOf, PER_PAGE, refundCredit, unapplyNote, type NoteDetail } from './more';
 import { exportRequest } from './actions';
@@ -97,7 +97,7 @@ export default function Notes({ org, openId, kind, creating, against, onOpen, on
           </div>
           {rows.length ? (
             rows.map((n) => (
-              <button key={n.id} type="button" data-note={n.id} onClick={() => onOpen(n.id)} className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === n.id && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+              <button key={n.id} type="button" data-note={n.id} onClick={() => onOpen(n.id)} className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === n.id && 'bg-info-soft dark:bg-selection/40')}>
                 <b className={cx('w-[120px] shrink-0', n.number ? 'text-ink' : 'text-ink-3')}>{n.number ?? 'Draft'}</b>
                 <span className="min-w-0 flex-1 truncate text-ink">{n.client ?? 'No customer'}</span>
                 <span className="w-[120px] shrink-0 truncate text-ink-2">{n.invoice_number ?? '—'}</span>
@@ -106,7 +106,7 @@ export default function Notes({ org, openId, kind, creating, against, onOpen, on
                 </span>
                 <span className="w-[90px] shrink-0 text-ink-2">{n.issue_date && n.number ? dateLabel(n.issue_date) : '—'}</span>
                 <b className="w-[130px] shrink-0 text-right text-ink tabular-nums">{amount(n.total, n.currency)}</b>
-                {kind === 'credit' ? <span className={cx('w-[120px] shrink-0 text-right tabular-nums', n.number && n.remaining > 0 ? 'font-bold text-[#9A4A06] dark:text-warning' : 'text-ink-3')}>{n.number ? amount(n.remaining, n.currency) : '—'}</span> : null}
+                {kind === 'credit' ? <span className={cx('w-[120px] shrink-0 text-right tabular-nums', n.number && n.remaining > 0 ? 'font-bold text-warning-ink dark:text-warning' : 'text-ink-3')}>{n.number ? amount(n.remaining, n.currency) : '—'}</span> : null}
               </button>
             ))
           ) : (
@@ -231,7 +231,7 @@ function NotePanel({ id, onClose, onOpenInvoice }: { id: number; onClose: () => 
                 ...(n.kind === 'credit'
                   ? ([
                       ['Applied', amount(n.applied, n.currency)],
-                      ['Unused', <span className={n.remaining > 0 && !draft ? 'text-[#9A4A06] dark:text-warning' : ''}>{amount(n.remaining, n.currency)}</span>],
+                      ['Unused', <span className={n.remaining > 0 && !draft ? 'text-warning-ink dark:text-warning' : ''}>{amount(n.remaining, n.currency)}</span>],
                     ] as Array<[string, ReactNode]>)
                   : []),
                 [

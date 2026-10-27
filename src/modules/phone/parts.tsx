@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon';
 import { Button, Chip, cx, Empty, ErrorNote, Spinner } from '../../components/ui';
 import { isNotOffered, NOT_OFFERED, type Optional } from './api';
 import { callerInitials, directionIcon, isMissed } from './lib/format';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /**
  * The Phone's small shared pieces (design "WorkSuite Phone (VoIP) — Modern UI"): numbers and timers in the mono face,
@@ -51,15 +52,12 @@ export function Panel({ title, sub, action, children, className, bodyClassName }
 }
 
 /** A KPI tile (A01, A10, W01 "My day"). `value` null is "not measured", never a zero. */
-export function Kpi({ label, value, sub, tone }: { label: string; value: ReactNode | null; sub?: ReactNode; tone?: 'danger' | 'warning' | 'success' | 'primary' }) {
-  const colour = tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : tone === 'success' ? 'text-success' : tone === 'primary' ? 'text-primary' : 'text-ink';
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5 rounded-[12px] border border-line bg-surface px-4 py-3">
-      <span className="text-[11.5px] font-semibold text-ink-3">{label}</span>
-      {value === null ? <span className="text-[13px] font-semibold text-ink-3">Not measured</span> : <span className={cx('font-mono text-[22px] font-bold tabular-nums', colour)}>{value}</span>}
-      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-    </div>
-  );
+const PHONE_TONE = { danger: 'red', warning: 'amber', success: 'green', primary: 'blue' } as const;
+
+/** A figure tile, drawn as the shared StatCard; `null` is a figure the server does not measure. */
+export function Kpi({ label, value, sub, tone, icon }: { label: string; value: ReactNode | null; sub?: ReactNode; tone?: keyof typeof PHONE_TONE | StatTone; icon?: string }) {
+  const t = tone && tone in PHONE_TONE ? PHONE_TONE[tone as keyof typeof PHONE_TONE] : (tone as StatTone | undefined);
+  return <StatCard label={label} value={value === null ? <>Not measured</> : value} empty={value === null ? true : undefined} sub={sub} tone={t} icon={icon} />;
 }
 
 /** Honest state: this WorkSuite server has no such endpoint yet (NFR-10). */
@@ -141,7 +139,7 @@ export function DirectionGlyph({ direction, disposition, size = 16 }: { directio
 /** The caller's initials on the stage's deep blue (W02, W03, D01). */
 export function CallerBadge({ name, size = 56, className }: { name: string | null | undefined; size?: number; className?: string }) {
   return (
-    <span className={cx('inline-flex shrink-0 items-center justify-center rounded-full bg-[#1E3A8A] font-bold text-white', className)} style={{ width: size, height: size, fontSize: Math.max(11, size * 0.34) }} aria-hidden>
+    <span className={cx('inline-flex shrink-0 items-center justify-center rounded-full bg-stage-primary font-bold text-white', className)} style={{ width: size, height: size, fontSize: Math.max(11, size * 0.34) }} aria-hidden>
       {callerInitials(name)}
     </span>
   );

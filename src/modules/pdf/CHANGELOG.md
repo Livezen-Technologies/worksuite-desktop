@@ -4,6 +4,23 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.0.0 — 2026-10-27
+
+**Added**
+
+- tools on this computer with PDFium — pictures and blank pages to a PDF, combine with ranges and bookmarks, duplicate and split pages, page images and text, a protected (AES-256) and an unlocked copy, true redaction, Bates numbers, headers, footers and watermarks; new edit ops page.duplicate, page.stamp, page.redact and IPC pdf:derive, pdf:compose (D-G12)
+
+**Changed**
+
+- what needs the server or WorkSuite Office says so, with the Pro panel for Drive PDFs, instead of a button that is always off; Standards, Print production and Measure are not listed (D-G12)
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+
+## 1.3.1 — 2026-10-26
+
+**Fixed**
+
+- a page in Organize is reached with Tab and picked with Enter or Space (D-G21)
+
 ## 1.3.0 — 2026-10-22
 
 **Added**

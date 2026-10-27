@@ -6,7 +6,7 @@ import { openRouteInWindow } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { Avatar, ErrorNote, Spinner } from '../../components/ui';
 import { openMeeting } from '../meet/api';
-import { btn, btnPrimary, PageHead } from '../hr/parts';
+import { btn, btnPrimary, PageHead } from '../../components/PageKit';
 import { stamp, type Interview } from './api';
 
 /**
@@ -96,7 +96,7 @@ export default function Today({ data, onScorecard, canEvaluate }: { data: UseQue
           })}
         </ul>
       )}
-      {open ? <p className="mt-4 rounded-[10px] bg-[#FEF3C7] px-3 py-2 text-[12.5px] text-[#92400E] dark:bg-warning-bg dark:text-warning">{open} scorecard{open === 1 ? ' is' : 's are'} still open — they block candidates from moving on.</p> : null}
+      {open ? <p className="mt-4 rounded-[10px] bg-yellow-bg px-3 py-2 text-[12.5px] text-orange-ink dark:bg-warning-bg dark:text-warning">{open} scorecard{open === 1 ? ' is' : 's are'} still open — they block candidates from moving on.</p> : null}
     </div>
   );
 }

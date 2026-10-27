@@ -127,14 +127,14 @@ export default function CashMove({ session, onClose }: { session: PosSession; on
             onChange={(e) => setReason(e.target.value.slice(0, 120))}
             placeholder={reasons.length ? t('pos.cash.otherReason') : t('pos.reason')}
             aria-label={t('pos.reason')}
-            className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+            className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
           />
           <div className="text-[14px] font-bold text-ink-2">{t('pos.reference')}</div>
           <input
             value={reference}
             onChange={(e) => setReference(e.target.value.slice(0, 120))}
             aria-label={t('pos.reference')}
-            className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+            className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
           />
         </div>
         <Keypad className="w-[280px] shrink-0 content-start" keys={['7', '8', '9', '4', '5', '6', '1', '2', '3', '00', '0', 'back']} onKey={(k) => setAmount((v) => press(v, k))} />

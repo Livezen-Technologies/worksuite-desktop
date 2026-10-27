@@ -63,7 +63,7 @@ describe('W07 Analytics', () => {
     expect(screen.getByText('412k')).toBeTruthy();
     expect(screen.getByText('4.6%')).toBeTruthy();
     expect(screen.getByText('38 min')).toBeTruthy();
-    const impressions = screen.getByText('Impressions').parentElement!;
+    const impressions = screen.getByRole('group', { name: 'Impressions' });
     expect(within(impressions).getByText('Not measured')).toBeTruthy();
     expect(within(impressions).queryByText('0')).toBeNull();
     // A shorter reply time is the better change: green.

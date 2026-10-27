@@ -10,7 +10,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { createTask, patchTask } from './actions';
-import { ALL_TASKS } from './queries';
+import { ALL_TASKS, showStatus } from './queries';
 import { counts as countOf, inScope, isOpen, plainText, PRIORITIES, SCOPES, STATUSES, type Priority, type Scope, type Status, type Task, type TaskList } from './api';
 import { BoardView } from './BoardView';
 import { ListView } from './ListView';
@@ -115,7 +115,7 @@ export default function TasksPage(_props: ModuleProps) {
   };
   const change = async (t: Task, s: Status) => {
     // Ticked at once (#392); the server has the last word.
-    qc.setQueryData<{ data: { tasks: Task[] } }>(['tasks', 'all'], (old) => (old ? { ...old, data: { tasks: old.data.tasks.map((x) => (x.id === t.id ? { ...x, status: s } : x)) } } : old));
+    await showStatus(qc, [t.id], s);
     try {
       await patchTask(t, 'status', s, `${STATUSES.find((x) => x.id === s)?.label}: “${t.title}”`);
       // Completing sets progress to 100 and reopening leaves it there; a reopened task is not finished.
@@ -129,7 +129,7 @@ export default function TasksPage(_props: ModuleProps) {
   // The list's picked tasks, one after another so each change is its own entry in the task's history.
   const bulk = async (ts: Task[], s: Status) => {
     const ids = new Set(ts.map((t) => t.id));
-    qc.setQueryData<{ data: { tasks: Task[] } }>(['tasks', 'all'], (old) => (old ? { ...old, data: { tasks: old.data.tasks.map((x) => (ids.has(x.id) ? { ...x, status: s } : x)) } } : old));
+    await showStatus(qc, [...ids], s);
     let failed = 0;
     for (const t of ts) {
       try {
@@ -144,7 +144,7 @@ export default function TasksPage(_props: ModuleProps) {
   };
   const move = async (t: Task, s: Status) => {
     // Shown in its new column straight away; the server has the last word.
-    qc.setQueryData<{ data: { tasks: Task[] } }>(['tasks', 'all'], (old) => (old ? { ...old, data: { tasks: old.data.tasks.map((x) => (x.id === t.id ? { ...x, status: s } : x)) } } : old));
+    await showStatus(qc, [t.id], s);
     try {
       await apiPost(`/api/tasks/${t.id}/move`, { status: s });
     } catch (e) {

@@ -13,9 +13,10 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { pickable, type Balance, type LeaveDecided, type LeaveReq, type LeaveReview, type LeaveTypes, type Profile } from './api';
 import { coverOf, leaveReview, useApproveLeave, useCoverFirst, WaitingForCover } from './coverRule';
 import { addDays, dayShort, monthGrid, monthLabel, parseYmd, rangeLabel, shiftMonth, ymd } from './dates';
-import { btn, btnBad, btnGhost, btnGood, btnPrimary, btnSmall, Empty, Field, humanise, Initials, input, PageHead, Seg, Sheet, StatusChip } from './parts';
+import { btn, btnBad, btnGhost, btnGood, btnPrimary, btnSmall, Empty, Field, humanise, Initials, input, PageHead, Seg, Sheet, StatusChip } from '../../components/PageKit';
 import { can } from './Rail';
 import { Select } from '../../components/Select';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Leave · Requests & calendar (HrLeave, HrLeaveCalendar): my balances, the
@@ -139,7 +140,7 @@ export default function Leave() {
                     {r.responsible_status ? <StatusChip>{`cover ${r.responsible_status}`}</StatusChip> : null}
                   </span>
                   <span className="truncate text-[12.5px] text-ink-2">{describeLeave(r)}</span>
-                  {note ? <span className="text-[12px] font-semibold text-[#9A4A06] dark:text-warning">{note}</span> : null}
+                  {note ? <span className="text-[12px] font-semibold text-warning-ink dark:text-warning">{note}</span> : null}
                 </span>
                 <span className="flex shrink-0 flex-wrap justify-end gap-1.5">
                   {r.can_decide && r.status === 'pending' ? (
@@ -224,8 +225,8 @@ function LeaveCalendar({ month, setMonth, requests, holidays, onOpen }: { month:
           const on = requests.filter((r) => r.starts_on <= c.day && r.ends_on >= c.day);
           return (
             <div key={c.day} role="gridcell" className={cx('flex min-h-[74px] flex-col gap-0.5 overflow-hidden border-r border-b border-line/70 px-1.5 py-1', c.weekend ? 'bg-ground/60' : 'bg-surface', !c.inMonth && 'opacity-45')}>
-              <span className={cx('text-[11.5px] font-bold', c.day === today ? 'text-primary' : hol ? 'text-[#6B3FB5]' : 'text-ink-2')}>{parseYmd(c.day).getDate()}</span>
-              {hol ? <span className="truncate rounded-[4px] bg-[#F1EAFB] px-1.5 py-px text-[10.5px] font-bold text-[#5B2FA0] dark:bg-[#2A1F45] dark:text-[#C4A8F0]">{hol.name}</span> : null}
+              <span className={cx('text-[11.5px] font-bold', c.day === today ? 'text-primary' : hol ? 'text-violet-ink' : 'text-ink-2')}>{parseYmd(c.day).getDate()}</span>
+              {hol ? <span className="truncate rounded-[4px] bg-violet-bg px-1.5 py-px text-[10.5px] font-bold text-violet-ink">{hol.name}</span> : null}
               {on.slice(0, 3).map((r) => (
                 <button
                   key={r.id}
@@ -567,11 +568,11 @@ export function ReviewLeave({ id, canDecide, onClose, onDone }: { id: number; ca
                   {v.request.type_name} · {rangeLabel(v.request.starts_on, v.request.ends_on)} · {v.request.days} {Number(v.request.days) === 1 ? 'day' : 'days'}
                   {v.request.reason ? ` · “${v.request.reason}”` : ''}
                 </span>
-                <div className="grid grid-cols-3 gap-2">
-                  <Stat label="Pending requests" value={String(v.pending.count)} sub={`${v.pending.days} day(s) total`} />
-                  <Stat label="Notice" value={v.request.notice_days != null ? `${v.request.notice_days} days` : '—'} sub={v.request.requested_on ? `asked on ${dayShort(v.request.requested_on)}` : undefined} />
-                  <Stat label={`Taken in ${v.history.year}`} value={String(v.history.approved_days)} sub={`${v.history.approved_count} approved · ${v.history.rejected_count} refused`} />
-                </div>
+                <StatGrid min={130}>
+                  <Stat icon="inbox" tone="blue" label="Pending requests" value={String(v.pending.count)} sub={`${v.pending.days} day(s) total`} />
+                  <Stat icon="calendar-clock" tone="violet" label="Notice" value={v.request.notice_days != null ? `${v.request.notice_days} days` : '—'} sub={v.request.requested_on ? `asked on ${dayShort(v.request.requested_on)}` : undefined} />
+                  <Stat icon="plane" tone="cyan" label={`Taken in ${v.history.year}`} value={String(v.history.approved_days)} sub={`${v.history.approved_count} approved · ${v.history.rejected_count} refused`} />
+                </StatGrid>
                 <div>
                   <b className="text-ink">Who else is off then</b>
                   <div className="mt-0.5 text-[12.5px] text-ink-2">
@@ -653,11 +654,11 @@ export function ReviewLeave({ id, canDecide, onClose, onDone }: { id: number; ca
                   </ul>
                 </div>
                 {v.attendance ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    <Stat label="Days present" value={String(v.attendance.days_present)} hint={`In the last ${v.attendance.window_days} days`} />
-                    <Stat label="Days late" value={String(v.attendance.days_late)} hint={`Late on ${v.attendance.days_late} ${v.attendance.days_late === 1 ? 'day' : 'days'} in the last ${v.attendance.window_days} days`} tone={v.attendance.days_late ? 'amber' : undefined} />
-                    <Stat label="Missing check-outs" value={String(v.attendance.missing_check_outs)} hint={`In the last ${v.attendance.window_days} days`} tone={v.attendance.missing_check_outs ? 'red' : undefined} />
-                  </div>
+                  <StatGrid min={130}>
+                    <Stat icon="user-check" tone="green" label="Days present" value={String(v.attendance.days_present)} hint={`In the last ${v.attendance.window_days} days`} />
+                    <Stat icon="snooze" label="Days late" value={String(v.attendance.days_late)} hint={`Late on ${v.attendance.days_late} ${v.attendance.days_late === 1 ? 'day' : 'days'} in the last ${v.attendance.window_days} days`} tone={v.attendance.days_late ? 'amber' : undefined} />
+                    <Stat icon="door" label="Missing check-outs" value={String(v.attendance.missing_check_outs)} hint={`In the last ${v.attendance.window_days} days`} tone={v.attendance.missing_check_outs ? 'red' : undefined} />
+                  </StatGrid>
                 ) : null}
               </>
             ) : null}
@@ -689,13 +690,13 @@ export function ReviewLeave({ id, canDecide, onClose, onDone }: { id: number; ca
                 </span>
               ) : v && pending && mayDecide ? (
                 <span className="ml-auto flex flex-wrap justify-end gap-2">
-                  <button type="button" disabled={busy || approval.busy === id} className={btn + ' !border-[#F1B8A8] !text-danger dark:!border-danger/40'} onClick={() => void reject()}>
+                  <button type="button" disabled={busy || approval.busy === id} className={btn + ' !border-danger-line !text-danger dark:!border-danger/40'} onClick={() => void reject()}>
                     Reject
                   </button>
                   {blocked ? (
                     <WaitingForCover name={cover?.mine ? 'You' : cover?.name} />
                   ) : (
-                    <button type="button" disabled={busy || approval.busy === id} className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} onClick={() => void approval.approve(id, { note, review: v })}>
+                    <button type="button" disabled={busy || approval.busy === id} className={btnPrimary + ' !bg-success hover:!bg-success'} onClick={() => void approval.approve(id, { note, review: v })}>
                       Approve
                     </button>
                   )}
@@ -746,14 +747,8 @@ function ChangeCover({ id, employeeId, current, onDone }: { id: number; employee
   );
 }
 
-function Stat({ label, value, sub, tone, hint }: { label: string; value: string; sub?: string; tone?: 'amber' | 'red'; hint?: string }) {
-  return (
-    <div title={hint} className={cx('rounded-[9px] px-2.5 py-2', tone === 'amber' ? 'bg-[#FFF4E0] dark:bg-warning-bg' : 'bg-ground')}>
-      <div className="text-[11px] font-semibold text-ink-3">{label}</div>
-      <b className={cx('text-[16px] text-ink', tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : tone === 'red' ? 'text-danger' : undefined)}>{value}</b>
-      {sub ? <div className="text-[11px] text-ink-3">{sub}</div> : null}
-    </div>
-  );
+function Stat({ label, value, sub, tone, hint, icon }: { label: string; value: string; sub?: string; tone?: 'amber' | 'red' | StatTone; hint?: string; icon?: string }) {
+  return <StatCard size="sm" label={label} value={value} sub={sub} tone={tone} title={hint} icon={icon} />;
 }
 
 /**

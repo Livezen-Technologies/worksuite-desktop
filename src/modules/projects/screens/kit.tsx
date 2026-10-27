@@ -9,6 +9,7 @@ import { useProjectCompany } from '../company';
 import { dqk, dread } from '../delivery';
 import { fieldClass } from '../parts';
 import { HEALTH_CHIP, PROJECT_STATUS, errorStatus, errorText } from '../portfolio';
+import { STAT_TONES, StatCard, type StatTone } from '../../../components/StatCard';
 
 /**
  * The Projects screens' small pieces, in the desktop's own language (D01–D04: tokens for both themes, 13px type,
@@ -53,22 +54,21 @@ export function Progress({ value, label, fill = 'bg-primary' }: { value: number;
 }
 
 /** A figure tile; a button when it leads somewhere. */
-export function Kpi({ label, value, sub, tone = 'text-ink', onClick }: { label: string; value: ReactNode; sub?: ReactNode; tone?: string; onClick?: () => void }) {
-  const body = (
-    <>
-      <span className="text-[11.5px] font-semibold text-ink-3">{label}</span>
-      <b className={cx('text-[20px] leading-tight', tone)}>{value}</b>
-      {sub ? <span className="text-[11.5px] text-ink-3">{sub}</span> : null}
-    </>
-  );
-  const cls = 'flex flex-col gap-0.5 rounded-[12px] border border-line bg-surface px-3.5 py-2.5 text-start';
-  return onClick ? (
-    <button type="button" onClick={onClick} className={cx(cls, 'hover:border-primary/50')}>
-      {body}
-    </button>
-  ) : (
-    <div className={cls}>{body}</div>
-  );
+/** A figure tone from the class a caller used to colour the figure with ('text-danger' → red), or a StatTone. */
+function kpiTone(tone: string | undefined): StatTone | undefined {
+  if (!tone) return undefined;
+  if ((STAT_TONES as readonly string[]).includes(tone)) return tone as StatTone;
+  if (tone.includes('danger')) return 'red';
+  if (tone.includes('warning')) return 'amber';
+  if (tone.includes('success')) return 'green';
+  if (tone.includes('primary')) return 'blue';
+  if (tone.includes('6D28D9')) return 'violet';
+  return undefined;
+}
+
+/** A figure tile, drawn as the shared StatCard; a button when it leads somewhere. */
+export function Kpi({ label, value, sub, tone, icon, onClick }: { label: string; value: ReactNode; sub?: ReactNode; tone?: string; icon?: string; onClick?: () => void }) {
+  return <StatCard label={label} value={value} sub={sub} tone={kpiTone(tone)} icon={icon} onClick={onClick} />;
 }
 
 /** A card with a heading row. */

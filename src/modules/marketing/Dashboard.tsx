@@ -12,6 +12,8 @@ import { Refused, TABLE, TD, TH } from './audience-parts';
 import { btn, btnPrimary, CAMPAIGN_PILL, Card, CardLink, Kpi, Line, Meter, n, PageHeader, Panel, pct, Pill, Seg } from './parts';
 import type { Go } from './routes';
 import type { Campaign, DashboardWide, Options, Readiness, ReadinessItem } from './types';
+import { StatGrid } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 const PERIODS = [7, 30, 90] as const;
 type Period = (typeof PERIODS)[number];
@@ -92,21 +94,21 @@ export default function Dashboard({ org, options, onGo }: { org: string; options
 
       {d.readiness ? <ReadinessCard readiness={d.readiness} onRoute={go} /> : null}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Contacts" value={n(t.contacts)} sub={<span className="text-success">+{n(t.new)} in {d.days} days</span>} onClick={() => onGo({ view: 'contacts' })} />
-        <Kpi label="May be emailed" value={n(t.subscribed)} sub={`${share}% of contacts: consent given, not suppressed`} onClick={() => onGo({ view: 'contacts', filter: { subscribed: 'yes' } })} />
+      <StatGrid>
+        <Kpi icon="users" tone="blue" label="Contacts" value={n(t.contacts)} sub={<span className="text-success">+{n(t.new)} in {d.days} days</span>} onClick={() => onGo({ view: 'contacts' })} />
+        <Kpi icon="mail-check" tone="green" label="May be emailed" value={n(t.subscribed)} sub={`${share}% of contacts: consent given, not suppressed`} onClick={() => onGo({ view: 'contacts', filter: { subscribed: 'yes' } })} />
         {d.email ? (
           <>
-            <Kpi label="Human open rate" value={pct(d.email.human_open_rate)} sub="Proxy and scanner opens left out" />
-            <Kpi label="Bounce rate" value={pct(d.email.bounce_rate)} tone={guardHit ? 'red' : undefined} sub={<span className={guardHit ? 'text-danger' : undefined}>The guard pauses a campaign at {d.email.bounce_guard}%</span>} />
+            <Kpi icon="mail-open" tone="violet" label="Human open rate" value={pct(d.email.human_open_rate)} sub="Proxy and scanner opens left out" />
+            <Kpi icon="spam" label="Bounce rate" value={pct(d.email.bounce_rate)} tone={guardHit ? 'red' : undefined} sub={<span className={guardHit ? 'text-danger' : undefined}>The guard pauses a campaign at {d.email.bounce_guard}%</span>} />
           </>
         ) : (
           <>
-            <Kpi label="Qualified" value={n(t.qualified)} sub="Ready to hand to sales" onClick={() => onGo({ view: 'contacts', filter: { status: 'qualified' } })} />
-            <Kpi label="Suppressed" value={n(t.suppressed)} tone={t.suppressed > 0 ? 'red' : undefined} sub="Never to be contacted" onClick={() => onGo({ view: 'consent' })} />
+            <Kpi icon="badge-check" tone="cyan" label="Qualified" value={n(t.qualified)} sub="Ready to hand to sales" onClick={() => onGo({ view: 'contacts', filter: { status: 'qualified' } })} />
+            <Kpi icon="ban" label="Suppressed" value={n(t.suppressed)} tone={t.suppressed > 0 ? 'red' : undefined} sub="Never to be contacted" onClick={() => onGo({ view: 'consent' })} />
           </>
         )}
-      </div>
+      </StatGrid>
 
       {d.email || d.calls ? (
         <div className="grid items-start gap-4 lg:grid-cols-3">
@@ -240,7 +242,7 @@ function ReadinessRow({ item: i, onRoute }: { item: ReadinessItem; onRoute: (rou
       {i.ok ? (
         <Icon name="check-circle" size={18} className="mt-0.5 shrink-0 text-success" />
       ) : (
-        <Icon name="warning" size={18} className={cx('mt-0.5 shrink-0', blocking ? 'text-danger' : 'text-[#B45309] dark:text-warning')} />
+        <Icon name="warning" size={18} className={cx('mt-0.5 shrink-0', blocking ? 'text-danger' : 'text-warning dark:text-warning')} />
       )}
       <span className="sr-only">{i.ok ? 'Done:' : blocking ? 'Blocks sending:' : 'Open:'}</span>
       <div className="min-w-0 flex-1">
@@ -363,12 +365,12 @@ function RecentCampaigns({ rows, onOpen, canCreate }: { rows: Campaign[]; onOpen
             const reached = c.stats ? c.stats.sent - c.stats.bounced : 0;
             const rate = (part: number) => (c.stats && reached > 0 ? `${Math.round((part / reached) * 1000) / 10}%` : '—');
             return (
-              <tr key={c.id} className="cursor-pointer hover:bg-subtle" onClick={() => onOpen(c.id)}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} className="cursor-pointer hover:bg-subtle" onClick={() => onOpen(c.id)}>
                 <td className={cx(TD, 'pl-4')}>
                   <button type="button" onClick={(e) => (e.stopPropagation(), onOpen(c.id))} className="text-left font-semibold text-ink hover:underline">
                     {c.name}
                   </button>
-                  {c.ab ? <span className="ml-1.5 rounded-[4px] bg-[#F1EAFB] px-1 text-[10px] font-bold text-[#5B2FA0] dark:bg-[#2A1F45] dark:text-[#C4A8F0]">A/B</span> : null}
+                  {c.ab ? <span className="ml-1.5 rounded-[4px] bg-violet-bg px-1 text-[10px] font-bold text-violet-ink">A/B</span> : null}
                 </td>
                 <td className={TD}>
                   <Pill tone={CAMPAIGN_PILL[c.status]}>{c.status_label}</Pill>

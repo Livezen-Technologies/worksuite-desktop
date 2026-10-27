@@ -6,9 +6,9 @@ import { todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner } from '../../components/ui';
-import { btnPrimary, btnSmall, PageHead } from '../hr/parts';
+import { btnPrimary, btnSmall, PageHead } from '../../components/PageKit';
 import { addMonths, addYear, can, fetchPeriods, K, refusal, setPeriodStatus, shortDate, type Company, type Period } from './api';
-import { ConfirmSheet, LoadFailed, Notice, PeriodPill, ReasonSheet } from './parts';
+import { ConfirmSheet, LoadFailed, Notice, PeriodPill, ReasonSheet } from '../../components/RecordKit';
 
 /**
  * The financial calendar: which months take entries, and the next year added

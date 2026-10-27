@@ -7,6 +7,7 @@ import { addDays, dayLabel, fetchAvailability, fetchDeposits, K, linkDeposit, mo
 import { Chips, errText, input, Kbd, label, Refused, useDesk, useMove, useNow } from './parts';
 import { depositHtml, printPage, type DeskSettings } from './print';
 import { CancelFeeNote } from './Extras';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * The panel's dialogs: D09 check-in, D10 move, D11 cancel or no-show, D12 deposit. Each asks the server and shows its
@@ -32,13 +33,13 @@ export function CheckInDialog({ a, visits, noShows, pinned, onClose }: { a: Appo
       footer={<><Button variant="secondary" onClick={onClose}>Not yet</Button><Button variant="primary" autoFocus loading={busy} onClick={() => void go()}>Check in<Kbd>⏎</Kbd></Button></>}
     >
       <p className="m-0 text-[13px] text-ink-2">{`${a.service.name} · ${a.provider.name} · ${a.local.start}–${a.local.end} · ${early > 0 ? `${early} min early` : early < 0 ? `${-early} min late` : 'on time'}`}</p>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <Stat k="Visits" v={visits ?? '—'} />
-        <Stat k="No-shows" v={noShows ?? '—'} />
-        <Stat k="Deposit held" v={a.deposit ? money(a.deposit.held, a.deposit.currency) : '—'} />
-      </div>
+      <StatGrid min={110} className="mt-3">
+        <Stat icon="calendar-check" tone="blue" k="Visits" v={visits ?? '—'} />
+        <Stat icon="user-x" tone="amber" k="No-shows" v={noShows ?? '—'} />
+        <Stat icon="wallet" tone="green" k="Deposit held" v={a.deposit ? money(a.deposit.held, a.deposit.currency) : '—'} />
+      </StatGrid>
       {pinned.length || a.internal_notes ? (
-        <div className="mt-3 rounded-[8px] bg-[#FDF1E3] px-3 py-2 text-[12.5px] text-[#9A4A06] dark:bg-warning/15 dark:text-warning">
+        <div className="mt-3 rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-ink dark:bg-warning/15 dark:text-warning">
           <b>Read before starting: </b>
           {[...pinned, a.internal_notes].filter(Boolean).join(' ')}
         </div>
@@ -51,13 +52,8 @@ export function CheckInDialog({ a, visits, noShows, pinned, onClose }: { a: Appo
   );
 }
 
-function Stat({ k, v }: { k: string; v: string | number }) {
-  return (
-    <div className="rounded-[10px] border border-line px-3 py-2">
-      <div className="text-[11px] text-ink-3">{k}</div>
-      <div className="text-[15px] font-bold text-ink tabular-nums">{v}</div>
-    </div>
-  );
+function Stat({ k, v, icon, tone }: { k: string; v: string | number; icon?: string; tone?: StatTone }) {
+  return <StatCard size="sm" label={k} value={v} icon={icon} tone={tone} />;
 }
 
 /** D10 · Move: free times by week from the server, for this stylist or another; why; the deposit stays. */
@@ -120,7 +116,7 @@ export function MoveDialog({ a, onClose }: { a: Appointment; onClose: () => void
               <div className="mb-1 text-center text-[11.5px] font-semibold text-ink-2">{dayLabel(d)}</div>
               <div className="flex max-h-[200px] flex-col gap-1 overflow-y-auto scroll-thin">
                 {slots.map((s) => (
-                  <button key={s.starts_at} type="button" aria-pressed={pick?.starts_at === s.starts_at} onClick={() => setPick({ starts_at: s.starts_at, label: s.label, date: d })} className={cx('h-7 rounded-[6px] border text-[11.5px] tabular-nums', pick?.starts_at === s.starts_at ? 'border-primary bg-[#23349E] font-bold text-white dark:bg-primary' : 'border-line hover:bg-subtle')}>
+                  <button key={s.starts_at} type="button" aria-pressed={pick?.starts_at === s.starts_at} onClick={() => setPick({ starts_at: s.starts_at, label: s.label, date: d })} className={cx('h-7 rounded-[6px] border text-[11.5px] tabular-nums', pick?.starts_at === s.starts_at ? 'border-primary bg-stage-primary font-bold text-white dark:bg-primary' : 'border-line hover:bg-subtle')}>
                     {s.label}
                   </button>
                 ))}

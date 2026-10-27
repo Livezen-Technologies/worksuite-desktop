@@ -1,10 +1,11 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { dateLabel, relative, timeLabel } from '../../core/time';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { Kpi, PageHead, Panel } from '../hr/parts';
-import { Line, ListPanel, Pill } from '../inventory/parts';
+import { Kpi, PageHead, Panel } from '../../components/PageKit';
+import { Line, ListPanel, Pill } from '../../components/ListKit';
 import { fetchDetail, K, money, moneyList, type Dashboard as Data } from './api';
 import { Left, subline } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The Tenders front page: what is open and where, the win rate, the value in
@@ -25,17 +26,18 @@ export default function Dashboard({ data, org, onOpen, onGo }: { data: UseQueryR
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
       <PageHead title="Tenders" sub="What is coming in, what is going out, and what came back" />
-      <div className="grid grid-cols-4 gap-3">
-        <Kpi label="Open" value={c.open ?? 0} sub="Every stage before a decision" onClick={() => onGo('board')} />
-        <Kpi label="Being prepared" value={(c.preparing ?? 0) + (c.ready ?? 0)} sub={c.ready ? `${c.ready} ready to submit` : 'Documents, review, approval'} onClick={() => onGo('preparing')} />
-        <Kpi label="Awaiting a decision" value={(c.submitted ?? 0) + (c.evaluation ?? 0)} sub="Submitted or under evaluation" onClick={() => onGo('submitted')} />
+      <StatGrid>
+        <Kpi icon="file-text" tone="blue" label="Open" value={c.open ?? 0} sub="Every stage before a decision" onClick={() => onGo('board')} />
+        <Kpi icon="compose" tone="violet" label="Being prepared" value={(c.preparing ?? 0) + (c.ready ?? 0)} sub={c.ready ? `${c.ready} ready to submit` : 'Documents, review, approval'} onClick={() => onGo('preparing')} />
+        <Kpi icon="hourglass" tone="amber" label="Awaiting a decision" value={(c.submitted ?? 0) + (c.evaluation ?? 0)} sub="Submitted or under evaluation" onClick={() => onGo('submitted')} />
         <Kpi
+          icon="trophy"
           label="Win rate"
           value={d.win_rate.percent === null ? '—' : `${d.win_rate.percent}%`}
           sub={d.win_rate.decided ? `${d.win_rate.won} won of ${d.win_rate.decided} decided` : 'Nothing decided yet'}
           tone={d.win_rate.percent !== null && d.win_rate.percent >= 50 ? 'green' : undefined}
         />
-      </div>
+      </StatGrid>
 
       <div className="grid grid-cols-2 gap-3.5">
         <Panel title="Ready to go out" sub="Mandatory documents only · least time and most missing first" bodyClassName="flex flex-col">
@@ -81,14 +83,14 @@ export default function Dashboard({ data, org, onOpen, onGo }: { data: UseQueryR
           </div>
           <div className="flex flex-col">
             <span className="text-[11.5px] text-ink-3">Awarded to us</span>
-            <b className="text-[15px] text-[#145C39] tabular-nums dark:text-success">{moneyList(d.value.awarded_by_currency)}</b>
+            <b className="text-[15px] text-success-ink tabular-nums dark:text-success">{moneyList(d.value.awarded_by_currency)}</b>
           </div>
           <div className="flex flex-col">
             <span className="text-[11.5px] text-ink-3">Company documents</span>
             <span className="text-[12.5px] text-ink">
               {d.documents.total} in the library
               {d.documents.expired ? <b className="text-danger"> · {d.documents.expired} expired</b> : null}
-              {d.documents.expiring ? <b className="text-[#9A4A06] dark:text-warning"> · {d.documents.expiring} expiring soon</b> : null}
+              {d.documents.expiring ? <b className="text-warning-ink dark:text-warning"> · {d.documents.expiring} expiring soon</b> : null}
             </span>
           </div>
         </Panel>
@@ -124,7 +126,7 @@ export default function Dashboard({ data, org, onOpen, onGo }: { data: UseQueryR
                 title={x.title}
                 sub={[x.tender_ref, x.kind.replace(/_/g, ' '), x.instrument, money(x.amount, x.currency)].filter(Boolean).join(' · ')}
                 right={x.days !== null ? `${x.days} ${x.days === 1 ? 'day' : 'days'} left` : dateLabel(x.valid_until)}
-                rightClass={(x.days ?? 99) <= 7 ? 'text-danger' : 'text-[#9A4A06] dark:text-warning'}
+                rightClass={(x.days ?? 99) <= 7 ? 'text-danger' : 'text-warning-ink dark:text-warning'}
                 onClick={() => onOpen(Number(x.tender_id))}
               />
             ))}
@@ -160,7 +162,7 @@ export default function Dashboard({ data, org, onOpen, onGo }: { data: UseQueryR
                 title={s.name}
                 sub={s.enabled ? (s.imported_30 || s.seen_30 ? `${s.imported_30} kept of ${s.seen_30} seen in 30 days` : 'Nothing at all in 30 days.') : 'Switched off'}
                 right={s.last_run_at ? relative(s.last_run_at) : 'Never run'}
-                rightClass={s.enabled && !s.seen_30 ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-3'}
+                rightClass={s.enabled && !s.seen_30 ? 'text-warning-ink dark:text-warning' : 'text-ink-3'}
               />
             ))}
           </ListPanel>

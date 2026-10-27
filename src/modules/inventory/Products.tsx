@@ -3,9 +3,9 @@ import { lazy, Suspense, useMemo, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Empty, input, PageHead } from '../hr/parts';
+import { btn, btnPrimary, Empty, input, PageHead } from '../../components/PageKit';
 import { fetchCategories, fetchProducts, K, num, PER_PAGE, pictureSrc, qty, trackingLabel, treeOf, whole, type Company, type Product, type ProductFilters } from './api';
-import { minWidth, Pill } from './parts';
+import { minWidth, Pill } from '../../components/ListKit';
 import { Checkbox } from '../../components/Checkbox';
 import { ContextMenu } from '../../components/ContextMenu';
 import { isMac } from '../../core/bridge';
@@ -330,7 +330,7 @@ function TreeRow({ label, count, on, level, onClick, muted }: { label: string; c
       type="button"
       aria-current={on ? 'true' : undefined}
       onClick={onClick}
-      className={cx('flex shrink-0 items-center gap-2 py-1.5 pr-3 text-left text-[12.5px]', on ? 'bg-[#EEF1FC] font-bold text-[#23349E] dark:bg-selection dark:text-primary' : 'text-ink hover:bg-subtle', muted && !on && 'text-ink-3')}
+      className={cx('flex shrink-0 items-center gap-2 py-1.5 pr-3 text-left text-[12.5px]', on ? 'bg-selection font-bold text-primary dark:bg-selection dark:text-primary' : 'text-ink hover:bg-subtle', muted && !on && 'text-ink-3')}
       style={{ paddingLeft: 12 + level * 16 }}
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -373,7 +373,7 @@ function Row({
         e.preventDefault();
         onMenu(p, e.clientX, e.clientY);
       }}
-      className={cx('group flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', on && 'bg-[#F4F6FE] dark:bg-selection/40', !p.active && 'opacity-60')}>
+      className={cx('group flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', on && 'bg-info-soft dark:bg-selection/40', !p.active && 'opacity-60')}>
       <button type="button" onClick={() => onOpen(p.id)} onKeyDown={(e) => rowKeys(e, p, onMenu, onWindow)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
         <Thumb key={p.image_url ?? ''} url={p.image_url ?? null} />
         <span className="flex min-w-0 flex-1 flex-col">
@@ -399,7 +399,7 @@ function Row({
       <span className="flex shrink-0 flex-col items-end" style={{ width: w.avail }}>
         {stocked ? (
           <>
-            <b className={cx('tabular-nums', avail !== null && avail <= 0 ? 'text-danger' : p.low ? 'text-[#9A4A06] dark:text-warning' : 'text-ink')}>{qty(avail, p.unit_code)}</b>
+            <b className={cx('tabular-nums', avail !== null && avail <= 0 ? 'text-danger' : p.low ? 'text-warning-ink dark:text-warning' : 'text-ink')}>{qty(avail, p.unit_code)}</b>
             {onHand !== null && onHand !== avail ? <span className="text-[11px] text-ink-3 tabular-nums">{qty(onHand)} on hand</span> : null}
           </>
         ) : (
@@ -474,7 +474,7 @@ function CompactRow({ p, on, open, onOpen, onMenu, onWindow }: { p: Product; on:
         e.preventDefault();
         onMenu(p, e.clientX, e.clientY);
       }}
-      className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2.5 text-left last:border-b-0', on ? 'bg-[#eff6ff] shadow-[inset_3px_0_0_var(--color-primary,#2563eb)] dark:bg-selection/40' : 'hover:bg-subtle/60', !p.active && 'opacity-60')}
+      className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2.5 text-left last:border-b-0', on ? 'bg-info-soft shadow-[inset_3px_0_0_var(--color-primary)] dark:bg-selection/40' : 'hover:bg-subtle/60', !p.active && 'opacity-60')}
     >
       <Thumb key={p.image_url ?? ''} url={p.image_url ?? null} size={40} />
       <span className="flex min-w-0 flex-1 flex-col">
@@ -488,7 +488,7 @@ function CompactRow({ p, on, open, onOpen, onMenu, onWindow }: { p: Product; on:
       <span className="flex shrink-0 flex-col items-end text-right tabular-nums">
         {p.is_stocked ? (
           <>
-            <b className={cx('text-[13.5px]', out ? 'text-danger' : p.low ? 'text-[#9A4A06] dark:text-warning' : 'text-ink')}>{qty(onHand)}</b>
+            <b className={cx('text-[13.5px]', out ? 'text-danger' : p.low ? 'text-warning-ink dark:text-warning' : 'text-ink')}>{qty(onHand)}</b>
             <span className="text-[11.5px] text-ink-3">{out ? 'out' : p.low ? 'low' : 'on hand'}</span>
           </>
         ) : (

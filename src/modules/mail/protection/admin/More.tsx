@@ -61,7 +61,7 @@ function AttachmentForm({ saved }: { saved: AttachmentsAnswer }) {
               {catalogue.filter((c) => c.group === g).map((c) => {
                 const on = draft.blocked_types.includes(c.ext);
                 return (
-                  <button key={c.ext} type="button" aria-pressed={on} onClick={() => toggleType(c.ext)} className={cx('inline-flex h-[26px] items-center gap-1 rounded-full border px-2.5 font-mono text-[12px] font-semibold', on ? 'border-[#F3C7BE] bg-[#FCE9E4] text-[#B42318] dark:border-[#5A2620] dark:bg-[#3D1A16] dark:text-[#FF8A7A]' : 'border-line text-ink-2 hover:bg-subtle')}>
+                  <button key={c.ext} type="button" aria-pressed={on} onClick={() => toggleType(c.ext)} className={cx('inline-flex h-[26px] items-center gap-1 rounded-full border px-2.5 font-mono text-[12px] font-semibold', on ? 'border-danger-line bg-danger-bg text-danger dark:text-danger-ink' : 'border-line text-ink-2 hover:bg-subtle')}>
                     {on ? <Icon name="lock" size={11} /> : null}.{c.ext}
                   </button>
                 );

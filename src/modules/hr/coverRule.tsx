@@ -7,7 +7,7 @@ import { createStore, useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { cx } from '../../components/ui';
 import type { LeaveDecided, LeaveReview } from './api';
-import { btn, btnPrimary, Sheet } from './parts';
+import { btn, btnPrimary, Sheet } from '../../components/PageKit';
 
 /**
  * Approving leave before the cover has said yes (worksuite-desktop#262, #263): one rule for every Approve — the
@@ -87,7 +87,7 @@ export function WaitingForCover({ name, className }: { name?: string | null; cla
       title={why}
       aria-label={`Waiting for cover. ${why}`}
       onClick={(e) => e.preventDefault()}
-      className={cx('inline-flex h-[34px] shrink-0 cursor-not-allowed items-center gap-1.5 rounded-[8px] border border-[#F6D9A8] bg-[#FFF7E6] px-3 text-[13px] font-semibold whitespace-nowrap text-[#9A4A06] dark:border-warning/30 dark:bg-warning-bg dark:text-warning', className)}
+      className={cx('inline-flex h-[34px] shrink-0 cursor-not-allowed items-center gap-1.5 rounded-[8px] border border-warning-line bg-warning-bg px-3 text-[13px] font-semibold whitespace-nowrap text-warning-ink dark:border-warning/30 dark:bg-warning-bg dark:text-warning', className)}
     >
       Waiting for cover
     </button>
@@ -210,12 +210,12 @@ function CoverQuestion({ a, busy, onAnyway, onAcceptAndApprove, onRemind, onOpen
             </button>
           ) : null}
           {c?.mine && c.status === 'pending' ? (
-            <button type="button" disabled={busy} className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} onClick={onAcceptAndApprove}>
+            <button type="button" disabled={busy} className={btnPrimary + ' !bg-success hover:!bg-success'} onClick={onAcceptAndApprove}>
               Accept cover & approve
             </button>
           ) : null}
           {!a.blocked ? (
-            <button type="button" disabled={busy} className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} onClick={onAnyway}>
+            <button type="button" disabled={busy} className={btnPrimary + ' !bg-success hover:!bg-success'} onClick={onAnyway}>
               Approve anyway
             </button>
           ) : null}

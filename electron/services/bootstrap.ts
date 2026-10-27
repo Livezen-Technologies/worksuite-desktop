@@ -97,6 +97,11 @@ export class BootstrapService {
     private readonly http: HttpClient,
     /** The key the server's policy is signed with: per account (its trusted `discovery_key`), so a getter. */
     private readonly policyPublicKey: string | null | (() => string | null),
+    /**
+     * A release build (packaged): a policy is applied only when signed and checked against a key, so with no key
+     * none is (audit D-G05). A development build applies an unsigned policy when there is no key to check it with.
+     */
+    private readonly requireSignedPolicy = false,
   ) {}
 
   private policyKey(): string | null {
@@ -156,9 +161,11 @@ export class BootstrapService {
     const user = toUserSummary((d.user ?? {}) as PublicUser);
     const orgs = Array.isArray(d.organizations) ? d.organizations.map(toOrg).filter((o): o is Organization => o !== null) : [];
     const signedPolicy = (d.desktop_policy ?? null) as Record<string, unknown> | null;
-    let policy = signedPolicy ? acceptSignedPolicy(signedPolicy, this.policyKey()) : null;
+    const key = this.policyKey();
+    let policy = signedPolicy ? acceptSignedPolicy(signedPolicy, key, { requireSignature: this.requireSignedPolicy }) : null;
     if (!policy) {
-      if (signedPolicy) log.warn('POLICY_SIGNATURE_INVALID: keeping the last valid desktop policy');
+      if (signedPolicy && !key) log.warn('POLICY_UNSIGNED_REFUSED: this release build has no policy key to check the desktop policy with; keeping the last valid desktop policy');
+      else if (signedPolicy) log.warn('POLICY_SIGNATURE_INVALID: keeping the last valid desktop policy');
       policy = this.lastValidPolicy ?? { ...DEFAULT_POLICY };
     }
     this.lastValidPolicy = policy;

@@ -3,10 +3,10 @@ import { useState } from 'react';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnPrimary, Empty, PageHead } from '../hr/parts';
+import { btnPrimary, Empty, PageHead } from '../../components/PageKit';
 import { num, qty, type Warehouse } from '../inventory/api';
 import { fetchReplenishment, KI, raiseRequests } from '../inventory/insight';
-import { minWidth } from '../inventory/parts';
+import { minWidth } from '../../components/ListKit';
 import { Checkbox } from '../../components/Checkbox';
 import { refreshPurchase } from './api';
 
@@ -96,7 +96,7 @@ export default function Replenishment({ org, warehouse, warehouses, canPurchase,
                     <span className="shrink-0 truncate text-ink-2" style={{ width: W.wh }}>
                       {i.warehouse ?? '—'}
                     </span>
-                    <b className="shrink-0 text-right text-[#9A4A06] tabular-nums dark:text-warning" style={{ width: W.avail }}>
+                    <b className="shrink-0 text-right text-warning-ink tabular-nums dark:text-warning" style={{ width: W.avail }}>
                       {qty(num(i.available) ?? 0)}
                       {i.unit ? ` ${i.unit}` : ''}
                     </b>

@@ -7,7 +7,7 @@ import { todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, Field, input, SidePanel } from '../../components/PageKit';
 import { amount, fetchBankAccounts, K, METHODS, recordPayment, searchCustomers, useBillingOrgs, type Customer, type InvoiceDetail } from './api';
 import { Checkbox } from '../../components/Checkbox';
 import { allocateFx, converted, fetchModes, KB, oldestFirst, openInvoicesOf, uploadSlip } from './more';
@@ -227,7 +227,7 @@ export default function RecordPayment({ invoice, org, onClose }: { invoice?: Inv
                 .map((i) => (
                   <div key={i.id} className="flex justify-between px-2.5 py-[7px]">
                     <span className="text-ink">{i.number ?? `#${i.id}`}</span>
-                    <b className={cx('tabular-nums', plan[i.id]! >= i.due - 0.005 ? 'text-[#1F7A4D] dark:text-success' : 'text-[#9A4A06] dark:text-warning')}>{amount(plan[i.id], i.currency)}</b>
+                    <b className={cx('tabular-nums', plan[i.id]! >= i.due - 0.005 ? 'text-success dark:text-success' : 'text-warning-ink dark:text-warning')}>{amount(plan[i.id], i.currency)}</b>
                   </div>
                 ))
             : null}
@@ -245,20 +245,20 @@ export default function RecordPayment({ invoice, org, onClose }: { invoice?: Inv
         onDragOver={(e) => (e.preventDefault(), setDragging(true))}
         onDragLeave={() => setDragging(false)}
         onDrop={(e) => (e.preventDefault(), setDragging(false), addSlips(e.dataTransfer.files))}
-        className={cx('cursor-pointer rounded-[8px] border border-dashed px-2.5 py-[9px] text-[12px] text-ink-2', dragging ? 'border-primary bg-selection' : 'border-[#C9CFE0] dark:border-line')}
+        className={cx('cursor-pointer rounded-[8px] border border-dashed px-2.5 py-[9px] text-[12px] text-ink-2', dragging ? 'border-primary bg-selection' : 'border-slate-line dark:border-line')}
       >
         {slips.length ? slips.map((f) => f.name).join(', ') : 'Drag the bank slip here, or click to choose it'}
       </div>
       <input ref={pick} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.gif,application/pdf,image/*" aria-label="Choose the bank slip" className="hidden" onChange={(e) => (addSlips(e.target.files), (e.target.value = ''))} />
       {invoice && settles > invoice.due + 0.005 ? (
-        <p className="m-0 rounded-[8px] bg-warning-bg px-3 py-2 text-[12px] text-[#9A4A06] dark:text-warning">More than is owed: {amount(invoice.due, invoice.currency)} settles the invoice and the rest stays on the customer's account.</p>
+        <p className="m-0 rounded-[8px] bg-warning-bg px-3 py-2 text-[12px] text-warning-ink dark:text-warning">More than is owed: {amount(invoice.due, invoice.currency)} settles the invoice and the rest stays on the customer's account.</p>
       ) : null}
       {offline ? <p className="m-0 rounded-[8px] bg-subtle px-3 py-2 text-[12px] text-ink-2">{OFFLINE_WRITE}</p> : null}
       <div className="mt-auto flex justify-end gap-2 border-t border-line pt-3">
         <button type="button" className={btn} onClick={onClose}>
           Cancel
         </button>
-        <button type="button" className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} disabled={busy || !ready} onClick={() => void save()}>
+        <button type="button" className={btnPrimary + ' !bg-success hover:!bg-success'} disabled={busy || !ready} onClick={() => void save()}>
           {busy ? 'Recording…' : 'Record'}
         </button>
       </div>

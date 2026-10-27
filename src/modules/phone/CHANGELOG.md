@@ -4,6 +4,29 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.1 — 2026-10-27
+
+**Changed**
+
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+- its settings screen uses the shared Settings kit (src/components/SettingsKit.tsx): the same headers, cards and rows as Settings (D-G09)
+
+## 1.2.0 — 2026-10-26
+
+**Changed**
+
+- Phone is shown, rings and notifies only for whoever has the server's telephony application (Voip 1.2.0, Core 1.17.0; everybody by default), as on the web (D-G24)
+
+**Fixed**
+
+- its rows that open a record on a click are reached with Tab and opened with Enter or Space (audit D-G21)
+
+## 1.1.1 — 2026-10-26
+
+**Changed**
+
+- the figure cards (KPI, stat and summary tiles) are the shared StatCard — compact, a tinted icon chip and the label above a calm figure, a muted line under it, zero shown muted; cards that open a list are buttons with a focus ring and a soft lift; the same figures and actions as before
+
 ## 1.1.0 — 2026-10-07
 
 **Added**

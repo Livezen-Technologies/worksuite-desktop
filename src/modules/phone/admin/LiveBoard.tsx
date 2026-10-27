@@ -6,6 +6,7 @@ import { isNotOffered, NOT_OFFERED, phoneApi, useBoard, useExtensions, useLive, 
 import { usePhoneAccess } from '../access';
 import { clock, isoDay, prettyNumber } from '../lib/format';
 import { Kpi, Mono, PageBody, PageHeader, Panel, Refused } from '../parts';
+import { StatGrid } from '../../../components/StatCard';
 
 /**
  * A01 · Live board (VOIP-RPT-04/05/06, WF-14). Queues, waiting callers, the longest wait, agents by state and the
@@ -74,14 +75,14 @@ function BoardView({ b, wall, canSupervise }: { b: Board; wall: boolean; canSupe
   const t = b.totals;
   return (
     <div className="flex flex-col gap-4">
-      <div className={cx('grid gap-3', wall ? 'grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6')}>
-        <Kpi label="Calls now" value={t.calls_now} sub={`${t.external} external · ${t.internal} internal`} />
-        <Kpi label="Waiting" value={t.waiting} tone={t.waiting ? 'warning' : undefined} sub={`across ${b.queues.length} queues`} />
-        <Kpi label="Longest wait" value={clock(t.longest_wait)} tone={t.longest_wait > 60 ? 'danger' : undefined} />
-        <Kpi label="Agents free" value={`${t.agents_free} / ${t.agents_total}`} sub={`${t.agents_paused} paused`} />
-        <Kpi label="Answered today" value={t.answered_today} tone="success" sub={t.answer_rate !== null ? `${t.answer_rate}% answer rate` : undefined} />
-        <Kpi label="Abandoned" value={t.abandoned_today} sub={t.avg_abandon_wait !== null ? `avg ${clock(t.avg_abandon_wait)} before hang-up` : undefined} />
-      </div>
+      <StatGrid min={wall ? 200 : 180}>
+        <Kpi icon="phone-call" tone="blue" label="Calls now" value={t.calls_now} sub={`${t.external} external · ${t.internal} internal`} />
+        <Kpi icon="hourglass" label="Waiting" value={t.waiting} tone={t.waiting ? 'warning' : undefined} sub={`across ${b.queues.length} queues`} />
+        <Kpi icon="timer" label="Longest wait" value={clock(t.longest_wait)} tone={t.longest_wait > 60 ? 'danger' : undefined} />
+        <Kpi icon="headphones" tone="green" label="Agents free" value={`${t.agents_free} / ${t.agents_total}`} sub={`${t.agents_paused} paused`} />
+        <Kpi icon="phone-incoming" label="Answered today" value={t.answered_today} tone="success" sub={t.answer_rate !== null ? `${t.answer_rate}% answer rate` : undefined} />
+        <Kpi icon="phone-missed" label="Abandoned" value={t.abandoned_today} sub={t.avg_abandon_wait !== null ? `avg ${clock(t.avg_abandon_wait)} before hang-up` : undefined} />
+      </StatGrid>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">
           <Panel title="Queues now">
@@ -327,14 +328,14 @@ function Derived({ wall }: { wall: boolean }) {
           {down.map((s) => `${s.server}: ${s.message ?? 'not reachable'}`).join(' · ')}
         </div>
       ) : null}
-      <div className={cx('grid gap-3', wall ? 'grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6')}>
-        <Kpi label="Calls now" value={calls.length} sub={`${calls.filter((c) => !c.internal).length} external · ${calls.filter((c) => c.internal).length} internal`} />
-        <Kpi label="Waiting" value={q.length ? waiting : null} tone={waiting ? 'warning' : undefined} sub={q.length ? `across ${q.length} queues` : undefined} />
-        <Kpi label="Longest wait" value={q.length ? clock(longest) : null} />
-        <Kpi label="Agents free" value={`${states.filter((x) => x.s === 'free').length} / ${agents.length}`} sub={`${states.filter((x) => x.s === 'paused').length} away or DND`} />
-        <Kpi label="Answered today" value={t ? t.answered : null} tone="success" sub={t?.answer_rate !== null && t?.answer_rate !== undefined ? `${t.answer_rate}% answer rate` : undefined} />
-        <Kpi label="Unanswered today" value={t ? t.unanswered : null} />
-      </div>
+      <StatGrid min={wall ? 200 : 180}>
+        <Kpi icon="phone-call" tone="blue" label="Calls now" value={calls.length} sub={`${calls.filter((c) => !c.internal).length} external · ${calls.filter((c) => c.internal).length} internal`} />
+        <Kpi icon="hourglass" label="Waiting" value={q.length ? waiting : null} tone={waiting ? 'warning' : undefined} sub={q.length ? `across ${q.length} queues` : undefined} />
+        <Kpi icon="timer" tone="violet" label="Longest wait" value={q.length ? clock(longest) : null} />
+        <Kpi icon="headphones" tone="green" label="Agents free" value={`${states.filter((x) => x.s === 'free').length} / ${agents.length}`} sub={`${states.filter((x) => x.s === 'paused').length} away or DND`} />
+        <Kpi icon="phone-incoming" label="Answered today" value={t ? t.answered : null} tone="success" sub={t?.answer_rate !== null && t?.answer_rate !== undefined ? `${t.answer_rate}% answer rate` : undefined} />
+        <Kpi icon="phone-missed" label="Unanswered today" value={t ? t.unanswered : null} />
+      </StatGrid>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="flex flex-col gap-4">
           <Panel title="Queues now">

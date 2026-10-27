@@ -10,7 +10,7 @@ import { Icon } from '../../components/Icon';
 import { ErrorNote, FileBadge, Spinner, cx } from '../../components/ui';
 import type { DocList, EmployeeDoc } from './api';
 import { dayLong } from './dates';
-import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, row, Seg, Sheet, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, row, Seg, Sheet, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 
 /**
@@ -122,7 +122,7 @@ export default function MyDocuments({ employeeId }: { employeeId?: number } = {}
             const files = Array.from(e.dataTransfer.files);
             if (files.length) setAdding(files);
           }}
-          className={cx('flex h-16 shrink-0 items-center justify-center rounded-[12px] border-2 border-dashed font-semibold', drag ? 'border-primary bg-selection text-primary' : 'border-[#B8C2DA] bg-surface text-ink-2 dark:border-line')}
+          className={cx('flex h-16 shrink-0 items-center justify-center rounded-[12px] border-2 border-dashed font-semibold', drag ? 'border-primary bg-selection text-primary' : 'border-primary-soft bg-surface text-ink-2 dark:border-line')}
         >
           Drag files here, or click to browse
         </button>

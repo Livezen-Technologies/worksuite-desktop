@@ -4,6 +4,22 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-27
+
+**Added**
+
+- read-only offline from the encrypted cache — what was last read, under an "Offline · read-only" banner with its "as of" time; every change waits for the connection and is refused before it is sent; secrets, files, exports and one-time answers are never kept (D-G14)
+
+**Changed**
+
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+
+## 1.1.1 — 2026-10-26
+
+**Changed**
+
+- the figure cards (KPI, stat and summary tiles) are the shared StatCard — compact, a tinted icon chip and the label above a calm figure, a muted line under it, zero shown muted; cards that open a list are buttons with a focus ring and a soft lift; the same figures and actions as before
+
 ## 1.1.0 — 2026-10-25
 
 **Added**

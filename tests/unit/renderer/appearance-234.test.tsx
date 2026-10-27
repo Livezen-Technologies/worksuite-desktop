@@ -360,7 +360,7 @@ describe('the profile cards (#234)', () => {
     serve({ accent: '#be123c', locked: true }, { theme: 'dark' });
     await initAppState();
     const view = renderProfiles();
-    expect(screen.getByText('Set by your organization')).toBeTruthy();
+    expect(screen.getByText('Managed by your organization')).toBeTruthy();
     expect(screen.getAllByText('Your organization sets the colour profile.').length).toBeGreaterThan(0);
     const org = screen.getAllByRole('radio', { name: 'Organisation default' });
     expect(org.every((r) => r.getAttribute('aria-checked') === 'true')).toBe(true);

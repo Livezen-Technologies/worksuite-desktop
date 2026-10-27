@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { Button } from '../../components/ui';
 import { fetchDashboard, K, today } from './api';
 import { errText, Head, Pill, Section, StatusPill, td, th, useDesk } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * D21 · Offline and outbox: what this desk did without WorkSuite — check-ins and other status moves, client notes —
@@ -92,7 +93,7 @@ export default function Outbox({ items }: { items: OfflineMutation[] }) {
         <table className="w-full border-collapse text-[12.5px] text-ink">
           <tbody>
             {(day.data?.schedule ?? []).filter((a) => !desk.location || a.location.id === desk.location).map((a) => (
-              <tr key={a.id} className="cursor-pointer hover:bg-subtle" onClick={() => desk.open(a.id)}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={a.id} className="cursor-pointer hover:bg-subtle" onClick={() => desk.open(a.id)}>
                 <td className={td}>{a.local.start}</td>
                 <td className={td}>{a.customer.name}</td>
                 <td className={td}>{`${a.service.name} · ${a.provider.name}`}</td>

@@ -192,8 +192,8 @@ describe('the Voice calls view (UX-CALL-01)', () => {
     const tiles = await within(view()).findByRole('list', { name: 'Calls in this period' });
     const text = within(tiles).getAllByRole('listitem').map((t) => t.textContent);
     expect(text).toEqual(['Calls38', 'Answered33', 'Missed5', 'Avg wait0:14', 'Avg length4:32', 'Call-backs open2']);
-    expect(within(tiles).getByRole('listitem', { name: /^Missed: 5/ }).className).toContain('bg-[#fff6f5]');
-    expect(within(tiles).getByRole('listitem', { name: /^Call-backs open: 2/ }).className).toContain('bg-[#fffaf0]');
+    expect(within(tiles).getByRole('listitem', { name: /^Missed: 5/ }).getAttribute('data-tone')).toBe('red');
+    expect(within(tiles).getByRole('listitem', { name: /^Call-backs open: 2/ }).getAttribute('data-tone')).toBe('amber');
     fireEvent.click(within(tiles).getByRole('listitem', { name: /^Missed: 5/ }));
     await waitFor(() => expect(callsAsked().at(-1)).toMatchObject({ result: 'missed', page: '1' }));
     fireEvent.click(within(tiles).getByRole('listitem', { name: /^Call-backs open: 2/ }));

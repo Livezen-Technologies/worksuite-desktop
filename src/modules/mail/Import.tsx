@@ -12,6 +12,7 @@ import { Select } from '../../components/Select';
 import { Button, Chip, Empty, ErrorNote, Spinner, TextField, cx } from '../../components/ui';
 import { accountBg } from './parts';
 import { SOURCES, accountsFor, folderProgress, importActions, sinceFor, stageWords, timeLeft, type ImportCheck, type ImportDetail, type ImportOptions, type ImportSummary, type SourceKind } from './imports';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Settings › Mail › Import mail (design D08, MAIL-MIG-20…22, WF-M27): bring
@@ -356,12 +357,12 @@ function ImportProgress({ summary }: { summary: ImportSummary }) {
       <div role="progressbar" aria-label={text('Import progress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={s.percent} className="h-2 overflow-hidden rounded-full bg-subtle">
         <div className="h-2 rounded-full bg-primary" style={{ width: `${s.percent}%` }} />
       </div>
-      <div className="grid grid-cols-4 gap-2.5">
-        <Stat k={text('Messages copied')} v={s.copied.toLocaleString()} />
-        <Stat k={text('Remaining')} v={remaining.toLocaleString()} />
-        <Stat k={text('Already here')} v={s.skipped.toLocaleString()} />
-        <Stat k={left ? text('Time left') : text('Copied')} v={left ?? bytes(s.bytes)} />
-      </div>
+      <StatGrid min={140}>
+        <Stat icon="mail-check" tone="green" k={text('Messages copied')} v={s.copied.toLocaleString()} />
+        <Stat icon="inbox" tone="blue" k={text('Remaining')} v={remaining.toLocaleString()} />
+        <Stat icon="copy" tone="neutral" k={text('Already here')} v={s.skipped.toLocaleString()} />
+        <Stat icon="clock" tone="violet" k={left ? text('Time left') : text('Copied')} v={left ?? bytes(s.bytes)} />
+      </StatGrid>
       {problem ? <p className="rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning">{problem}</p> : null}
       {d?.folders.length ? (
         <div className="overflow-hidden rounded-[10px] border border-line">
@@ -404,11 +405,6 @@ function ImportProgress({ summary }: { summary: ImportSummary }) {
   );
 }
 
-function Stat({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex flex-col gap-0.5 rounded-[10px] bg-subtle px-3 py-2.5">
-      <span className="text-[11.5px] text-ink-3">{k}</span>
-      <b className="font-mono text-[17px] text-ink">{v}</b>
-    </div>
-  );
+function Stat({ k, v, icon, tone }: { k: string; v: string; icon?: string; tone?: StatTone }) {
+  return <StatCard size="sm" label={k} value={v} icon={icon} tone={tone} />;
 }

@@ -34,7 +34,7 @@ export default function Alerts() {
       <Section>
         <ul className="m-0 list-none p-0">
           {list.map((n) => (
-            <li key={n.id} className={cx('flex items-start gap-3 border-b border-line/70 px-4 py-3', !n.read && 'bg-[#F6F8FE] dark:bg-selection/40')}>
+            <li key={n.id} className={cx('flex items-start gap-3 border-b border-line/70 px-4 py-3', !n.read && 'bg-info-soft dark:bg-selection/40')}>
               <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', n.read ? 'bg-transparent' : 'bg-primary')} />
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-bold text-ink">{n.title}</div>

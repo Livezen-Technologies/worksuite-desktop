@@ -286,9 +286,12 @@ describe('the financial overview', () => {
     wrap(<FinancialOverview company={company} onGo={vi.fn()} />);
     await screen.findByText('Total revenue');
     expect(apiGet).toHaveBeenCalledWith('/api/finance/overview/financial', expect.objectContaining({ company: 2 }), expect.anything());
-    expect(screen.getByText('+12.5%').className).toContain('text-success');
-    // Costs up is bad: same arrow direction, the other colour.
-    expect(screen.getByText('+20.0%').className).toContain('text-danger');
+    const pill = (t: string) => screen.getByText(t).closest('[data-stat-trend]')!;
+    expect(pill('+12.5%').getAttribute('data-stat-trend')).toBe('up');
+    expect(pill('+12.5%').className).toContain('is-good');
+    // Costs up is bad: the same arrow, and the pill says it is bad news.
+    expect(pill('+20.0%').getAttribute('data-stat-trend')).toBe('up');
+    expect(pill('+20.0%').className).toContain('is-bad');
     expect(screen.getByText('No comparison — nothing in the previous period')).toBeTruthy();
     expect(screen.getByText('A balance on 28 Sep 2026 — not compared')).toBeTruthy();
     expect(screen.getByText(/Compared with 5 Apr 2025 to 31 Dec 2025 — the same length of time immediately before this period\. Posted journals only/)).toBeTruthy();
@@ -450,11 +453,17 @@ describe('budget against actual', () => {
     expect(within(rent).getByText('+8.3%').className).toContain('text-danger');
     expect(within(sales).getByText('+8.3%').className).toContain('text-success');
     expect(within(screen.getByText('Travel').closest('[data-favourable]') as HTMLElement).getByText('not budgeted')).toBeTruthy();
-    // Profit has no favourable: behind plan is red by its sign.
-    const profit = screen.getByText('Profit against plan').parentElement as HTMLElement;
-    expect(within(profit).getAllByText('LKR -120,000.00').at(-1)!.className).toContain('text-danger');
-    expect(screen.getByText('LKR +400,000.00').className).toContain('text-success');
-    expect(screen.getByText('LKR +520,000.00').className).toContain('text-danger');
+    // The totals are stat cards; their variance is the trend pill, which says good or bad news in words and an arrow.
+    // Profit has no favourable: behind plan is bad news by its sign.
+    const pill = (el: HTMLElement) => el.closest('[data-stat-trend]') as HTMLElement;
+    const profit = screen.getByRole('group', { name: 'Profit against plan' });
+    const profitPill = profit.querySelector('[data-stat-trend]') as HTMLElement;
+    expect(profitPill.textContent).toContain('LKR -120,000.00');
+    expect(profitPill.className).toContain('is-bad');
+    expect(profitPill.getAttribute('data-stat-trend')).toBe('down');
+    expect(pill(screen.getByText('LKR +400,000.00')).className).toContain('is-good');
+    expect(pill(screen.getByText('LKR +520,000.00')).className).toContain('is-bad');
+    expect(screen.getByRole('group', { name: 'Cost' }).getAttribute('data-favourable')).toBe('false');
     fireEvent.click(screen.getByRole('button', { name: 'Export' }));
     await waitFor(() => expect(call).toHaveBeenCalledWith('transfers:download', { financeCsv: { report: 'budget-variance', company: 2, from: '2026-01-01', to: '2026-09-28' }, name: 'budget-variance.csv' }));
   });

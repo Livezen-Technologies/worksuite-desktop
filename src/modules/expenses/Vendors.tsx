@@ -6,10 +6,10 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { problemsOf, refusal, shortDate } from '../finance/api';
-import { ConfirmSheet, LoadFailed, Notice } from '../finance/parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
 import { can, canAct, money } from './api';
 import { Note } from './parts';
 import type { ScreenProps } from './Rail';
@@ -134,7 +134,7 @@ function VendorCard({ v, mayWrite, busy, onArchive, onDelete }: { v: Vendor; may
 function Figure({ value, label, tone }: { value: string; label: string; tone?: 'green' }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <b className={cx('truncate text-[14px] tabular-nums', tone === 'green' ? 'text-[#166534] dark:text-success' : 'text-ink')}>{value}</b>
+      <b className={cx('truncate text-[14px] tabular-nums', tone === 'green' ? 'text-success-ink dark:text-success' : 'text-ink')}>{value}</b>
       <span className="text-[11px] text-ink-3">{label}</span>
     </span>
   );

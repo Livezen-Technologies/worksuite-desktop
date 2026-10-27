@@ -119,9 +119,9 @@ export function CropPanel(p: PanelProps & { draft: Rect | null; setDraft: (r: Re
           Use
         </DarkButton>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-[12px] text-[#AFC0E8]">
-        <span className="rounded-[8px] border border-[#24314F] px-2.5 py-1.5">W {Math.round(t.w * d.w)}</span>
-        <span className="rounded-[8px] border border-[#24314F] px-2.5 py-1.5">H {Math.round(t.h * d.h)}</span>
+      <div className="grid grid-cols-2 gap-2 text-[12px] text-stage-accent">
+        <span className="rounded-[8px] border border-stage-line-soft px-2.5 py-1.5">W {Math.round(t.w * d.w)}</span>
+        <span className="rounded-[8px] border border-stage-line-soft px-2.5 py-1.5">H {Math.round(t.h * d.h)}</span>
       </div>
       <div className="flex gap-2">
         <DarkButton primary onClick={p.onApply} disabled={d.w < 0.02 || d.h < 0.02}>
@@ -129,7 +129,7 @@ export function CropPanel(p: PanelProps & { draft: Rect | null; setDraft: (r: Re
         </DarkButton>
         {r.crop ? <DarkButton onClick={() => (p.setDraft(null), p.commit({ ...r, crop: null, crop_ratio: null }))}>Remove crop</DarkButton> : null}
       </div>
-      <span className="text-[12px] text-[#8C9BC0]">Drag on the picture to choose what to keep. Layers stay where they are on the picture.</span>
+      <span className="text-[12px] text-stage-ink-3">Drag on the picture to choose what to keep. Layers stay where they are on the picture.</span>
       <Label>Rounded corners</Label>
       <Slider label="Corner radius" value={r.corners} min={0} max={200} unit=" px" onChange={(v) => p.live({ ...r, corners: v })} onDone={p.settle} />
       {r.corners > 0 && ['jpg', 'jpeg'].includes(p.ext) ? (
@@ -214,8 +214,8 @@ export function FiltersPanel(p: PanelProps & { presets: Preset[]; onSavePreset: 
         {names.map((n) => {
           const on = !r.filter.preset && r.filter.name === n;
           return (
-            <button key={n} type="button" aria-pressed={on} onClick={() => p.commit({ ...r, filter: { ...r.filter, name: n, preset: null, strength: n === r.filter.name ? r.filter.strength : 100 } })} className="flex flex-col items-center gap-1 text-[12px] font-semibold text-[#E6ECFA]">
-              <span className={cx('flex h-[58px] w-full items-center justify-center overflow-hidden', on ? TILE_ON : TILE)}>{thumbs[n] ? <img src={thumbs[n]} alt="" className="h-full w-full object-cover" /> : <Icon name="blend" size={18} className="text-[#5E6B8C]" />}</span>
+            <button key={n} type="button" aria-pressed={on} onClick={() => p.commit({ ...r, filter: { ...r.filter, name: n, preset: null, strength: n === r.filter.name ? r.filter.strength : 100 } })} className="flex flex-col items-center gap-1 text-[12px] font-semibold text-stage-ink">
+              <span className={cx('flex h-[58px] w-full items-center justify-center overflow-hidden', on ? TILE_ON : TILE)}>{thumbs[n] ? <img src={thumbs[n]} alt="" className="h-full w-full object-cover" /> : <Icon name="blend" size={18} className="text-stage-ink-4" />}</span>
               {filterLabel(n)}
             </button>
           );
@@ -261,9 +261,9 @@ export function AreaPanel(p: PanelProps) {
   return (
     <div className="flex flex-col gap-3">
       <Head title="Area" onReset={area ? () => p.commit({ ...r, area: null, filter: { ...r.filter, scope: 'image' } }) : null} />
-      <span className="text-[12.5px] text-[#AFC0E8]">Click the picture to pick a colour area — a sky, a wall. Shift-click adds to it. Filters can then apply to the area alone.</span>
+      <span className="text-[12.5px] text-stage-accent">Click the picture to pick a colour area — a sky, a wall. Shift-click adds to it. Filters can then apply to the area alone.</span>
       <Slider label="How near a colour counts" value={area?.tolerance ?? 32} min={4} max={120} onChange={(v) => p.live({ ...r, area: { seeds: area?.seeds ?? [], tolerance: v } })} onDone={p.settle} />
-      <span className="text-[12px] text-[#8C9BC0]">{area?.seeds.length ? `${area.seeds.length} ${area.seeds.length === 1 ? 'pick' : 'picks'}` : 'Nothing picked yet.'}</span>
+      <span className="text-[12px] text-stage-ink-3">{area?.seeds.length ? `${area.seeds.length} ${area.seeds.length === 1 ? 'pick' : 'picks'}` : 'Nothing picked yet.'}</span>
       {area?.seeds.length ? (
         <DarkButton onClick={() => p.commit({ ...r, filter: { ...r.filter, scope: 'area' } })} disabled={r.filter.scope === 'area'}>
           Use for filters
@@ -320,11 +320,11 @@ export function TextPanel(p: PanelProps & { brandFonts: string[]; orgPresets: Pr
           <textarea aria-label="Text" value={sel.text} rows={2} onChange={(e) => set({ text: e.target.value }, true)} onBlur={p.settle} className={cx(FIELD, 'h-auto py-1.5')} />
           <Label>Font</Label>
           <Select value={sel.font} aria-label="Font" options={fonts} onValueChange={(v) => set({ font: v })} className="h-8 w-full text-white" searchable />
-          <span className="text-[11.5px] text-[#8C9BC0]">Brand fonts load from Drive › Brand › Fonts and are kept for offline use.</span>
+          <span className="text-[11.5px] text-stage-ink-3">Brand fonts load from Drive › Brand › Fonts and are kept for offline use.</span>
           <div className="grid grid-cols-[90px_1fr] gap-2">
-            <label className="flex items-center gap-1 rounded-[8px] border border-[#24314F] bg-[#0B1120] px-2 text-[13px] text-[#E6ECFA]">
+            <label className="flex items-center gap-1 rounded-[8px] border border-stage-line-soft bg-stage px-2 text-[13px] text-stage-ink">
               <input type="number" aria-label="Size in pixels" min={4} max={2000} value={Math.round((sel.size / 1000) * ch)} onChange={(e) => set({ size: (Math.max(4, Number(e.target.value) || 4) / ch) * 1000 }, true)} className="h-8 w-full bg-transparent outline-none" />
-              <span className="text-[#8C9BC0]">px</span>
+              <span className="text-stage-ink-3">px</span>
             </label>
             <Select value={String(sel.weight)} aria-label="Weight" options={[{ value: '400', label: 'Regular' }, { value: '500', label: 'Medium' }, { value: '700', label: 'Bold' }, { value: '800', label: 'Extra bold' }]} onValueChange={(v) => set({ weight: Number(v) })} className="h-8 w-full text-white" />
           </div>
@@ -367,7 +367,7 @@ export function TextPanel(p: PanelProps & { brandFonts: string[]; orgPresets: Pr
           ) : null}
         </>
       ) : (
-        <span className="text-[12px] text-[#8C9BC0]">Choose a style to add text, or select text on the picture. Double-click text to type in place; drag its side handles to set where it wraps.</span>
+        <span className="text-[12px] text-stage-ink-3">Choose a style to add text, or select text on the picture. Double-click text to type in place; drag its side handles to set where it wraps.</span>
       )}
       <Note>Text stays a live layer in the version: anyone with Edit access can fix a typo after the picture is saved.</Note>
     </div>
@@ -439,9 +439,9 @@ export function StickersPanel(p: PanelProps & { start: 'stickers' | 'shapes'; li
   const setSel = (patch: Partial<OverlayObject>, live = false) => sel && (live ? p.live : p.commit)(withObject(r, sel.id, (o) => ({ ...o, ...patch }) as OverlayObject));
   return (
     <div className="flex flex-col gap-3">
-      <div role="tablist" aria-label="Stickers and shapes" className="-mx-4 -mt-4 flex border-b border-[#1E2A4A] px-2">
+      <div role="tablist" aria-label="Stickers and shapes" className="-mx-4 -mt-4 flex border-b border-stage-line-soft px-2">
         {(['stickers', 'shapes', 'drive'] as const).map((t) => (
-          <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('h-11 px-3 text-[13px] font-bold', tab === t ? 'border-b-2 border-[#7FA2FF] text-white' : 'text-[#8C9BC0] hover:text-white')}>
+          <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('h-11 px-3 text-[13px] font-bold', tab === t ? 'border-b-2 border-stage-ink-3 text-white' : 'text-stage-ink-3 hover:text-white')}>
             {t === 'stickers' ? 'Stickers' : t === 'shapes' ? 'Shapes' : 'From Drive'}
           </button>
         ))}
@@ -468,7 +468,7 @@ export function StickersPanel(p: PanelProps & { start: 'stickers' | 'shapes'; li
               </button>
             ))}
           </div>
-          {!list.length && !brand.length ? <span className="text-[12px] text-[#8C9BC0]">{cat === 'brand' && !p.libraries.stickers.length ? 'Your admin has not chosen a Stickers folder yet.' : 'No sticker matches.'}</span> : null}
+          {!list.length && !brand.length ? <span className="text-[12px] text-stage-ink-3">{cat === 'brand' && !p.libraries.stickers.length ? 'Your admin has not chosen a Stickers folder yet.' : 'No sticker matches.'}</span> : null}
         </>
       ) : null}
       {tab === 'shapes' ? (
@@ -494,7 +494,7 @@ export function StickersPanel(p: PanelProps & { start: 'stickers' | 'shapes'; li
               </button>
             ))}
           </div>
-          {!p.libraries.logos.length ? <span className="text-[12px] text-[#8C9BC0]">No logos you can view. Your admin chooses the Logos folder in Drive settings › Photo editor.</span> : null}
+          {!p.libraries.logos.length ? <span className="text-[12px] text-stage-ink-3">No logos you can view. Your admin chooses the Logos folder in Drive settings › Photo editor.</span> : null}
           <DarkButton onClick={() => setPicking(true)} icon={<Icon name="folder-open" size={14} />}>
             Browse Drive…
           </DarkButton>
@@ -516,7 +516,7 @@ export function StickersPanel(p: PanelProps & { start: 'stickers' | 'shapes'; li
           <Label>{sel.kind === 'sticker' ? 'Selected sticker' : 'Selected picture'}</Label>
           {sel.kind === 'sticker' && sel.vector ? (
             <>
-              <div className="flex items-center gap-3 text-[12.5px] text-[#E6ECFA]">
+              <div className="flex items-center gap-3 text-[12.5px] text-stage-ink">
                 Colour
                 <Swatches label="Sticker colour" value={sel.colour} onChange={(colour) => setSel({ colour } as Partial<StickerObject>)} colours={['#5B9BFF', '#FFFFFF', '#F59E0B', '#E5484D', '#12A594', '#1B1F2E']} />
               </div>
@@ -524,7 +524,7 @@ export function StickersPanel(p: PanelProps & { start: 'stickers' | 'shapes'; li
               {sel.outline.on ? <Slider label="Outline width" value={sel.outline.width} min={1} max={12} onChange={(v) => setSel({ outline: { ...sel.outline, width: v } } as Partial<StickerObject>, true)} onDone={p.settle} /> : null}
             </>
           ) : (
-            <span className="text-[12px] text-[#8C9BC0]">A picture keeps its own colours: opacity and shadow only.</span>
+            <span className="text-[12px] text-stage-ink-3">A picture keeps its own colours: opacity and shadow only.</span>
           )}
           <Slider label="Opacity" value={Math.round(sel.opacity * 100)} min={5} max={100} unit="%" onChange={(v) => setSel({ opacity: v / 100 }, true)} onDone={p.settle} />
           <SwitchRow label="Shadow" checked={sel.shadow.on} onChange={(on) => setSel({ shadow: { ...sel.shadow, on } })} />
@@ -593,7 +593,7 @@ export function FramesPanel(p: PanelProps & { libraries: Libraries }) {
         {FRAME_TILES.map((x) => {
           const on = (f?.preset ?? 'none') === x.id;
           return (
-            <button key={x.id} type="button" aria-pressed={on} onClick={() => choose(x.id)} className="flex flex-col items-center gap-1 text-[12px] font-semibold text-[#E6ECFA]">
+            <button key={x.id} type="button" aria-pressed={on} onClick={() => choose(x.id)} className="flex flex-col items-center gap-1 text-[12px] font-semibold text-stage-ink">
               <span className={cx('flex h-[58px] w-full items-center justify-center', on ? TILE_ON : TILE)}>
                 <FrameGlyph id={x.id} />
               </span>
@@ -604,7 +604,7 @@ export function FramesPanel(p: PanelProps & { libraries: Libraries }) {
         {p.libraries.frames.map((it) => {
           const on = f?.preset === 'library' && f.asset?.file_id === it.file_id;
           return (
-            <button key={`${it.file_id}`} type="button" aria-pressed={on} onClick={() => choose('library', it)} className="flex flex-col items-center gap-1 text-[12px] font-semibold text-[#E6ECFA]">
+            <button key={`${it.file_id}`} type="button" aria-pressed={on} onClick={() => choose('library', it)} className="flex flex-col items-center gap-1 text-[12px] font-semibold text-stage-ink">
               <span className={cx('flex h-[58px] w-full items-center justify-center overflow-hidden', on ? TILE_ON : TILE)}><LibraryThumb item={it} /></span>
               <span className="w-full truncate text-center">{it.name.replace(/\.[^.]+$/, '')}</span>
             </button>
@@ -615,7 +615,7 @@ export function FramesPanel(p: PanelProps & { libraries: Libraries }) {
         <>
           <Slider label="Frame size" value={f.size} min={0} max={200} unit=" px" onChange={(v) => p.live({ ...r, frame: { ...f, size: v } })} onDone={p.settle} />
           {f.preset !== 'shadow' && f.preset !== 'library' ? (
-            <div className="flex items-center gap-3 text-[12.5px] text-[#E6ECFA]">
+            <div className="flex items-center gap-3 text-[12.5px] text-stage-ink">
               Colour
               <Swatches label="Frame colour" value={f.colour} onChange={(colour) => p.commit({ ...r, frame: { ...f, colour } })} colours={['#FFFFFF', '#F4EFE6', '#111111', '#23349E']} />
             </div>
@@ -629,7 +629,7 @@ export function FramesPanel(p: PanelProps & { libraries: Libraries }) {
 }
 
 function FrameGlyph({ id }: { id: FramePreset }) {
-  const inner = 'h-[30px] w-[44px] rounded-[2px] bg-[#5E6B8C]';
+  const inner = 'h-[30px] w-[44px] rounded-[2px] bg-brand';
   switch (id) {
     case 'thin':
       return <span className="rounded-[3px] border-2 border-white p-0"><span className={cx(inner, 'block')} /></span>;
@@ -640,7 +640,7 @@ function FrameGlyph({ id }: { id: FramePreset }) {
     case 'shadow':
       return <span className={cx(inner, 'block shadow-[0_6px_10px_rgba(0,0,0,.7)]')} />;
     case 'brand':
-      return <span className="rounded-[3px] bg-[#23349E] p-1"><span className={cx(inner, 'block')} /></span>;
+      return <span className="rounded-[3px] bg-stage-primary p-1"><span className={cx(inner, 'block')} /></span>;
     default:
       return <span className={cx(inner, 'block')} />;
   }
@@ -667,10 +667,10 @@ export function DrawPanel({ style, setStyle }: { style: DrawStyle; setStyle: (s:
         <>
           <Swatches label="Pen colour" value={style.colour} onChange={(colour) => setStyle({ ...style, colour })} />
           <Slider label="Width" value={style.width} min={1} max={60} onChange={(width) => setStyle({ ...style, width })} />
-          <span className="text-[12px] text-[#8C9BC0]">Draw on the picture. Each stroke is a layer you can move, hide or delete.</span>
+          <span className="text-[12px] text-stage-ink-3">Draw on the picture. Each stroke is a layer you can move, hide or delete.</span>
         </>
       ) : (
-        <span className="text-[12px] text-[#8C9BC0]">Click a stroke to remove it.</span>
+        <span className="text-[12px] text-stage-ink-3">Click a stroke to remove it.</span>
       )}
     </div>
   );
@@ -716,11 +716,11 @@ export function MarkPanel(p: PanelProps & { presets: Preset[]; libraries: Librar
         <>
           <SwitchRow label="Tile across the picture" checked={base.tile} onChange={(tile) => set({ tile })} />
           {!base.tile ? (
-            <div className="flex flex-col gap-1.5 text-[12.5px] text-[#E6ECFA]">
+            <div className="flex flex-col gap-1.5 text-[12.5px] text-stage-ink">
               Position
               <div role="radiogroup" aria-label="Position" className="grid w-[120px] grid-cols-3 gap-1">
                 {Array.from({ length: 9 }, (_, i) => (
-                  <button key={i} type="button" role="radio" aria-checked={base.pos === i} aria-label={`Position ${i + 1}`} onClick={() => set({ pos: i })} className={cx('h-[26px] rounded-[5px]', base.pos === i ? 'bg-[#5B7BFF]' : 'bg-[#1A2440] hover:bg-[#24314F]')} />
+                  <button key={i} type="button" role="radio" aria-checked={base.pos === i} aria-label={`Position ${i + 1}`} onClick={() => set({ pos: i })} className={cx('h-[26px] rounded-[5px]', base.pos === i ? 'bg-stage-primary-2' : 'bg-stage-line-soft hover:bg-stage-line-soft')} />
                 ))}
               </div>
             </div>
@@ -743,8 +743,8 @@ export function RedactPanel(p: PanelProps) {
     <div className="flex flex-col gap-3">
       <Head title="Redact" />
       <Note tone="warning">Redact destroys the pixels underneath. Once saved it cannot be removed — not by reopening the edit, and not by anyone else.</Note>
-      <span className="text-[12.5px] text-[#AFC0E8]">Drag over what to hide: a name, a number, a face.</span>
-      <span className="text-[12px] text-[#8C9BC0]">{r.redactions.length ? `${r.redactions.length} ${r.redactions.length === 1 ? 'area' : 'areas'} blacked out. Undo takes back the last one until you save.` : 'Nothing redacted yet.'}</span>
+      <span className="text-[12.5px] text-stage-accent">Drag over what to hide: a name, a number, a face.</span>
+      <span className="text-[12px] text-stage-ink-3">{r.redactions.length ? `${r.redactions.length} ${r.redactions.length === 1 ? 'area' : 'areas'} blacked out. Undo takes back the last one until you save.` : 'Nothing redacted yet.'}</span>
     </div>
   );
 }
@@ -814,22 +814,22 @@ export function LayersPanel(p: PanelProps) {
           ) : null}
         </>
       ) : null}
-      {!r.objects.length ? <span className="text-[12px] text-[#8C9BC0]">No layers yet. Text, shapes, stickers, logos and drawings show here, top first.</span> : null}
+      {!r.objects.length ? <span className="text-[12px] text-stage-ink-3">No layers yet. Text, shapes, stickers, logos and drawings show here, top first.</span> : null}
       <ul aria-label="Layers" className="flex flex-col gap-1">
         {[...r.objects].reverse().map((o, n) => {
           const i = r.objects.length - 1 - n;
           const on = p.selected.includes(o.id);
           return (
-            <li key={o.id} className={cx('flex items-center gap-1 rounded-[8px] border px-1.5 py-1', on ? 'border-[#5B7BFF] bg-[#1A2650]' : 'border-[#24314F]')}>
-              <button type="button" onClick={(e) => p.onSelect(e.shiftKey ? [...p.selected, o.id] : [o.id])} className="min-w-0 flex-1 truncate px-1 text-left text-[12.5px] text-[#E6ECFA]">
+            <li key={o.id} className={cx('flex items-center gap-1 rounded-[8px] border px-1.5 py-1', on ? 'border-stage-primary-2 bg-navy-2' : 'border-stage-line-soft')}>
+              <button type="button" onClick={(e) => p.onSelect(e.shiftKey ? [...p.selected, o.id] : [o.id])} className="min-w-0 flex-1 truncate px-1 text-left text-[12.5px] text-stage-ink">
                 {labelOf(o)}
-                {o.group ? <span className="ml-1 text-[10.5px] text-[#8C9BC0]">· group</span> : null}
+                {o.group ? <span className="ml-1 text-[10.5px] text-stage-ink-3">· group</span> : null}
               </button>
-              <button type="button" aria-label={o.hidden ? `Show ${labelOf(o)}` : `Hide ${labelOf(o)}`} title={o.hidden ? 'Show' : 'Hide'} onClick={() => patch([o.id], (x) => ({ ...x, hidden: !x.hidden }))} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#AFC0E8] hover:bg-white/10"><Icon name={o.hidden ? 'eye-off' : 'eye'} size={14} /></button>
-              <button type="button" aria-label={o.locked ? `Unlock ${labelOf(o)}` : `Lock ${labelOf(o)}`} title={o.locked ? 'Unlock' : 'Lock'} onClick={() => patch([o.id], (x) => ({ ...x, locked: !x.locked }))} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#AFC0E8] hover:bg-white/10"><Icon name={o.locked ? 'lock' : 'unlock'} size={14} /></button>
-              <button type="button" aria-label="Bring forward" title="Bring forward" disabled={i === r.objects.length - 1} onClick={() => move(o.id, 1)} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#AFC0E8] hover:bg-white/10 disabled:opacity-30"><Icon name="arrow-up" size={14} /></button>
-              <button type="button" aria-label="Send back" title="Send back" disabled={i === 0} onClick={() => move(o.id, -1)} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#AFC0E8] hover:bg-white/10 disabled:opacity-30"><Icon name="arrow-down" size={14} /></button>
-              <button type="button" aria-label={`Delete ${labelOf(o)}`} title="Delete" onClick={() => (p.commit({ ...r, objects: r.objects.filter((x) => x.id !== o.id) }), p.onSelect(p.selected.filter((x) => x !== o.id)))} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-[#FFB4A3] hover:bg-white/10"><Icon name="trash" size={14} /></button>
+              <button type="button" aria-label={o.hidden ? `Show ${labelOf(o)}` : `Hide ${labelOf(o)}`} title={o.hidden ? 'Show' : 'Hide'} onClick={() => patch([o.id], (x) => ({ ...x, hidden: !x.hidden }))} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-stage-accent hover:bg-white/10"><Icon name={o.hidden ? 'eye-off' : 'eye'} size={14} /></button>
+              <button type="button" aria-label={o.locked ? `Unlock ${labelOf(o)}` : `Lock ${labelOf(o)}`} title={o.locked ? 'Unlock' : 'Lock'} onClick={() => patch([o.id], (x) => ({ ...x, locked: !x.locked }))} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-stage-accent hover:bg-white/10"><Icon name={o.locked ? 'lock' : 'unlock'} size={14} /></button>
+              <button type="button" aria-label="Bring forward" title="Bring forward" disabled={i === r.objects.length - 1} onClick={() => move(o.id, 1)} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-stage-accent hover:bg-white/10 disabled:opacity-30"><Icon name="arrow-up" size={14} /></button>
+              <button type="button" aria-label="Send back" title="Send back" disabled={i === 0} onClick={() => move(o.id, -1)} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-stage-accent hover:bg-white/10 disabled:opacity-30"><Icon name="arrow-down" size={14} /></button>
+              <button type="button" aria-label={`Delete ${labelOf(o)}`} title="Delete" onClick={() => (p.commit({ ...r, objects: r.objects.filter((x) => x.id !== o.id) }), p.onSelect(p.selected.filter((x) => x !== o.id)))} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-stage-danger hover:bg-white/10"><Icon name="trash" size={14} /></button>
             </li>
           );
         })}
@@ -856,7 +856,7 @@ export function ExportPanel({ ext, onExport, busy }: { ext: string; onExport: (f
       <DarkButton primary disabled={busy} onClick={() => onExport(format, quality, size === 'original' ? null : Number(size))} icon={<Icon name="download" size={14} />}>
         Download a copy
       </DarkButton>
-      <span className="text-[12px] text-[#8C9BC0]">Saved on this computer only; nothing changes in Drive. Large is 2048 px and small 1024 px on the long edge.</span>
+      <span className="text-[12px] text-stage-ink-3">Saved on this computer only; nothing changes in Drive. Large is 2048 px and small 1024 px on the long edge.</span>
     </div>
   );
 }
@@ -877,5 +877,5 @@ function LibraryThumb({ item }: { item: LibraryItem }) {
       if (made) URL.revokeObjectURL(made);
     };
   }, [item]);
-  return url ? <img alt="" src={url} className="h-full w-full object-contain" /> : <span className="truncate px-1 text-[11px] text-[#C9D4FF]">{item.name}</span>;
+  return url ? <img alt="" src={url} className="h-full w-full object-contain" /> : <span className="truncate px-1 text-[11px] text-navy-ink">{item.name}</span>;
 }

@@ -9,6 +9,7 @@ import { stampDayLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Chip, cx } from '../../components/ui';
+import { SectionHeader, SettingRowFrame, SettingsGroup } from '../../components/SettingsKit';
 
 const STORAGE: Record<string, string> = {
   keychain: 'macOS Keychain',
@@ -60,13 +61,14 @@ function daysAgo(iso: string | null | undefined, now = Date.now()): number | nul
   return Number.isFinite(t) ? Math.max(0, Math.floor((now - t) / 86_400_000)) : null;
 }
 
+/** A fact about the license: the Settings kit's row frame, the name on the start side and the value beside it. */
 function Row({ label, children, pending }: { label: string; children: ReactNode; pending?: boolean }) {
   return (
-    <div className="flex items-center gap-4 border-b border-line py-2.5 text-[13.5px]">
+    <SettingRowFrame className="flex items-center gap-4 !py-2.5 text-[13.5px]">
       <div className="w-[140px] shrink-0 text-ink-3">{label}</div>
       <div className={cx('min-w-0 flex-1', pending ? 'text-ink-3' : 'text-ink')}>{children}</div>
       {pending ? <Chip>Needs server</Chip> : null}
-    </div>
+    </SettingRowFrame>
   );
 }
 
@@ -88,10 +90,7 @@ export function LicensePage() {
   };
   if (!b) {
     return (
-      <div className="rounded-[12px] border border-line bg-surface p-5 text-[13.5px] text-ink-2">
-        <h2 className="text-[22px] font-bold text-ink">License</h2>
-        <p className="mt-2">Sign in to see your organization's license on this computer.</p>
-      </div>
+      <SectionHeader title="License" hint="Sign in to see your organization's license on this computer." />
     );
   }
   const org = b.organizations.find((o) => o.id === (orgId ?? b.defaultOrganizationId)) ?? b.organizations[0] ?? null;
@@ -105,17 +104,18 @@ export function LicensePage() {
   const off = list.filter((e) => !e.enabled);
   const d = device.data;
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-      <section aria-label="License" className="rounded-[12px] border border-line bg-surface p-5">
-        <div className="flex items-center gap-3">
-          <h2 className="text-[20px] font-bold text-ink">License</h2>
-          <Chip tone={status === 'ACTIVE' ? 'success' : 'warning'}>{status.toUpperCase()}{b.offline ? ' · CACHED' : ''}</Chip>
-          <div className="flex-1" />
-          <Button variant="primary" loading={refreshing} onClick={refresh}>
-            Refresh License
-          </Button>
-        </div>
-        <div className="mt-3">
+    <>
+    <SectionHeader
+      title="License"
+      hint={<Chip tone={status === 'ACTIVE' ? 'success' : 'warning'}>{status.toUpperCase()}{b.offline ? ' · CACHED' : ''}</Chip>}
+      actions={
+        <Button variant="primary" loading={refreshing} onClick={refresh}>
+          Refresh License
+        </Button>
+      }
+    />
+    <div className="grid items-start gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <SettingsGroup label="License" className="!mb-0">
           <Row label="Edition" pending={!license?.edition}>
             {license?.edition ?? NOT_YET}
           </Row>
@@ -150,13 +150,11 @@ export function LicensePage() {
           <Row label="Offline grace" pending={license?.graceDays == null && !license?.graceEndsAt}>
             {license?.graceEndsAt ? `Until ${stampDayLabel(license.graceEndsAt, 'year')}` : license?.graceDays != null ? `${license.graceDays} days (server license)` : NOT_YET}
           </Row>
-        </div>
-      </section>
+      </SettingsGroup>
       <div className="space-y-4">
-        <section aria-label="Entitlements on this device" className="rounded-[12px] border border-line bg-surface p-5">
-          <h3 className="text-[15px] font-bold text-ink">Entitlements on this device</h3>
-          <p className="text-[12px] text-ink-3">From your organization&apos;s sign-in · refreshed when your access changes</p>
-          <ul className="mt-3 grid grid-cols-2 gap-1.5">
+        <SettingsGroup title="Entitlements on this device" description="From your organization's sign-in · refreshed when your access changes" className="!mb-0">
+          <div className="px-[18px] py-3">
+          <ul className="grid grid-cols-2 gap-1.5">
             {[...on, ...(showAll ? off : [])].map((e) => (
               <li key={e.id} className={cx('truncate rounded-[8px] px-2.5 py-1.5 text-[13px]', e.enabled ? 'bg-subtle text-ink' : 'bg-subtle/50 text-ink-3')}>
                 {e.enabled ? '✓' : '—'} {e.label}
@@ -168,18 +166,20 @@ export function LicensePage() {
               {showAll ? 'Show included only' : `${off.length} not included`}
             </button>
           ) : null}
-        </section>
-        <section className="rounded-[12px] border border-line bg-surface p-5 text-[13px] text-ink-2">
-          <p>
+          </div>
+        </SettingsGroup>
+        <SettingsGroup label="Your data" className="!mb-0">
+          <p className="px-[18px] py-3.5 text-[13px] text-ink-2">
             <strong className="text-ink">Your data is safe.</strong> A sign-in check that is due or has lapsed never deletes mail, files, notes or offline changes. They stay on this
             computer and sync once WorkSuite is verified again.
             {b.policy.wipe_on_revoke !== 'tokens' ? ' If an administrator removes this device, your organization’s policy may clear its saved copy.' : ''}
           </p>
-        </section>
+        </SettingsGroup>
         <p className="flex items-center gap-1.5 text-[12px] text-ink-3">
           <Icon name="info" size={13} /> License details come from your server’s latest verification. Refresh retrieves its current saved license status.
         </p>
       </div>
     </div>
+    </>
   );
 }

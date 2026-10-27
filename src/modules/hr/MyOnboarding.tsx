@@ -7,7 +7,7 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { BankCard } from './Bank';
 import MyDocuments from './MyDocuments';
 import { ProgressBar, RequiredDocs, StepList, type ObState } from './onboardingParts';
-import { btn, btnPrimary, Field, input, PageHead, Panel, SidePanel } from './parts';
+import { btn, btnPrimary, Field, input, PageHead, Panel, SidePanel } from '../../components/PageKit';
 import { dayLong } from './dates';
 import { Icon } from '../../components/Icon';
 import { useTab } from '../../core/tab-context';
@@ -44,7 +44,7 @@ export default function MyOnboarding() {
   return (
     <div className="@container flex flex-col gap-3.5">
       <PageHead title="My onboarding" sub={done ? 'Everything is done. Welcome aboard.' : 'A few things to complete before your first day. Anything you enter here goes straight onto your HR record.'} />
-      <section className="flex flex-wrap items-center gap-4 rounded-[14px] border border-line bg-[linear-gradient(120deg,#F3F5FE,var(--color-surface))] px-5 py-4 dark:bg-[linear-gradient(120deg,var(--color-selection),var(--color-surface))]">
+      <section className="flex flex-wrap items-center gap-4 rounded-[14px] border border-line bg-[linear-gradient(120deg,var(--ws-info-soft),var(--color-surface))] px-5 py-4 dark:bg-[linear-gradient(120deg,var(--color-selection),var(--color-surface))]">
         <span className="flex min-w-[220px] flex-1 flex-col">
           <b className="text-[18px] text-ink">{done ? `Welcome aboard, ${first}` : `Welcome, ${first}`}</b>
           <span className="text-[12.5px] text-ink-3">

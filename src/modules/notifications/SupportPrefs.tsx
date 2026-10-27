@@ -4,7 +4,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Switch } from '../../components/ui';
-import { Card, SettingRow } from '../account/parts';
+import { Card, SettingRow } from '../../components/CardKit';
 import type { EventChoices } from './FilesPrefs';
 
 type Categories = Record<string, EventChoices>;

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { GUEST_APPS, findApp, type AppDefinition } from '@shared/apps';
 import { GUEST_VISIBLE, canOpenApp, canOpenLink, canOpenRoute, canOpenWebPath, guestLockedApp, routeOwner, type VisibleApps } from '@shared/access';
+import { featureOn, type EffectiveSetting } from '@shared/desktop-settings';
 import { askForAccess } from './access-request';
 import { app, isGuest } from './app-state';
 import { openSignInPanel } from './session';
@@ -40,14 +41,22 @@ export function visibleIds(): Set<string> {
   return idsOf(app.get().apps);
 }
 
+/**
+ * A screen a desktop setting turns off though its app is given: WorkSuite Office's document tabs
+ * (`features.officeEditing`).
+ */
+function featureBlocks(id: string, effective: Record<string, EffectiveSetting> | null | undefined): boolean {
+  return id === 'office' && !featureOn(effective, 'officeEditing');
+}
+
 /** Whether the person may open this app (a catalogue id, a shell screen, or a part of an app such as calls). */
 export function canOpen(id: string): boolean {
-  return canOpenApp(id, visibleIds());
+  return !featureBlocks(id, app.get().desktopSettings?.effective) && canOpenApp(id, visibleIds());
 }
 
 /** Whether a desktop route belongs to an app the person may open (or to none). */
 export function canOpenDesktopRoute(route: string): boolean {
-  return canOpenRoute(route, visibleIds());
+  return !featureBlocks(routeOwner(route), app.get().desktopSettings?.effective) && canOpenRoute(route, visibleIds());
 }
 
 /** Whether a WorkSuite web path belongs to an app the person may open (or to none). */
@@ -84,7 +93,7 @@ export function requestableApp(target: string): AppDefinition | null {
 
 /** Whether the person may open this app; re-renders when access changes. */
 export function useCanOpen(id: string): boolean {
-  return useStore(app, (s) => canOpenApp(id, idsOf(s.apps)));
+  return useStore(app, (s) => !featureBlocks(id, s.desktopSettings?.effective) && canOpenApp(id, idsOf(s.apps)));
 }
 
 /** The ids of the apps the person may open; re-renders when access changes. */

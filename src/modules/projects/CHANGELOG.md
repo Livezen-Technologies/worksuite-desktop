@@ -4,6 +4,31 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.5 — 2026-10-27
+
+**Changed**
+
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+- its settings screen uses the shared Settings kit (src/components/SettingsKit.tsx): the same headers, cards and rows as Settings (D-G09)
+
+## 1.6.4 — 2026-10-26
+
+**Fixed**
+
+- its rows that open a record on a click are reached with Tab and opened with Enter or Space (audit D-G21)
+
+## 1.6.3 — 2026-10-26
+
+**Changed**
+
+- the figure cards (KPI, stat and summary tiles) are the shared StatCard — compact, a tinted icon chip and the label above a calm figure, a muted line under it, zero shown muted; cards that open a list are buttons with a focus ring and a soft lift; the same figures and actions as before
+
+## 1.6.2 — 2026-10-26
+
+**Fixed**
+
+- a card dragged on the project board no longer jumps back to its old column while a poll was on its way (#430)
+
 ## 1.6.1 — 2026-10-16
 
 - Page heads wrap their actions under the title on a narrow or scaled-up window

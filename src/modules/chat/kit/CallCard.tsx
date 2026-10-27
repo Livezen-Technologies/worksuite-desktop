@@ -35,18 +35,14 @@ function NativeCallCard({ m, own, roomId, compact }: { m: ChatMessage; own: bool
             {timeLabel(m.created_at)}
             {d.detail ? ` · ${d.detail}` : ''}
           </span>
-          {d.action ? (
-            <button type="button" onClick={act} className={cx('h-7 shrink-0 rounded-full px-3 text-[12px] font-bold', d.action === 'Join' ? 'bg-success text-white' : 'bg-success-bg text-success hover:brightness-95')}>
-              {d.action}
-            </button>
-          ) : null}
+          {d.action ? <CallAction action={d.action} video={video} onClick={act} /> : null}
         </div>
       </div>
     );
   }
   return (
     <div className={cx('mt-3 flex', own ? 'justify-end' : 'justify-start')}>
-      <div className={cx('flex items-center gap-2.5 rounded-[12px] border px-3 py-2.5', d.tone === 'missed' ? 'border-[#F1B8A8] bg-surface dark:border-danger/40' : d.tone === 'live' ? 'border-[#9EE6C3] bg-surface' : 'border-line bg-surface')}>
+      <div className={cx('flex items-center gap-2.5 rounded-[12px] border px-3 py-2.5', d.tone === 'missed' ? 'border-danger-line bg-surface dark:border-danger/40' : d.tone === 'live' ? 'border-success-line bg-surface' : 'border-line bg-surface')}>
         <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', d.tone === 'missed' ? 'bg-danger-bg text-danger' : d.tone === 'live' ? 'bg-success-bg text-success' : 'bg-selection text-primary')}>
           <Icon name={video ? 'video' : 'phone'} size={15} />
         </span>
@@ -57,12 +53,30 @@ function NativeCallCard({ m, own, roomId, compact }: { m: ChatMessage; own: bool
             {d.detail ? ` · ${d.detail}` : ''}
           </span>
         </span>
-        {d.action ? (
-          <button type="button" onClick={act} className={cx('ml-1 h-7 shrink-0 rounded-full px-3 text-[12px] font-bold', d.action === 'Join' ? 'bg-success text-white' : 'border border-line text-primary hover:bg-subtle')}>
-            {d.action}
-          </button>
-        ) : null}
+        {d.action ? <CallAction action={d.action} video={video} onClick={act} className="ml-1" /> : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * Join, Call back or Call again (#431): a filled button with the call's icon, so it reads as the thing to press.
+ * Call back was pale green text on pale green in the drawer and a bare outline in the thread, and looked like a label.
+ */
+export function CallAction({ action, video, onClick, className }: { action: 'Join' | 'Call back' | 'Call again'; video: boolean; onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={action === 'Join' ? 'Join the call' : `${action} with a ${video ? 'video' : 'voice'} call`}
+      className={cx(
+        'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.18)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+        action === 'Join' ? 'bg-success hover:brightness-95' : 'bg-primary hover:bg-primary-hover',
+        className,
+      )}
+    >
+      <Icon name={video ? 'video' : 'phone'} size={13} />
+      {action}
+    </button>
   );
 }

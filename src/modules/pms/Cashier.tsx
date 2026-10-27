@@ -2,13 +2,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { Ask, Field, input, Section } from '../garage/parts';
-import { PageHead } from '../hr/parts';
+import { Ask, Field, input, Section } from '../../components/FormKit';
+import { PageHead } from '../../components/PageKit';
 import { day, errorText, isZero, K, money, pGet, pPost, stamp, type Shift } from './api';
 import { device } from './devices';
 import { deskName, keepDeskName } from './money';
 import { Facts, NoAccess, Refusal, usePms } from './parts';
 import { printPage, shiftReportHtml } from './print';
+import { clickOnKey } from '../../components/press';
 
 /** A shift's figures, as the server counted them. */
 export function ShiftFacts({ s }: { s: Shift }) {
@@ -224,7 +225,7 @@ export default function Cashier() {
             </thead>
             <tbody>
               {q.data.items.slice(0, 60).map((s) => (
-                <tr key={s.id} className="cursor-pointer border-t border-line hover:bg-subtle" onClick={() => pms.open({ kind: 'shift', id: s.id })}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={s.id} className="cursor-pointer border-t border-line hover:bg-subtle" onClick={() => pms.open({ kind: 'shift', id: s.id })}>
                   <td className="py-1.5">{day(s.business_date)}</td>
                   <td className="py-1.5">{s.cashier}</td>
                   <td className="py-1.5">{s.terminal}</td>

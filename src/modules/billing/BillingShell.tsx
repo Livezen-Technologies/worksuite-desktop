@@ -146,7 +146,7 @@ export default function BillingShell(_props: ModuleProps) {
           {view === 'inv' ? (
             <div className="flex flex-col">
               {open.length ? (
-                <div role="tablist" aria-label="Open invoices" className="flex gap-0.5 border-b border-line bg-[#E9ECF3] px-6 pt-1.5 dark:bg-subtle">
+                <div role="tablist" aria-label="Open invoices" className="flex gap-0.5 border-b border-line bg-info-bg px-6 pt-1.5 dark:bg-subtle">
                   <DocTab label="List" on={!invoice} onClick={() => list(narrow)} />
                   {open.map((id) => (
                     <InvoiceTab key={id} id={id} on={invoice === id} onClick={() => openInvoice(id)} onClose={() => close(id)} />

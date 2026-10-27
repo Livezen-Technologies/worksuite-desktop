@@ -6,10 +6,10 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
 import { shortDate } from '../finance/api';
-import { Notice } from '../finance/parts';
+import { Notice } from '../../components/RecordKit';
 import { RangeFields, ReadFailed } from '../finance/ReportBar';
-import { Cell, Empty, Field, input, PageHead, row } from '../hr/parts';
-import { minWidth } from '../inventory/parts';
+import { Cell, Empty, Field, input, PageHead, row } from '../../components/PageKit';
+import { minWidth } from '../../components/ListKit';
 import { can, money } from './api';
 import { CONSOLIDATED_SORTS, fetchConsolidated, filterConsolidated, IK, num, sortConsolidated, topByCurrency, totalsByCurrency, type ConsolidatedSort } from './insight';
 import { Note } from './parts';
@@ -162,7 +162,7 @@ export default function Consolidated(_props: ScreenProps) {
                       <Cell w={150} className="text-right font-bold text-ink tabular-nums">
                         {money(r.total, r.currency)}
                       </Cell>
-                      <Cell w={150} className="text-right text-[#9A4A06] tabular-nums dark:text-warning">
+                      <Cell w={150} className="text-right text-warning-ink tabular-nums dark:text-warning">
                         {money(r.pending, r.currency)}
                       </Cell>
                       <Cell w={150} className="text-right text-primary tabular-nums">

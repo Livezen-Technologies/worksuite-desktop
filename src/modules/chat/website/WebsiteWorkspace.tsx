@@ -12,7 +12,7 @@ import { useTab, useTabTitle } from '../../../core/tab-context';
 import { listStamp } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { followUpsFirst, isMine as mineFor, longestWaiting, PRIORITIES, sectionRows, sortWebsiteRows, stepRow, useCallbacks, CLOSED_PAGE, useReturningVisitors, useWebsiteClosed, useWebsiteInbox, useWebsiteSearch, waitingSummary, waitsLive, WEBSITE, WEBSITE_SORTS, type CallbackOutcome, type Section, type WebsiteCallback, type WebsitePriority, type WebsiteRow, type WebsiteSort } from './api';
 import { renderedAfter } from './timings';
 import { VirtualList } from '../../../components/VirtualList';
@@ -634,7 +634,7 @@ function InvitedRow({ h, hidden, active, onOpen }: { h: WebchatHandoff; hidden: 
           {left !== null ? <span className="shrink-0 font-mono text-[11px] text-ink-3" aria-label={`Expires in ${clock(left)}`}>{clock(left)}</span> : null}
         </span>
         <span className="truncate text-[12px] text-ink-2">{handoffAsk(h)}{h.site ? ` · ${h.site}` : ''}</span>
-        {h.note && !hidden ? <span className="truncate text-[12px] text-[#7A4308] italic dark:text-warning" title="Only staff see this note">“{h.note}”</span> : null}
+        {h.note && !hidden ? <span className="truncate text-[12px] text-warning-strong italic dark:text-warning" title="Only staff see this note">“{h.note}”</span> : null}
       </button>
       <span className="flex gap-1.5">
         <Button size="sm" variant="primary" onClick={() => answer(true)}>{h.kind === 'invite' ? 'Join chat' : 'Accept'}</Button>
@@ -704,7 +704,7 @@ function CallbackRow({ b, active, onOpen }: { b: WebsiteCallback; active: boolea
 function PickConversation({ rows, missed, longest, visitors, onLongest, onVisitors }: { rows: WebsiteRow[]; missed: number | null; longest: WebsiteRow | null; visitors: number | null; onLongest: () => void; onVisitors: () => void }) {
   const now = useNow(30_000);
   const stats: Array<{ label: string; n: number | null; tone?: string }> = [
-    { label: 'Waiting', n: rows.filter(waitsLive).length, tone: 'text-[#9A4A06] dark:text-warning' },
+    { label: 'Waiting', n: rows.filter(waitsLive).length, tone: 'text-warning-ink dark:text-warning' },
     { label: 'Open', n: rows.length },
     { label: 'Missed', n: missed, tone: 'text-danger' },
   ];
@@ -762,7 +762,7 @@ function MenuItem({ icon, label, here, onClick, title, children }: { icon: strin
 function CountPill({ n, here, tone }: { n: number | null; here: boolean; tone: 'plain' | 'danger' | 'green' | 'amber' }) {
   if (!n) return null;
   return (
-    <span className={cx('inline-flex h-[18px] min-w-[20px] shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold', tone === 'danger' ? 'bg-danger text-white' : tone === 'green' ? 'bg-success-bg text-success' : tone === 'amber' ? 'bg-warning-bg text-[#9A4A06] dark:text-warning' : here ? 'bg-surface text-primary ring-1 ring-primary/40' : 'bg-subtle text-ink-2')}>
+    <span className={cx('inline-flex h-[18px] min-w-[20px] shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold', tone === 'danger' ? 'bg-danger text-white' : tone === 'green' ? 'bg-success-bg text-success' : tone === 'amber' ? 'bg-warning-bg text-warning-ink dark:text-warning' : here ? 'bg-surface text-primary ring-1 ring-primary/40' : 'bg-subtle text-ink-2')}>
       {n}
     </span>
   );

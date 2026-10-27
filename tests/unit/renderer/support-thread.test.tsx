@@ -72,8 +72,8 @@ describe('a website chat on a ticket (#332)', () => {
     expect(rows().filter((r) => r.dataset.internal).map((r) => r.dataset.message)).toEqual(['6']);
     expect(within(row(6)).getByText('Internal note')).toBeTruthy();
     expect(screen.getAllByText('Internal note')).toHaveLength(1);
-    expect(row(6).className).toMatch(/FFF8EC/);
-    for (const id of [1, 2, 3, 4, 7]) expect(row(id).className).not.toMatch(/FFF8EC/);
+    expect(row(6).className).toMatch(/\bbg-warning-bg\b/);
+    for (const id of [1, 2, 3, 4, 7]) expect(row(id).className).not.toMatch(/\bbg-warning-bg\b/);
     expect(isNote(chat[0] as never)).toBe(false);
     expect(isNote(chat[5] as never)).toBe(true);
   });

@@ -116,6 +116,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'inventory', label: 'Inventory', group: 'business', icon: 'package', app: 'inventory', perm: 'inventory.view', webPath: '/inventory', surface: 'native', sidebar: 'business', order: 128, keywords: 'inventory stock products warehouse movements catalogue sku barcode' },
   // Label Studio (WS-LABEL-SRS-001 FR-DSK-01, D01–D07): home, designer, print station, this computer's printers, the
   // interrupted batch and the Print Gateway. The rest of Label Studio (W02–W32) opens on the web from its rail.
+  // Hosting & Domains (Hosting & Domains SRS v1.0 HDM-DSK-01): the server's app `hosting`, opened with `hosting.view`.
+  // `/hosting?domain=`, `?server=` and `?certificate=` (the web's deep links, notifications) open here.
+  { id: 'hosting', label: 'Hosting', group: 'business', icon: 'globe', app: 'hosting', perm: 'hosting.view', webPath: '/hosting', surface: 'native', sidebar: 'business', order: 129.5, keywords: 'hosting domains dns records registrar expiry renew certificates ssl tls servers vps monitors uptime incidents costs providers accounts sync' },
   { id: 'label', label: 'Label Studio', group: 'business', icon: 'printer', app: 'label', perm: 'label.access', webPath: '/label', surface: 'native', sidebar: 'business', order: 129, keywords: 'label labels barcode qr sticker zebra zpl print station printer gateway templates serials' },
   // HR carries no app slug: there is no `hr` row in `applications`, and its
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
@@ -127,9 +130,12 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'board', label: 'Board', group: 'work', icon: 'landmark', app: 'board', perm: 'board.access', webPath: '/board', surface: 'native', sidebar: 'business', order: 142, keywords: 'board directors governance meetings packs papers agenda resolutions votes circulars minutes signing committee' },
   { id: 'recruitment', label: 'Recruitment', group: 'people', icon: 'user-plus', app: 'recruitment', perm: 'recruitment.access', webPath: '/recruitment', surface: 'native', sidebar: 'business', order: 141, keywords: 'recruitment hiring jobs vacancies candidates applicants pipeline interviews scorecards offers requisitions ats talent' },
 
-  // Phone (WS-VOIP-SRS-001): the web's `/phone`, open to everyone signed in like the web's catalogue — the server has
-  // no `voip` row in `applications` yet (G-13); the screens ask the server what the person may do.
-  { id: 'phone', label: 'Phone', group: 'communication', icon: 'phone', webPath: '/phone', surface: 'native', sidebar: 'work', order: 43, keywords: 'voip sip call extension pbx dial softphone voicemail' },
+  // Phone (WS-VOIP-SRS-001): the web's `/phone`, gated on the server's application `telephony` (not `voip`): Voip 1.2.0
+  // registers it (`RegisterTelephonyApp`, permission audit G-03) and Core 1.17.0 puts it in `AppGate::DEFAULTS`, so
+  // everybody has it unless an administrator takes it away — as the web's catalogue (`'/phone': 'telephony'`). Without
+  // it the phone does not connect, ring or notify (canOpenApp('phone') in main). The screens still ask the server what
+  // the person may do (an extension, a PBX).
+  { id: 'phone', label: 'Phone', group: 'communication', icon: 'phone', app: 'telephony', webPath: '/phone', surface: 'native', sidebar: 'work', order: 43, keywords: 'voip sip call extension pbx dial softphone voicemail' },
   { id: 'meet', label: 'Meet', group: 'communication', icon: 'video', app: 'meet', webPath: '/meet', surface: 'native', sidebar: 'work', order: 45, keywords: 'video call meeting join code', guest: 'local' },
   // Agendas, attendance and minutes. Not an application on the server — the
   // `meeting.view` permission is its only gate (AppGate::CORE notes).
@@ -151,6 +157,13 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'social-media', label: 'Social Media', group: 'business', icon: 'send', webPath: '/social-media', surface: 'native', sidebar: 'business', order: 167, keywords: 'social media manager facebook instagram linkedin x twitter youtube tiktok threads pinterest google business post schedule publish queue calendar inbox comments approvals campaigns analytics' },
   // Opened in the browser until their desktop modules ship (§14, §18).
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },
+  // The server's own apps with no desktop module yet: each its `applications` row's slug and web route, gated on the
+  // permission its own API demands (none for Diagrams, whose routes ask only for a session). Links into them —
+  // `/documents/…`, `/forms/…`, `/rental/…`, `/diagrams/…` — open there too.
+  { id: 'docs', label: 'Documents', group: 'business', icon: 'file-check', app: 'docs', perm: 'docs.view', webPath: '/documents', surface: 'browser', order: 168, keywords: 'documents templates letterhead contract agreement generate merge sign signature letter' },
+  { id: 'forms', label: 'Forms', group: 'work', icon: 'clipboard-check', app: 'forms', perm: 'forms.view', webPath: '/forms', surface: 'browser', order: 192, keywords: 'forms survey questionnaire quiz responses collect' },
+  { id: 'diagram', label: 'Diagrams', group: 'work', icon: 'shapes', app: 'diagram', webPath: '/diagrams', surface: 'browser', order: 194, keywords: 'diagrams flowchart draw.io visio chart shapes whiteboard' },
+  { id: 'rental', label: 'Rental', group: 'business', icon: 'key', app: 'rental', perm: 'rental.access', webPath: '/rental', surface: 'browser', order: 133.5, keywords: 'rental rent hire equipment gear camera vehicle tools reservation booking quote checkout return deposit fleet' },
 
   // WorkSuite Projects (WS-PROJECT-SRS-001 PRJ-DSK-01..04): native since 0.2.216 — the board with its keyboard, My work,
   // the tray timer and an offline outbox. `/projects/<id>`, `/projects/<id>/tasks/<task>`, `/projects?project=<id>` and

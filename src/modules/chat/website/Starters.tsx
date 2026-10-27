@@ -5,7 +5,7 @@ import { text } from '../../../core/i18n';
 import { toast } from '../../../core/toasts';
 import { useTabTitle } from '../../../core/tab-context';
 import { Button, Empty, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../../components/ui';
-import { Note } from '../../account/parts';
+import { Note } from '../../../components/CardKit';
 import { designOf, siteNameOf, widgetsList, withDefaults } from './widget/design';
 import { Labelled, WidgetPicker } from './widget/parts';
 import { WidgetPreview } from './widget/WidgetPreview';

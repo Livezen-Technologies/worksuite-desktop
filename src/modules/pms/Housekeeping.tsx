@@ -2,8 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Button, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { Ask } from '../garage/parts';
-import { PageHead } from '../hr/parts';
+import { Ask } from '../../components/FormKit';
+import { PageHead } from '../../components/PageKit';
 import { errorText, K, newKey, pGet, pGetMeta, pPost, type HkTaskFull, type Rack } from './api';
 import { useActions } from './ops';
 import { Refusal, StatusBadge, usePms } from './parts';
@@ -168,7 +168,7 @@ export default function Housekeeping({ room }: { room: number | null }) {
                         {t.status_label}
                         {t.assigned_name ? ` · ${t.assigned_name}` : ' · nobody yet'}
                       </div>
-                      {t.flags?.due_in ? <div className="text-[11.5px] text-[#0891b2]">Guest due in today</div> : null}
+                      {t.flags?.due_in ? <div className="text-[11.5px] text-teal">Guest due in today</div> : null}
                     </button>
                     {next && typeof t.version === 'number' ? (
                       <div>

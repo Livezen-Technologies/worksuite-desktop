@@ -311,6 +311,26 @@ describe('the bootstrap says which apps are self-service', () => {
   });
 });
 
+describe('a release build without a policy key (audit D-G05)', () => {
+  const answer = (routes: Record<string, unknown>) =>
+    ({
+      get: async (path: string) => {
+        if (path in routes) return routes[path];
+        throw new Error(`no ${path}`);
+      },
+    }) as unknown as HttpClient;
+  const user = { id: 7, name: 'Nuwan', email: 'n@ws.example' };
+  const routes = { '/desktop/v1/bootstrap': { user, apps: ['mail'], desktop_policy: { version: 3, downloads: 'disabled' } } };
+
+  it('refuses the unsigned policy and keeps the defaults; a development build applies it, marked unsigned', async () => {
+    const release = new BootstrapService(new Database(':memory:'), () => new Vault(Vault.generateKey()), answer(routes), null, true);
+    const refused = await release.fetch('desktop-v1');
+    expect(refused.policy).toMatchObject({ version: 0, downloads: 'allowed', signed: false });
+    const dev = new BootstrapService(new Database(':memory:'), () => new Vault(Vault.generateKey()), answer(routes), null);
+    expect((await dev.fetch('desktop-v1')).policy).toMatchObject({ version: 3, downloads: 'disabled', signed: false });
+  });
+});
+
 describe('the server’s licence locks apps (/api/system/entitlements)', () => {
   const answer = (routes: Record<string, unknown>) =>
     ({

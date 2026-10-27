@@ -1,9 +1,10 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button, ErrorNote, Spinner } from '../../../components/ui';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { eGet, K, type LearnerRow, type Paged } from '../api';
 import { input, useEl } from '../parts';
+import { clickOnKey } from '../../../components/press';
 
 /**
  * Learners the person follows (§5.14): their reports, their courses'
@@ -50,7 +51,7 @@ export default function Learners() {
             </thead>
             <tbody>
               {data.items.map((l) => (
-                <tr key={l.user_id} className="cursor-pointer border-b border-line last:border-0 hover:bg-subtle" onClick={() => el.open.learner(l.user_id)}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={l.user_id} className="cursor-pointer border-b border-line last:border-0 hover:bg-subtle" onClick={() => el.open.learner(l.user_id)}>
                   <td className="px-3 py-2">
                     <button type="button" className="font-semibold text-ink hover:text-primary" onClick={() => el.open.learner(l.user_id)}>
                       {l.name}

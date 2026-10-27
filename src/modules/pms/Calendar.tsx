@@ -3,8 +3,8 @@ import { useMemo, useState } from 'react';
 import { Select } from '../../components/Select';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { input } from '../garage/parts';
-import { PageHead } from '../hr/parts';
+import { input } from '../../components/FormKit';
+import { PageHead } from '../../components/PageKit';
 import { codeOf, day, errorText, K, money, pGet, plusDays, pPost, type CalendarBar, type CalendarData } from './api';
 import { NoAccess, Refusal, usePms } from './parts';
 import { Checkbox } from '../../components/Checkbox';
@@ -90,7 +90,7 @@ export default function Calendar({ date }: { date: string | null }) {
             </span>
           ))}
           <span className="flex items-center gap-1">
-            <span className="inline-block size-2.5 rounded-[3px] bg-[repeating-linear-gradient(45deg,#94a3b8_0_2px,transparent_2px_5px)]" />
+            <span className="inline-block size-2.5 rounded-[3px] bg-[repeating-linear-gradient(45deg,var(--ws-muted)_0_2px,transparent_2px_5px)]" />
             Out of order / blocked
           </span>
         </div>
@@ -129,7 +129,7 @@ export default function Calendar({ date }: { date: string | null }) {
                       <div
                         key={`o${o.id}`}
                         title={`${o.kind.replace(/_/g, ' ')}${o.reason ? ` — ${o.reason}` : ''}`}
-                        className="pointer-events-none absolute top-1 bottom-1 rounded-[4px] bg-[repeating-linear-gradient(45deg,#94a3b855_0_3px,transparent_3px_7px)]"
+                        className="pointer-events-none absolute top-1 bottom-1 rounded-[4px] bg-[repeating-linear-gradient(45deg,color-mix(in_srgb,var(--ws-muted)_33%,transparent)_0_3px,transparent_3px_7px)]"
                         style={{ left: `calc(${ROOM_W}px + (100% - ${ROOM_W}px) * ${s.col / cols.length})`, width: `calc((100% - ${ROOM_W}px) * ${s.span / cols.length})` }}
                       />
                     ) : null;

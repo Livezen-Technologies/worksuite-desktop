@@ -15,11 +15,12 @@ import { CorrectAttendance, type CorrectableDay } from './Correct';
 import { dayLong, dayShort, minutesLabel, monthLabel, shiftMonth, ymd } from './dates';
 import { EditEmployee } from './EditEmployee';
 import MyDocuments from './MyDocuments';
-import { btn, btnBad, btnGood, btnPrimary, btnSmall, Cell, Empty, Facts, Field, Grid, humanise, input, Kpi, Panel, row, Seg, Sheet, StatusChip, THead } from './parts';
+import { btn, btnBad, btnGood, btnPrimary, btnSmall, Cell, Empty, Facts, Field, Grid, humanise, input, Kpi, Panel, row, Seg, Sheet, StatusChip, THead } from '../../components/PageKit';
 import { can } from './Rail';
 import { NewRequestSheet } from './Requests';
 import { SheetDetail } from './TimesheetApprovals';
 import { Select } from '../../components/Select';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * An employee's profile (HrProfile, HrProfilePersonal, HrProfileSheet; the
@@ -94,7 +95,7 @@ export default function EmployeeProfile({ id, onBack }: { id: number; onBack: ()
         <button type="button" className="shrink-0 font-semibold text-primary hover:underline" onClick={onBack}>
           ← Back
         </button>
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0E7C86] text-[16px] font-bold text-white">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal text-[16px] font-bold text-white">
           {e.name
             .split(/\s+/)
             .slice(0, 2)
@@ -107,7 +108,7 @@ export default function EmployeeProfile({ id, onBack }: { id: number; onBack: ()
           <span className="truncate text-[12.5px] text-ink-3">
             {[e.employee_no, e.designation, e.department].filter(Boolean).join(' · ')}
             {' · '}
-            <b className={e.status === 'active' ? 'text-success' : 'text-[#9A4A06] dark:text-warning'}>{humanise(e.status)}</b>
+            <b className={e.status === 'active' ? 'text-success' : 'text-warning-ink dark:text-warning'}>{humanise(e.status)}</b>
           </span>
         </div>
         {e.email && canMail ? (
@@ -135,7 +136,7 @@ export default function EmployeeProfile({ id, onBack }: { id: number; onBack: ()
         ) : null}
       </div>
       {p.leaving ? (
-        <div className="flex items-center gap-2 rounded-[10px] border border-[#F5D9A8] bg-warning-bg px-3.5 py-2 text-[12.5px] text-[#7A3E06] dark:border-warning/40 dark:text-warning">
+        <div className="flex items-center gap-2 rounded-[10px] border border-warning-line bg-warning-bg px-3.5 py-2 text-[12.5px] text-warning-strong dark:border-warning/40 dark:text-warning">
           <b>{p.leaving.former ? 'Left' : 'Leaving'}{p.leaving.exit_at ? ` ${dayLong(p.leaving.exit_at)}` : ''}</b>
           {p.leaving.reason ? <span>· {p.leaving.reason}</span> : null}
           {p.leaving.offboarding ? <span>· offboarding {p.leaving.offboarding.status_label.toLowerCase()}, {p.leaving.offboarding.percent}%</span> : null}
@@ -186,12 +187,12 @@ function Overview({ p, onTab }: { p: Profile; onTab: (t: Tab) => void }) {
   const open = p.requests.filter((r) => r.status === 'pending');
   return (
     <>
-      <div className="grid grid-cols-4 gap-2.5">
-        <Kpi label="This month" value={att ? `${att.days_present} / ${att.work_days}` : '—'} sub="days present" onClick={p.can.attendance ? () => onTab('attendance') : undefined} />
-        <Kpi label="Hours worked" value={att ? `${Math.round(att.net_seconds / 3600)} h` : '—'} sub={att ? `${Math.round(att.overtime_minutes / 60)} h overtime` : undefined} />
-        <Kpi label="Leave available" value={p.leave ? Math.round(available * 10) / 10 : '—'} sub="days, all types" onClick={p.can.leave ? () => onTab('leave') : undefined} />
-        <Kpi label="Open requests" value={open.length} sub={open[0]?.kind_label ?? open[0]?.kind ?? 'Nothing waiting'} onClick={() => onTab('requests')} />
-      </div>
+      <StatGrid min={180}>
+        <Kpi icon="calendar" tone="blue" label="This month" value={att ? `${att.days_present} / ${att.work_days}` : '—'} sub="days present" onClick={p.can.attendance ? () => onTab('attendance') : undefined} />
+        <Kpi icon="clock" tone="violet" label="Hours worked" value={att ? `${Math.round(att.net_seconds / 3600)} h` : '—'} sub={att ? `${Math.round(att.overtime_minutes / 60)} h overtime` : undefined} />
+        <Kpi icon="plane" tone="cyan" label="Leave available" value={p.leave ? Math.round(available * 10) / 10 : '—'} sub="days, all types" onClick={p.can.leave ? () => onTab('leave') : undefined} />
+        <Kpi icon="inbox" tone="amber" label="Open requests" value={open.length} sub={open[0]?.kind_label ?? open[0]?.kind ?? 'Nothing waiting'} onClick={() => onTab('requests')} />
+      </StatGrid>
       <div className="grid min-h-0 grid-cols-[1fr_1.3fr_1fr] gap-3">
         <Panel title="Employment" bodyClassName="px-3.5 py-2">
           <Facts
@@ -475,13 +476,13 @@ function AttendanceTab({ id, name, self }: { id: number; name: string; self: boo
         </button>
       </div>
       {t ? (
-        <div className="grid grid-cols-5 gap-2.5">
-          <Kpi label="Present" value={`${t.days_present} / ${t.work_days}`} sub={t.attendance_rate != null ? `${t.attendance_rate}% attendance` : undefined} />
-          <Kpi label="Worked" value={minutesLabel(t.net_seconds / 60)} sub={`${minutesLabel(t.overtime_minutes)} overtime`} />
-          <Kpi label="Late days" value={t.late_days} tone={t.late_days ? 'amber' : undefined} />
-          <Kpi label="Early departures" value={t.early_days} />
-          <Kpi label="No check-out" value={t.missing_check_outs} tone={t.missing_check_outs ? 'red' : undefined} />
-        </div>
+        <StatGrid min={160}>
+          <Kpi icon="user-check" tone="green" label="Present" value={`${t.days_present} / ${t.work_days}`} sub={t.attendance_rate != null ? `${t.attendance_rate}% attendance` : undefined} />
+          <Kpi icon="clock" tone="violet" label="Worked" value={minutesLabel(t.net_seconds / 60)} sub={`${minutesLabel(t.overtime_minutes)} overtime`} />
+          <Kpi icon="snooze" label="Late days" value={t.late_days} tone={t.late_days ? 'amber' : undefined} />
+          <Kpi icon="logout" label="Early departures" value={t.early_days} />
+          <Kpi icon="door" label="No check-out" value={t.missing_check_outs} tone={t.missing_check_outs ? 'red' : undefined} />
+        </StatGrid>
       ) : null}
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.data ? (
@@ -526,10 +527,10 @@ function TimesheetTab({ p }: { p: Profile }) {
   if (!t.linked) return <Empty text="No login is linked, so no time can be logged against this person." />;
   return (
     <div className="flex max-w-[760px] flex-col gap-3">
-      <div className="grid grid-cols-2 gap-2.5">
-        <Kpi label="Logged this month" value={minutesLabel(t.minutes_this_month)} />
-        <Kpi label="Recent weeks" value={t.sheets.length} sub={t.sheets.filter((s) => s.status === 'submitted').length ? `${t.sheets.filter((s) => s.status === 'submitted').length} awaiting review` : 'none waiting'} />
-      </div>
+      <StatGrid min={150}>
+        <Kpi icon="timer" tone="blue" label="Logged this month" value={minutesLabel(t.minutes_this_month)} />
+        <Kpi icon="chart" tone="cyan" label="Recent weeks" value={t.sheets.length} sub={t.sheets.filter((s) => s.status === 'submitted').length ? `${t.sheets.filter((s) => s.status === 'submitted').length} awaiting review` : 'none waiting'} />
+      </StatGrid>
       <Panel title="Timesheets">
         <THead cols={[['Period', null], ['Submitted', 130], ['Status', 140], ['', 60]]} />
         {t.sheets.map((s) => (
@@ -585,7 +586,7 @@ function LeaveTab({ p }: { p: Profile }) {
           <div key={b.type_id} className={row}>
             <Cell w={null} className="font-semibold">
               {b.type}
-              {b.taken_from_requests !== b.taken ? <span className="ml-1.5 text-[11px] font-medium text-[#9A4A06] dark:text-warning" title="Approved requests add up to a different figure">requests say {b.taken_from_requests}</span> : null}
+              {b.taken_from_requests !== b.taken ? <span className="ml-1.5 text-[11px] font-medium text-warning-ink dark:text-warning" title="Approved requests add up to a different figure">requests say {b.taken_from_requests}</span> : null}
             </Cell>
             <Cell w={70} className="tabular-nums">{b.entitled}</Cell>
             <Cell w={80} className="tabular-nums">{b.carried_in}</Cell>
@@ -694,7 +695,7 @@ function ManageBalance({ employeeId, year, b, onClose, onDone }: { employeeId: n
       <Field label="Reason" hint="Recorded on the employee.">
         <input aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Opening balance carried over from the old system" className={input} />
       </Field>
-      <div className={cx('rounded-[8px] px-3 py-2 text-[12.5px]', result < 0 ? 'bg-warning-bg text-[#9A4A06] dark:text-warning' : 'bg-ground text-ink-2')}>
+      <div className={cx('rounded-[8px] px-3 py-2 text-[12.5px]', result < 0 ? 'bg-warning-bg text-warning-ink dark:text-warning' : 'bg-ground text-ink-2')}>
         {result < 0 ? 'This leaves them owing days. Allowed, but rarely intended.' : `Available after saving: ${Math.round(result * 100) / 100}`}
       </div>
     </Sheet>

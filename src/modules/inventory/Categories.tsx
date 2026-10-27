@@ -5,7 +5,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { btn, btnBad, btnPrimary, Field, input, Sheet } from '../hr/parts';
+import { btn, btnBad, btnPrimary, Field, input, Sheet } from '../../components/PageKit';
 import { createCategory, deleteCategory, fetchCategories, K, parentsFor, treeOf, updateCategory, type Company, type TreeNode } from './api';
 
 /**

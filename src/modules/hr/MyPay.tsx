@@ -9,7 +9,8 @@ import { money } from '../finance/api';
 import { PAYMENT_LABEL, type Payslip, type Profile } from './api';
 import { dayLong } from './dates';
 import { ALL, companiesOf, fetchCertificates, groupLines, inCompany, lineLabel, QUERY_KIND, raiseQuery, unsigned, type PayslipDetail } from './pay';
-import { Empty, Field, PageHead, Panel, Sheet, StatusChip, btn, btnPrimary, btnSmall, row } from './parts';
+import { Empty, Field, PageHead, Panel, Sheet, StatusChip, btn, btnPrimary, btnSmall, row } from '../../components/PageKit';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * My payslips (UI-23, HrSelfService · My pay; SRS §D1): the latest payslip with its net pay and PDF, every payslip
@@ -104,12 +105,12 @@ export default function MyPay() {
       ) : null}
 
       {summary.data?.summary ? (
-        <div className="grid grid-cols-4 gap-2.5">
-          <Tile label={`${summary.data.summary.year} so far`} value={`${summary.data.summary.months} ${summary.data.summary.months === 1 ? 'month' : 'months'}`} />
-          <Tile label="Gross, year to date" value={money(summary.data.summary.gross, cur(latest))} />
-          <Tile label="Deductions, year to date" value={money(summary.data.summary.deductions, cur(latest))} />
-          <Tile label="Net, year to date" value={money(summary.data.summary.net, cur(latest))} />
-        </div>
+        <StatGrid min={200}>
+          <Tile icon="calendar" tone="blue" label={`${summary.data.summary.year} so far`} value={`${summary.data.summary.months} ${summary.data.summary.months === 1 ? 'month' : 'months'}`} />
+          <Tile icon="banknote" tone="violet" label="Gross, year to date" value={money(summary.data.summary.gross, cur(latest))} />
+          <Tile icon="minus" tone="amber" label="Deductions, year to date" value={money(summary.data.summary.deductions, cur(latest))} />
+          <Tile icon="wallet" tone="green" label="Net, year to date" value={money(summary.data.summary.net, cur(latest))} />
+        </StatGrid>
       ) : null}
 
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-3">
@@ -234,11 +235,6 @@ function Line({ label, value, strong, bad }: { label: string; value: string; str
   );
 }
 
-function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[12px] border border-line bg-surface px-3.5 py-3">
-      <div className="text-[11px] text-ink-3">{label}</div>
-      <b className="text-[18px] text-ink tabular-nums">{value}</b>
-    </div>
-  );
+function Tile({ label, value, icon, tone }: { label: string; value: string; icon?: string; tone?: StatTone }) {
+  return <StatCard label={label} value={value} icon={icon} tone={tone} />;
 }

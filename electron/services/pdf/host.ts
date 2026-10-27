@@ -175,12 +175,35 @@ export function createPdfStudio(deps: PdfStudioDeps): PdfStudio {
     device: deps.device,
     userName: deps.userName,
     writeLocal: writeAtomically,
-    chooseSavePath: async (sender, suggested) => {
+    chooseSavePath: async (sender, suggested, ext = 'pdf') => {
       const win = winOf(sender);
-      const opts: Electron.SaveDialogOptions = { title: 'Save the PDF', defaultPath: suggested.replace(/[\\/:*?"<>|]+/g, '-'), filters: [{ name: 'PDF documents', extensions: ['pdf'] }] };
+      const filters = ext === 'txt' ? [{ name: 'Text', extensions: ['txt'] }] : [{ name: 'PDF documents', extensions: ['pdf'] }];
+      const opts: Electron.SaveDialogOptions = { title: ext === 'txt' ? 'Save the text' : 'Save the PDF', defaultPath: suggested.replace(/[\\/:*?"<>|]+/g, '-'), filters };
       const res = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
       if (res.canceled || !res.filePath) return null;
-      return res.filePath.toLowerCase().endsWith('.pdf') ? res.filePath : `${res.filePath}.pdf`;
+      return res.filePath.toLowerCase().endsWith(`.${ext}`) ? res.filePath : `${res.filePath}.${ext}`;
+    },
+    chooseFolder: async (sender, title) => {
+      const win = winOf(sender);
+      const opts: Electron.OpenDialogOptions = { title, properties: ['openDirectory', 'createDirectory'] };
+      const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+      return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
+    },
+    // Pictures for Create a PDF (D-G12), decoded here with the system's own decoders: PNG and JPEG, at most 50.
+    pickImages: async (sender) => {
+      const win = winOf(sender);
+      const opts: Electron.OpenDialogOptions = { title: 'Choose pictures', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }] };
+      const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+      if (res.canceled) return [];
+      const out: Array<{ name: string; width: number; height: number; bgra: Uint8Array }> = [];
+      for (const path of res.filePaths.slice(0, 50)) {
+        const img = nativeImage.createFromPath(path);
+        if (img.isEmpty()) throw new DesktopError('IPC_VALIDATION_FAILED', `${basename(path)} is not a picture WorkSuite can read.`);
+        const { width, height } = img.getSize();
+        if (width * height > 40_000_000) throw new DesktopError('IPC_VALIDATION_FAILED', `${basename(path)} is too large.`);
+        out.push({ name: basename(path), width, height, bgra: new Uint8Array(img.toBitmap()) });
+      }
+      return out;
     },
   });
 
@@ -229,6 +252,8 @@ export function createPdfStudio(deps: PdfStudioDeps): PdfStudio {
     router.handle('pdf:save', (input, c) => service.save(c.sender.id, input.session, input.target, input.note));
     router.handle('pdf:resolve', (input, c) => service.resolve(c.sender.id, input.session, input.answer));
     router.handle('pdf:discard', (input, c) => service.discard(c.sender.id, input.session));
+    router.handle('pdf:derive', (input, c) => service.derive(c.sender.id, input.session, input.req));
+    router.handle('pdf:compose', (input, c) => service.compose(c.sender.id, input.req));
     router.handle('pdf:extract', (input, c) => service.extract(c.sender.id, input.session, input.pages));
     // PDF Studio Pro: a smart card or USB token signs (PKCS#11 through OpenSC); its key never leaves it.
     router.handle('pdf:tokens', (input) => tokens.list(input.module ?? null));

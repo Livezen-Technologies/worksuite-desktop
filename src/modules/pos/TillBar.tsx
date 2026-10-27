@@ -101,7 +101,7 @@ export default function TillBar({ till, view, full, onFull, onSync }: { till: Ti
       <span className="h-8 w-px shrink-0 bg-white/[.14]" />
       <div className="flex min-w-0 items-center gap-2 text-[13px]">
         <span className="rounded-[6px] bg-pos-bar-chip px-2 py-[3px] font-mono font-bold">{terminal.code}</span>
-        <span className="truncate text-[#cbd5e1]">{till.session?.register ?? t('pos.bar.noRegister')}</span>
+        <span className="truncate text-stage-gray-ink">{till.session?.register ?? t('pos.bar.noRegister')}</span>
       </div>
       <div className="flex-1" />
       <button
@@ -110,11 +110,11 @@ export default function TillBar({ till, view, full, onFull, onSync }: { till: Ti
         title={when}
         className={`flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-semibold ${online ? 'bg-pos-online text-pos-online-ink' : 'bg-pos-offline text-pos-offline-ink'}`}
       >
-        <span className={`h-2 w-2 rounded-full ${pill.tone === 'online' ? 'bg-[#34d399]' : pill.tone === 'busy' ? 'bg-[#60a5fa]' : 'bg-[#fbbf24]'}`} />
+        <span className={`h-2 w-2 rounded-full ${pill.tone === 'online' ? 'bg-green-bright' : pill.tone === 'busy' ? 'bg-indigo-bright' : 'bg-amber'}`} />
         {net}
         {s.refused ? <span className="rounded-full bg-danger px-1.5 text-[11px] text-white">{s.refused}</span> : null}
       </button>
-      <span className="shrink-0 font-mono text-[14px] text-[#e2e8f0] tabular-nums">{now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+      <span className="shrink-0 font-mono text-[14px] text-stage-ink tabular-nums">{now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
       <span className="h-8 w-px shrink-0 bg-white/[.14]" />
       <div className="flex min-w-0 items-center gap-2.5">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-[13px] font-bold text-white">{initials(cashier)}</span>

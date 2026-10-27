@@ -3,7 +3,7 @@ import { call, isMac } from '../../../core/bridge';
 import { hideWindowBar } from '../../../app/windowChrome';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
-import { CallAvatar, VideoView } from '../parts';
+import { CallAvatar, VideoView } from '../../../components/CallKit';
 import { CallSidePanel, type PanelTab } from './CallSidePanel';
 import { CallVideoPip } from './CallVideoPip';
 import { CoreCallControls, type ControlButton, type MenuEntry } from './CoreCallControls';
@@ -188,7 +188,7 @@ export function CallWorkspace(props: WorkspaceProps) {
 
   if (floating) {
     return (
-      <div ref={setRoot} className="relative flex h-full flex-col overflow-hidden bg-[#0B1226] text-[13px] text-[#E6ECFA]">
+      <div ref={setRoot} className="relative flex h-full flex-col overflow-hidden bg-stage text-[13px] text-stage-ink">
         <FloatingCard {...props} star={star} self={self} presenter={presenter} onReturn={() => setFloating(false)} onChat={() => (callUi.set({ panelOpen: true, panelTab: props.tabs.find((t) => t.id === 'Chat')?.id ?? props.tabs[0]?.id ?? 'Chat' }), setFloating(false))} />
       </div>
     );
@@ -231,7 +231,7 @@ export function CallWorkspace(props: WorkspaceProps) {
   const tiles = [...people.filter((p) => !p.self), ...people.filter((p) => p.self && ui.selfView)];
 
   return (
-    <div ref={setRoot} onPointerMove={wake} className="relative h-full overflow-hidden bg-[#0B1226] text-[13px] text-[#E6ECFA]">
+    <div ref={setRoot} onPointerMove={wake} className="relative h-full overflow-hidden bg-stage text-[13px] text-stage-ink">
       <Header {...props} pinned={pinned} maximized={maximized} fullscreen={ui.fullscreen} onPin={() => void call('windows:setAlwaysOnTop', { value: !pinned }).then(setPinned)} onMax={() => void call('windows:toggleMaximize').then(setMaximized)} onFull={toggleFullscreen} onFloat={() => setFloating(true)} />
 
       <div className="absolute z-[10]" style={{ left: stageRect.x, top: stageRect.y, width: stageRect.width, height: stageRect.height }}>
@@ -262,12 +262,12 @@ export function CallWorkspace(props: WorkspaceProps) {
 }
 
 function Header({ title, clock, badges, headerExtra, pinnable = true, pinned, maximized, fullscreen, onPin, onMax, onFull, onFloat }: WorkspaceProps & { pinned: boolean; maximized: boolean; fullscreen: boolean; onPin: () => void; onMax: () => void; onFull: () => void; onFloat: () => void }) {
-  const btn = 'no-drag flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[#C9D3EE] hover:bg-white/10 hover:text-white';
+  const btn = 'no-drag flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-navy-ink hover:bg-white/10 hover:text-white';
   return (
-    <div className="drag absolute inset-x-0 top-0 z-[35] flex items-center gap-2.5 border-b border-white/8 bg-[#0F1B3D]" style={{ height: HEADER, paddingLeft: isMac && !fullscreen ? 84 : 14, paddingRight: isMac || fullscreen ? 10 : 146 }}>
-      <Icon name="lock" size={13} className="shrink-0 text-[#AFC0E8]" />
+    <div className="drag absolute inset-x-0 top-0 z-[35] flex items-center gap-2.5 border-b border-white/8 bg-navy" style={{ height: HEADER, paddingLeft: isMac && !fullscreen ? 84 : 14, paddingRight: isMac || fullscreen ? 10 : 146 }}>
+      <Icon name="lock" size={13} className="shrink-0 text-stage-accent" />
       <b className="min-w-0 truncate text-[13px]">{title}</b>
-      {clock ? <span className="font-mono text-[12px] text-[#AFC0E8] tabular-nums">{clock}</span> : null}
+      {clock ? <span className="font-mono text-[12px] text-stage-accent tabular-nums">{clock}</span> : null}
       {badges}
       <span className="flex-1" />
       {headerExtra}
@@ -300,17 +300,17 @@ function Stage({ layout, people, tiles, star, self, presenter, board, size, scre
         {board && !presenter?.screen ? (
           <div className="absolute inset-0">{board}</div>
         ) : presenter?.screen ? (
-          <div aria-label="Shared screen preview" className="absolute inset-0 flex items-center justify-center border-[3px] border-[#E5484D] bg-[#070C1A]">
+          <div aria-label="Shared screen preview" className="absolute inset-0 flex items-center justify-center border-[3px] border-stage-red bg-stage">
             <VideoView track={presenter.screen} className="h-full w-full object-contain" />
             <div className="absolute top-3 left-3 z-[15] flex items-center gap-3 rounded-[8px] bg-[rgba(11,18,38,.8)] px-2.5 py-1 text-[12px] font-semibold">
               <span>{presenter.self ? 'You are presenting' : `${presenter.name} is sharing their screen`}</span>
-              {presenter.self && stopPresenting ? <button type="button" onClick={stopPresenting} className="rounded px-2 py-1 bg-[#E5484D] text-white">Stop presenting</button> : null}
+              {presenter.self && stopPresenting ? <button type="button" onClick={stopPresenting} className="rounded px-2 py-1 bg-stage-red text-white">Stop presenting</button> : null}
             </div>
             {presenter.screenPaused ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[rgba(7,12,26,.82)]">
                 <Icon name="pause" size={28} />
                 <b className="text-[15px]">Screen sharing paused.</b>
-                <span className="text-[12.5px] text-[#AFC0E8]">{presenter.name} will pick it up again in a moment.</span>
+                <span className="text-[12.5px] text-stage-accent">{presenter.name} will pick it up again in a moment.</span>
               </div>
             ) : null}
             {!presenter.self ? screenLayer?.(presenter) : null}
@@ -344,13 +344,13 @@ function Stage({ layout, people, tiles, star, self, presenter, board, size, scre
 function Big({ p }: { p: CallPerson }) {
   const ui = callUi.get();
   return (
-    <div className={cx('absolute inset-0 flex items-center justify-center bg-[#16254F]', p.speaking && 'shadow-[inset_0_0_0_3px_#3DD68C]')}>
+    <div className={cx('absolute inset-0 flex items-center justify-center bg-navy-2', p.speaking && 'shadow-[inset_0_0_0_3px_var(--ws-stage-green-bright)]')}>
       {p.camera ? (
         <VideoView track={p.camera} mirror={p.self && ui.mirror} className={cx('h-full w-full', ui.fit === 'fit' ? 'object-contain' : 'object-cover')} />
       ) : (
         <div className="flex flex-col items-center gap-3">
           <CallAvatar name={p.self ? 'You' : p.name} size={150} glow={p.speaking ? 'speaking' : null} />
-          <span className="text-[#AFC0E8]">{p.name} · camera off</span>
+          <span className="text-stage-accent">{p.name} · camera off</span>
         </div>
       )}
       <span className="absolute bottom-3 left-3 rounded-[8px] bg-[rgba(11,18,38,.72)] px-2.5 py-1 text-[12.5px] font-semibold">
@@ -365,7 +365,7 @@ function Big({ p }: { p: CallPerson }) {
 /** A raised hand on a tile, with its place in the queue. */
 function HandBadge({ hand, className }: { hand: NonNullable<CallPerson['hand']>; className?: string }) {
   return (
-    <span role="img" aria-label={hand.label} title={hand.label} className={cx('flex items-center gap-0.5 rounded-[6px] bg-[#F6C177] px-1.5 py-0.5 text-[10.5px] font-bold text-[#3A2A10]', className)}>
+    <span role="img" aria-label={hand.label} title={hand.label} className={cx('flex items-center gap-0.5 rounded-[6px] bg-stage-danger px-1.5 py-0.5 text-[10.5px] font-bold text-stage-on-light', className)}>
       <Icon name="hand" size={12} />
       {hand.position}
     </span>
@@ -375,11 +375,11 @@ function HandBadge({ hand, className }: { hand: NonNullable<CallPerson['hand']>;
 export function Tile({ p, className }: { p: CallPerson; className?: string }) {
   const ui = callUi.get();
   return (
-    <div className={cx('relative flex min-h-0 items-center justify-center overflow-hidden rounded-[12px] bg-[#2F4A7A]', p.speaking && 'shadow-[inset_0_0_0_3px_#3DD68C]', className)}>
+    <div className={cx('relative flex min-h-0 items-center justify-center overflow-hidden rounded-[12px] bg-stage-4', p.speaking && 'shadow-[inset_0_0_0_3px_var(--ws-stage-green-bright)]', className)}>
       {p.camera ? <VideoView track={p.camera} mirror={p.self && ui.mirror} className={cx('h-full w-full', ui.fit === 'fit' ? 'object-contain' : 'object-cover')} /> : <CallAvatar name={p.self ? 'You' : p.name} size={64} />}
       <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-[6px] bg-[rgba(11,18,38,.72)] px-1.5 py-0.5 text-[11.5px] font-semibold">
         {p.name}
-        {p.host ? <span className="font-normal text-[#AFC0E8]">Host</span> : p.guest ? <span className="font-normal text-[#AFC0E8]">Guest</span> : null}
+        {p.host ? <span className="font-normal text-stage-accent">Host</span> : p.guest ? <span className="font-normal text-stage-accent">Guest</span> : null}
       </span>
       {!p.micOn ? (
         <span className="absolute top-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-[rgba(11,18,38,.72)]" title="Muted">
@@ -399,7 +399,7 @@ export function Tile({ p, className }: { p: CallPerson; className?: string }) {
 function Strip({ tiles, collapsed, top }: { tiles: CallPerson[]; collapsed: boolean; top: number }) {
   return (
     <div className="absolute inset-x-0 flex flex-col" style={{ top: collapsed ? top - 28 : top, height: collapsed ? 28 : STRIP }}>
-      <button type="button" onClick={() => callUi.set({ stripCollapsed: !collapsed })} className="no-drag absolute -top-3 left-1/2 z-[21] flex h-6 -translate-x-1/2 items-center gap-1 rounded-full bg-[#16254F] px-2.5 text-[11px] font-semibold text-[#C9D3EE] hover:text-white">
+      <button type="button" onClick={() => callUi.set({ stripCollapsed: !collapsed })} className="no-drag absolute -top-3 left-1/2 z-[21] flex h-6 -translate-x-1/2 items-center gap-1 rounded-full bg-navy-2 px-2.5 text-[11px] font-semibold text-navy-ink hover:text-white">
         <Icon name={collapsed ? 'chevron-down' : 'chevron-down'} size={12} className={collapsed ? 'rotate-180' : ''} />
         {collapsed ? `Show ${tiles.length} ${tiles.length === 1 ? 'person' : 'people'}` : 'Hide people'}
       </button>
@@ -428,18 +428,18 @@ function FloatingCard({ title, clock, badges, buttons, end, star, self, presente
   return (
     <>
       <div className="drag flex h-9 shrink-0 items-center gap-2 px-3" style={{ paddingRight: isMac ? 12 : 146 }}>
-        <span className="h-2 w-2 shrink-0 rounded-full bg-[#3DD68C]" />
+        <span className="h-2 w-2 shrink-0 rounded-full bg-stage-green-bright" />
         <b className="min-w-0 truncate text-[12.5px]">{title}</b>
-        {clock ? <span className="font-mono text-[11.5px] text-[#AFC0E8]">{clock}</span> : null}
+        {clock ? <span className="font-mono text-[11.5px] text-stage-accent">{clock}</span> : null}
       </div>
       {badges ? <div className="shrink-0 px-2 pb-1">{badges}</div> : null}
-      <button type="button" onClick={onReturn} title="Back to the call" className="no-drag relative min-h-0 flex-1 overflow-hidden bg-[#16254F]">
+      <button type="button" onClick={onReturn} title="Back to the call" className="no-drag relative min-h-0 flex-1 overflow-hidden bg-navy-2">
         {board && !presenter?.screen ? (
-          <span className="flex h-full items-center justify-center gap-2 text-[#C9D3EE]">
+          <span className="flex h-full items-center justify-center gap-2 text-navy-ink">
             <Icon name="board" size={18} /> Whiteboard on stage
           </span>
         ) : presenter?.screen ? (
-          <VideoView track={presenter.screen} className="h-full w-full border-[3px] border-[#E5484D] object-contain" />
+          <VideoView track={presenter.screen} className="h-full w-full border-[3px] border-stage-red object-contain" />
         ) : who?.camera ? (
           <VideoView track={who.camera} mirror={who.self && callUi.get().mirror} className="h-full w-full object-cover" />
         ) : (
@@ -455,12 +455,12 @@ function FloatingCard({ title, clock, badges, buttons, end, star, self, presente
       </button>
       <div className="flex shrink-0 items-center justify-center gap-2 py-2">
         {mic ? (
-          <button type="button" aria-label={mic.label} title={mic.label} onClick={mic.onClick} className={cx(btn, mic.tone === 'warn' ? 'bg-white text-[#B42318]' : 'bg-white/12 text-white hover:bg-white/20')}>
+          <button type="button" aria-label={mic.label} title={mic.label} onClick={mic.onClick} className={cx(btn, mic.tone === 'warn' ? 'bg-white text-stage-danger-ink' : 'bg-white/12 text-white hover:bg-white/20')}>
             <Icon name={mic.icon} size={17} />
           </button>
         ) : null}
         {cam ? (
-          <button type="button" aria-label={cam.label} title={cam.label} onClick={cam.onClick} className={cx(btn, cam.tone === 'on' ? 'bg-white text-[#0F1B3D]' : 'bg-white/12 text-white hover:bg-white/20')}>
+          <button type="button" aria-label={cam.label} title={cam.label} onClick={cam.onClick} className={cx(btn, cam.tone === 'on' ? 'bg-white text-stage-on-light' : 'bg-white/12 text-white hover:bg-white/20')}>
             <Icon name={cam.icon} size={17} />
           </button>
         ) : null}
@@ -470,7 +470,7 @@ function FloatingCard({ title, clock, badges, buttons, end, star, self, presente
         <button type="button" aria-label="Back to the call" title="Back to the call" onClick={onReturn} className={cx(btn, 'bg-white/12 text-white hover:bg-white/20')}>
           <Icon name="maximize" size={16} />
         </button>
-        <button type="button" aria-label={end.label} title={end.label} onClick={end.onClick} className={cx(btn, 'w-12 bg-[#E5484D] text-white hover:bg-[#D93D42]')}>
+        <button type="button" aria-label={end.label} title={end.label} onClick={end.onClick} className={cx(btn, 'w-12 bg-stage-red text-white hover:bg-stage-red')}>
           <Icon name="phone-off" size={17} />
         </button>
       </div>

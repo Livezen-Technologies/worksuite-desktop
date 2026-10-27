@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../../components/PageKit';
 import { amount, can, K, METHODS, methodLabel, unallocate } from './api';
 import { allocateFx, allocatePayment, converted, deletePayment, fetchPayment, fetchPayments, fetchSlips, KB, oldestFirst, openInvoicesOf, PER_PAGE, receiptPdf, refundable, refundPayment, removeSlip, uploadSlip, type PaymentDetail } from './more';
 import { money, StatusChip } from './parts';
@@ -92,7 +92,7 @@ export default function Payments({ org, openId, onlyUnallocated, onOpen, onOpenI
           <span>
             Received: <b className="tabular-nums">{amount(sum.total)}</b>
           </span>
-          <span className={sum.unallocated > 0 ? 'text-[#9A4A06] dark:text-warning' : ''}>
+          <span className={sum.unallocated > 0 ? 'text-warning-ink dark:text-warning' : ''}>
             On account: <b className="tabular-nums">{amount(sum.unallocated)}</b>
           </span>
         </div>
@@ -113,7 +113,7 @@ export default function Payments({ org, openId, onlyUnallocated, onOpen, onOpenI
           </div>
           {rows.length ? (
             rows.map((p) => (
-              <button key={p.id} type="button" data-payment={p.id} onClick={() => onOpen(p.id)} className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === p.id && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+              <button key={p.id} type="button" data-payment={p.id} onClick={() => onOpen(p.id)} className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === p.id && 'bg-info-soft dark:bg-selection/40')}>
                 <span className="flex w-[150px] shrink-0 flex-col">
                   <b className="flex items-center gap-1.5 text-ink">
                     {p.reference}
@@ -128,7 +128,7 @@ export default function Payments({ org, openId, onlyUnallocated, onOpen, onOpenI
                   {p.direction === 'out' ? '− ' : ''}
                   {amount(p.amount, p.currency)}
                 </b>
-                <span className={cx('w-[130px] shrink-0 text-right tabular-nums', p.unallocated > 0 ? 'font-bold text-[#9A4A06] dark:text-warning' : 'text-ink-3')}>{p.unallocated > 0 ? amount(p.unallocated, p.currency) : '—'}</span>
+                <span className={cx('w-[130px] shrink-0 text-right tabular-nums', p.unallocated > 0 ? 'font-bold text-warning-ink dark:text-warning' : 'text-ink-3')}>{p.unallocated > 0 ? amount(p.unallocated, p.currency) : '—'}</span>
               </button>
             ))
           ) : (
@@ -240,7 +240,7 @@ export function PaymentPanel({ id, onClose, onOpenInvoice, onOpenPayment }: { id
             <Facts
               rows={[
                 ['Amount', amount(p.amount, p.currency)],
-                ['Unallocated', <span className={p.unallocated > 0 ? 'text-[#9A4A06] dark:text-warning' : ''}>{amount(p.unallocated, p.currency)}</span>],
+                ['Unallocated', <span className={p.unallocated > 0 ? 'text-warning-ink dark:text-warning' : ''}>{amount(p.unallocated, p.currency)}</span>],
                 ['Method', methodLabel(p.method)],
                 [p.direction === 'out' ? 'Given back on' : 'Received on', dateLabel(p.paid_on)],
                 ['Bank reference', p.bank_reference || '—'],

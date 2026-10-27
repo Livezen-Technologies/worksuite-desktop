@@ -218,7 +218,7 @@ function Refused({ item, dependents }: { item: SalonOutboxItem; dependents: numb
                 role="radio"
                 aria-checked={chosen?.starts_at === x.starts_at}
                 onClick={() => setPick(x.starts_at)}
-                className={cx('min-h-11 rounded-[8px] text-[16px] tabular-nums', chosen?.starts_at === x.starts_at ? 'bg-primary font-bold text-white' : 'border border-[#CBD5E1] bg-surface text-ink hover:bg-subtle dark:border-line')}
+                className={cx('min-h-11 rounded-[8px] text-[16px] tabular-nums', chosen?.starts_at === x.starts_at ? 'bg-primary font-bold text-white' : 'border border-slate-line bg-surface text-ink hover:bg-subtle dark:border-line')}
               >
                 {x.label}
               </button>

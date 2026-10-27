@@ -12,6 +12,8 @@ export function FormattedMessage({ html, className }: { html: string; className?
     <div
       className={cx(RICH_CONTENT_CLASS, 'break-words [&_a]:text-primary [&_a]:underline [&_img]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-subtle [&_pre]:p-2', className)}
       dangerouslySetInnerHTML={{ __html: safe }}
+      // Links are <a> elements: Tab reaches them and Enter's click bubbles here.
+      role="presentation"
       onClick={(event) => {
         const link = (event.target as Element).closest('a');
         if (!link) return;

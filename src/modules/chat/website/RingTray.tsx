@@ -11,7 +11,7 @@ import { timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { cx, Spinner } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { ReplyBox, joinSend, useFit, useRingDraft } from './RingCard';
 import { useRingState, waited } from './Ringing';
 import { DASHBOARD_KEYS, homeOf, MAP_KEYS } from './live/LiveDashboard';
@@ -40,7 +40,7 @@ const join = (id: number) => void call('ring:join', { id }).catch((e) => toast('
 
 function JoinLink({ c, name }: { c: WebchatRingChat; name: string }) {
   return (
-    <button type="button" aria-label={`Join ${name}`} onClick={() => join(c.id)} className="flex h-[26px] shrink-0 items-center rounded-full bg-[#2F9E67] px-[11px] text-[12px] font-bold text-white hover:brightness-110">
+    <button type="button" aria-label={`Join ${name}`} onClick={() => join(c.id)} className="flex h-[26px] shrink-0 items-center rounded-full bg-green px-[11px] text-[12px] font-bold text-white hover:brightness-110">
       {text('Join')}
     </button>
   );
@@ -205,12 +205,12 @@ function TrayDashboard({ s, desk }: { s: WebchatRingState; desk: ReturnType<type
         <div className="flex items-center gap-2 px-3 pt-[11px] pb-2">
           <BrandMark size={22} />
           <span className="flex-1 text-[13.5px] font-bold">{text('Website chats')}</span>
-          <span className="flex items-center gap-[5px] text-[11px] font-bold text-[#1f6b40] dark:text-success">
-            <span className="h-[7px] w-[7px] rounded-full bg-[#2f9e67]" aria-hidden />
+          <span className="flex items-center gap-[5px] text-[11px] font-bold text-success dark:text-success">
+            <span className="h-[7px] w-[7px] rounded-full bg-green" aria-hidden />
             {text('Live')}
           </span>
           {status ? (
-            <span className={cx('rounded-[8px] px-2 py-0.5 text-[11px] font-bold', status.label === 'Online' ? 'bg-[#e9f6ee] text-[#1f6b40] dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-2')}>
+            <span className={cx('rounded-[8px] px-2 py-0.5 text-[11px] font-bold', status.label === 'Online' ? 'bg-success-bg text-success dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-2')}>
               {text(status.label)}
             </span>
           ) : null}
@@ -247,7 +247,7 @@ function TrayDashboard({ s, desk }: { s: WebchatRingState; desk: ReturnType<type
           ) : null}
           {/* Its display was unplugged (MAP-24 "the tray says so"), until the wall opens again. */}
           {info.data?.wallGone && !info.data.wallOpen ? (
-            <p role="status" className="px-2 pb-1 text-[11.5px] text-[#9A4A06] dark:text-warning">
+            <p role="status" className="px-2 pb-1 text-[11.5px] text-warning-ink dark:text-warning">
               {text('Wall mode closed — its display was disconnected.')}
             </p>
           ) : null}

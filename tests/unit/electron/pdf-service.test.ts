@@ -72,6 +72,18 @@ class FakeEngine implements EngineHandle {
   async extract() {
     return new Uint8Array(0);
   }
+  async protect() {
+    return new Uint8Array(0);
+  }
+  async unprotect() {
+    return new Uint8Array(0);
+  }
+  async pageText(pages: number[]) {
+    return pages.map(() => '');
+  }
+  async compose() {
+    return new Uint8Array(0);
+  }
   async unload() {}
   async close() {
     this.closed = true;

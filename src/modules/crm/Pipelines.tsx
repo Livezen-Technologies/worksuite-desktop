@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Caps, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Caps, Field, input, Sheet } from '../../components/PageKit';
 import type { Pipeline, Stage } from './api';
 import { isMissing, moveItem, stageProblems } from './logic';
 import { stageColour } from './parts';

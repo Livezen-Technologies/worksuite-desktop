@@ -1,20 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
 import { ErrorNote, Spinner } from '../../../components/ui';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { eGet, K, nice, pct, when, type Overview } from '../api';
 import { Section, Tile, useEl } from '../parts';
+import { StatGrid, type StatTone } from '../../../components/StatCard';
 
-const KPIS: Array<[string, string, (v: number) => string]> = [
-  ['active_courses', 'Active courses', String],
-  ['enrolled_learners', 'Enrolled learners', String],
-  ['courses_in_progress', 'Courses in progress', String],
-  ['completed_this_month', 'Completed this month', String],
-  ['pending_assignments', 'Pending assignments', String],
-  ['compliance_overdue', 'Mandatory overdue', String],
-  ['average_completion', 'Average completion', (v) => pct(v)],
-  ['training_hours', 'Training hours', (v) => `${Math.round(v * 10) / 10} h`],
-  ['upcoming_live_classes', 'Upcoming live classes', String],
-  ['certificates_issued', 'Certificates issued', String],
+const KPIS: Array<[string, string, (v: number) => string, string, StatTone]> = [
+  ['active_courses', 'Active courses', String, 'book-open', 'blue'],
+  ['enrolled_learners', 'Enrolled learners', String, 'users', 'violet'],
+  ['courses_in_progress', 'Courses in progress', String, 'hourglass', 'cyan'],
+  ['completed_this_month', 'Completed this month', String, 'graduation-cap', 'green'],
+  ['pending_assignments', 'Pending assignments', String, 'clipboard-list', 'amber'],
+  ['compliance_overdue', 'Mandatory overdue', String, 'shield-alert', 'red'],
+  ['average_completion', 'Average completion', (v) => pct(v), 'gauge', 'blue'],
+  ['training_hours', 'Training hours', (v) => `${Math.round(v * 10) / 10} h`, 'timer', 'violet'],
+  ['upcoming_live_classes', 'Upcoming live classes', String, 'video', 'cyan'],
+  ['certificates_issued', 'Certificates issued', String, 'award', 'green'],
 ];
 
 /**
@@ -36,12 +37,12 @@ export default function Dashboard() {
   return (
     <div className="flex flex-col gap-4 px-6 py-5">
       <PageHead title="Training dashboard" sub="Within your reach, for the company chosen." />
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        {KPIS.map(([k, label, fmt]) => {
+      <StatGrid min={190}>
+        {KPIS.map(([k, label, fmt, icon, tone]) => {
           const v = d.kpi[k];
-          return <Tile key={k} label={label} value={v === null || v === undefined ? 'Later' : fmt(v)} hint={v === null ? (d.later[k] ?? 'Arrives in a later phase.') : undefined} onClick={k === 'pending_assignments' ? () => el.go('grading') : k === 'compliance_overdue' ? () => el.go('enrollments', { overdue: 1 }) : undefined} />;
+          return <Tile key={k} icon={icon} tone={tone} label={label} value={v === null || v === undefined ? 'Later' : fmt(v)} hint={v === null ? (d.later[k] ?? 'Arrives in a later phase.') : undefined} onClick={k === 'pending_assignments' ? () => el.go('grading') : k === 'compliance_overdue' ? () => el.go('enrollments', { overdue: 1 }) : undefined} />;
         })}
-      </div>
+      </StatGrid>
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Completions, last six months">
           {trend.length === 0 ? (

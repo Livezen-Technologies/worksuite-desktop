@@ -14,7 +14,7 @@ import { RowLead } from '../../components/RowLead';
 import { Avatar, Empty, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
 import type { ModuleProps } from '../registry';
-import { useNow } from '../calls/parts';
+import { useNow } from '../../components/CallKit';
 import { CALL_FILTERS, CallLogList, useCallLog, type CallFilter } from './CallLog';
 import { Details, PRESENCE } from './Details';
 import { NewChat, StarredDialog } from './NewChat';

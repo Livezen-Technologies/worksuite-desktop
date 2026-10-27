@@ -7,6 +7,7 @@ import { openWeb } from '../parts';
 import { PROJECT_STATUS, daysLeftText, fmtDay, hm, num, pk, preads, projectPath, shortMoney, usedFill, usedTone, type ActivityRow, type FullDashboard } from '../portfolio';
 import { Failed, HealthChip, Kpi, Loading, Mono, Nothing, PageHead, Panel, Progress, TD, TH } from './kit';
 import { NewProjectButton } from './Register';
+import { StatGrid } from '../../../components/StatCard';
 
 /**
  * W01 · The Projects dashboard (PRJ-STS, PRJ-RPT), with the web's figures: eight tiles across the top, each leading to
@@ -20,7 +21,7 @@ import { NewProjectButton } from './Register';
 const STATUS_ORDER: ProjectStatus[] = ['planning', 'pending_approval', 'active', 'on_hold', 'completed', 'cancelled'];
 const STATUS_BAR: Record<string, string> = {
   planning: 'bg-ink-3',
-  pending_approval: 'bg-[#8B5CF6]',
+  pending_approval: 'bg-violet',
   active: 'bg-primary',
   on_hold: 'bg-warning',
   completed: 'bg-success',
@@ -69,13 +70,14 @@ function Content({ d, onGo }: { d: FullDashboard; onGo: (route: string) => void 
   const basis = [d.company?.name, d.currency].filter(Boolean).join(' · ');
   return (
     <>
-      <section aria-label="Key figures" className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5">
-        <Kpi label="Active projects" value={k.active ?? 0} sub={`${k.total ?? 0} in total`} onClick={() => onGo('/projects/all?status=active')} />
-        <Kpi label="At risk" value={k.at_risk ?? 0} sub={`${k.watch ?? 0} on watch`} tone={k.at_risk ? 'text-danger' : 'text-ink'} onClick={() => onGo('/projects/all?health=at_risk')} />
-        <Kpi label="Overdue tasks" value={k.tasks_overdue ?? 0} sub={`of ${num(k.tasks_open)} open`} tone={k.tasks_overdue ? 'text-danger' : 'text-ink'} onClick={() => onGo('/projects/my-work')} />
-        <Kpi label="Milestones · 30 days" value={k.milestones_30d ?? 0} sub={`${k.milestones_overdue ?? 0} overdue`} tone="text-[#6D28D9] dark:text-[#C4B5FD]" onClick={() => onGo('/projects/milestones')} />
-        <Kpi label="Hours this week" value={hm(k.minutes_week)} sub={`${k.billable_percent_week ?? 0}% billable`} onClick={() => onGo('/projects/time')} />
+      <StatGrid min={200} label="Key figures">
+        <Kpi icon="briefcase"  tone="blue" label="Active projects" value={k.active ?? 0} sub={`${k.total ?? 0} in total`} onClick={() => onGo('/projects/all?status=active')} />
+        <Kpi icon="shield-alert" label="At risk" value={k.at_risk ?? 0} sub={`${k.watch ?? 0} on watch`} tone={k.at_risk ? 'text-danger' : 'text-ink'} onClick={() => onGo('/projects/all?health=at_risk')} />
+        <Kpi icon="list-todo" label="Overdue tasks" value={k.tasks_overdue ?? 0} sub={`of ${num(k.tasks_open)} open`} tone={k.tasks_overdue ? 'text-danger' : 'text-ink'} onClick={() => onGo('/projects/my-work')} />
+        <Kpi icon="flag" label="Milestones · 30 days" value={k.milestones_30d ?? 0} sub={`${k.milestones_overdue ?? 0} overdue`} tone="text-violet dark:text-violet-ink" onClick={() => onGo('/projects/milestones')} />
+        <Kpi icon="timer" tone="cyan" label="Hours this week" value={hm(k.minutes_week)} sub={`${k.billable_percent_week ?? 0}% billable`} onClick={() => onGo('/projects/time')} />
         <Kpi
+          icon="wallet"
           label="Budget used"
           value={`${used}%`}
           tone={used > 100 ? 'text-danger' : 'text-ink'}
@@ -88,9 +90,9 @@ function Content({ d, onGo }: { d: FullDashboard; onGo: (route: string) => void 
             </>
           }
         />
-        <Kpi label="Open risks" value={k.open_risks ?? 0} sub={`${k.risks_high ?? 0} high`} tone={k.open_risks ? 'text-warning-ink' : 'text-ink'} onClick={() => onGo('/projects/risks')} />
-        <Kpi label="Waiting on you" value={waitingTime + waitingChanges} tone="text-primary" sub={`${waitingTime} time · ${waitingChanges} change${waitingChanges === 1 ? '' : 's'}`} onClick={() => onGo(waitingTime || !waitingChanges ? '/projects/time' : '/projects/changes')} />
-      </section>
+        <Kpi icon="warning" label="Open risks" value={k.open_risks ?? 0} sub={`${k.risks_high ?? 0} high`} tone={k.open_risks ? 'text-warning-ink' : 'text-ink'} onClick={() => onGo('/projects/risks')} />
+        <Kpi icon="inbox" label="Waiting on you" value={waitingTime + waitingChanges} tone="text-primary" sub={`${waitingTime} time · ${waitingChanges} change${waitingChanges === 1 ? '' : 's'}`} onClick={() => onGo(waitingTime || !waitingChanges ? '/projects/time' : '/projects/changes')} />
+      </StatGrid>
       <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-3.5">
           <Attention d={d} onGo={onGo} />
@@ -259,7 +261,7 @@ function Milestones({ rows, onGo }: { rows: NonNullable<FullDashboard['upcoming_
             const left = daysLeftText(m.days_left);
             return (
               <li key={m.id} className="flex items-center gap-2.5 text-[12.5px]">
-                <span className="w-[46px] shrink-0 rounded-[6px] bg-[#EDE9FE] py-0.5 text-center text-[11px] font-bold text-[#5B21B6] dark:bg-[#5B21B6]/25 dark:text-[#C4B5FD]">{fmtDay(m.due_date)}</span>
+                <span className="w-[46px] shrink-0 rounded-[6px] bg-violet-bg py-0.5 text-center text-[11px] font-bold text-violet-ink dark:bg-violet/25">{fmtDay(m.due_date)}</span>
                 <span className="min-w-0 flex-1">
                   <b className="block truncate font-semibold text-ink">{m.name}</b>
                   <button type="button" onClick={() => onGo(projectPath(m.project_id))} className="block truncate text-start text-[11px] text-ink-3 hover:underline">

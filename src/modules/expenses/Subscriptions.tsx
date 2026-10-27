@@ -7,10 +7,10 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, Kpi, PageHead, Panel, Seg, Sheet } from '../hr/parts';
-import { minWidth } from '../inventory/parts';
+import { btn, btnPrimary, Field, input, Kpi, PageHead, Panel, Seg, Sheet } from '../../components/PageKit';
+import { minWidth } from '../../components/ListKit';
 import { fromCents, problemsOf, shortDate } from '../finance/api';
-import { LoadFailed, Notice } from '../finance/parts';
+import { LoadFailed, Notice } from '../../components/RecordKit';
 import { can, canAct, money } from './api';
 import type { ScreenProps } from './Rail';
 import { SubConfirm, SubPill, SubscriptionPanel } from './SubscriptionPanel';
@@ -45,6 +45,8 @@ import {
   type EditorMode,
   type Sub,
 } from './suppliers';
+import { StatGrid } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Vendor subscriptions: what the company pays for on a cycle, and when each
@@ -147,12 +149,12 @@ export default function Subscriptions({
         <LoadFailed what="The subscriptions" onRetry={() => void q.refetch()} />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            <Kpi label="Active" value={sum.active} />
-            <Kpi label="Monthly cost" value={<Costs costs={sum.costs} pick="monthly" />} sub={sum.costs.length > 1 ? 'One line per currency — not added across them' : undefined} />
-            <Kpi label="Annual cost" value={<Costs costs={sum.costs} pick="annual" />} sub="Twelve months at today’s prices" />
-            <Kpi label="Renewing in 30 days" value={sum.dueSoon} tone={sum.dueSoon ? 'amber' : undefined} sub={sum.overdue ? `${sum.overdue} overdue` : undefined} />
-          </div>
+          <StatGrid>
+            <Kpi icon="repeat" tone="blue" label="Active" value={sum.active} />
+            <Kpi icon="calendar" tone="violet" label="Monthly cost" value={<Costs costs={sum.costs} pick="monthly" />} sub={sum.costs.length > 1 ? 'One line per currency — not added across them' : undefined} />
+            <Kpi icon="calendar-days" tone="cyan" label="Annual cost" value={<Costs costs={sum.costs} pick="annual" />} sub="Twelve months at today’s prices" />
+            <Kpi icon="calendar-clock" label="Renewing in 30 days" value={sum.dueSoon} tone={sum.dueSoon ? 'amber' : undefined} sub={sum.overdue ? `${sum.overdue} overdue` : undefined} />
+          </StatGrid>
 
           {soon.length ? (
             <Panel title="Upcoming renewals" sub={sum.overdue ? 'Overdue first: a stated renewal date that has passed without a payment receipt.' : undefined}>
@@ -206,7 +208,7 @@ export default function Subscriptions({
                 return (
                   <div
                     key={s.id}
-                    onClick={() => open(s.id)}
+                    role="button" tabIndex={0} onKeyDown={clickOnKey} onClick={() => open(s.id)}
                     className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-[9px] text-[13px] last:border-b-0 hover:bg-subtle', s.status !== 'active' && 'opacity-60', openSub === s.id && '!bg-selection !opacity-100')}
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
@@ -242,7 +244,7 @@ export default function Subscriptions({
                       <SubPill status={s.status} />
                     </span>
                     {/* The write actions gate themselves: a button whose only outcome is a 403 teaches people to distrust the screen. */}
-                    <span className="flex w-[132px] shrink-0 justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+                    <span role="presentation" className="flex w-[132px] shrink-0 justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
                       {write ? (
                         <>
                           <RowAction icon="compose" label={`Edit ${s.name}`} onClick={() => setEditor({ mode: 'edit', sub: s })} />
@@ -295,10 +297,10 @@ export default function Subscriptions({
   );
 }
 
-const TONE_TEXT = { red: 'text-danger', amber: 'text-[#9A4A06] dark:text-warning', grey: 'text-ink' } as const;
+const TONE_TEXT = { red: 'text-danger', amber: 'text-warning-ink dark:text-warning', grey: 'text-ink' } as const;
 const TONE_BADGE = {
-  red: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  amber: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
+  red: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  amber: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
   grey: 'bg-subtle text-ink-2',
 } as const;
 
@@ -346,7 +348,7 @@ function RenewalRow({ s, onOpen }: { s: Sub; onOpen: () => void }) {
       <span className="flex shrink-0 flex-col items-end">
         <b className="text-[13px] tabular-nums text-ink">{money(s.charge, s.currency)}</b>
         {/* The thing a number cannot say: whether somebody has to act before the date, or whether it happens by itself. */}
-        <span className={cx('text-[11.5px]', s.auto_renew ? 'text-ink-3' : 'text-[#9A4A06] dark:text-warning')}>{s.auto_renew ? 'renews automatically' : 'will not auto-renew'}</span>
+        <span className={cx('text-[11.5px]', s.auto_renew ? 'text-ink-3' : 'text-warning-ink dark:text-warning')}>{s.auto_renew ? 'renews automatically' : 'will not auto-renew'}</span>
       </span>
       <Icon name="chevron-right" size={15} className="shrink-0 text-ink-3 opacity-0 group-hover:opacity-100" />
     </button>

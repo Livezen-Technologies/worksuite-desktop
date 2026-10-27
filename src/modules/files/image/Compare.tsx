@@ -77,11 +77,11 @@ export function CompareView(p: CompareProps) {
   const options = sorted.map((v) => ({ value: String(v.version), label: label(v.version) }));
 
   const pic = (side: { url: string | null; error: boolean }, alt: string, cls?: string) =>
-    side.url ? <img src={side.url} alt={alt} className={cx('max-h-full max-w-full object-contain', cls)} /> : side.error ? <span className="text-[12.5px] text-[#FFB4A3]">This version could not be loaded.</span> : <Spinner />;
+    side.url ? <img src={side.url} alt={alt} className={cx('max-h-full max-w-full object-contain', cls)} /> : side.error ? <span className="text-[12.5px] text-stage-danger">This version could not be loaded.</span> : <Spinner />;
 
   return (
     <div className="flex min-h-0 flex-1">
-      <div className="relative flex min-w-0 flex-1 items-center justify-center bg-[#0B1120] p-6">
+      <div className="relative flex min-w-0 flex-1 items-center justify-center bg-stage p-6">
         {mode === 'side' ? (
           <div className="grid h-full w-full grid-cols-2 gap-4">
             <figure className="flex min-h-0 flex-col items-center justify-center gap-2">
@@ -90,7 +90,7 @@ export function CompareView(p: CompareProps) {
             </figure>
             <figure className="flex min-h-0 flex-col items-center justify-center gap-2">
               {pic(b, label(right))}
-              <figcaption className="rounded-[6px] bg-[#3B5BDB] px-2 py-0.5 text-[12px] font-bold text-white">{label(right)}</figcaption>
+              <figcaption className="rounded-[6px] bg-brand px-2 py-0.5 text-[12px] font-bold text-white">{label(right)}</figcaption>
             </figure>
           </div>
         ) : mode === 'toggle' ? (
@@ -104,37 +104,37 @@ export function CompareView(p: CompareProps) {
               {pic(b, label(right))}
               {a.url ? <img src={a.url} alt={label(left)} className="absolute inset-0 h-full w-full object-contain" style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }} /> : null}
               <span className="absolute top-2 left-2 rounded-[6px] bg-black/60 px-2 py-0.5 text-[12px] font-bold text-white">{label(left)}</span>
-              <span className="absolute top-2 right-2 rounded-[6px] bg-[#3B5BDB] px-2 py-0.5 text-[12px] font-bold text-white">{label(right)}</span>
+              <span className="absolute top-2 right-2 rounded-[6px] bg-brand px-2 py-0.5 text-[12px] font-bold text-white">{label(right)}</span>
               <span className="pointer-events-none absolute inset-y-0 w-0.5 bg-white" style={{ left: `${split}%` }} />
               <input type="range" min={0} max={100} value={split} onChange={(e) => setSplit(Number(e.target.value))} aria-label="Divider" className="absolute inset-x-0 top-1/2 w-full -translate-y-1/2 cursor-ew-resize opacity-0" />
             </div>
           </div>
         )}
       </div>
-      <aside aria-label="Compare versions" className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-[#1E2A4A] bg-[#0F1629] p-4 scroll-thin">
+      <aside aria-label="Compare versions" className="flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-stage-line-soft bg-stage p-4 scroll-thin">
         <div className="flex items-center">
           <h2 className="flex-1 text-[15px] font-bold text-white">Compare versions</h2>
-          <button type="button" aria-label="Close compare" onClick={p.onClose} className="flex h-8 w-8 items-center justify-center rounded-[8px] text-[#C3CEEA] hover:bg-white/10">
+          <button type="button" aria-label="Close compare" onClick={p.onClose} className="flex h-8 w-8 items-center justify-center rounded-[8px] text-stage-ink-2 hover:bg-white/10">
             <Icon name="x" size={16} />
           </button>
         </div>
         <Seg label="How to compare" value={mode} onChange={setMode} options={[{ value: 'split', label: 'Split' }, { value: 'side', label: 'Side by side' }, { value: 'toggle', label: 'Toggle' }]} />
-        <span className="text-[11px] font-bold tracking-[0.07em] text-[#8C9BC0] uppercase">Left</span>
+        <span className="text-[11px] font-bold tracking-[0.07em] text-stage-ink-3 uppercase">Left</span>
         <Select value={String(left)} aria-label="Left version" options={options} onValueChange={(v) => setLeft(Number(v))} className="h-8 w-full text-white" />
-        <span className="text-[11px] font-bold tracking-[0.07em] text-[#8C9BC0] uppercase">Right</span>
+        <span className="text-[11px] font-bold tracking-[0.07em] text-stage-ink-3 uppercase">Right</span>
         <Select value={String(right)} aria-label="Right version" options={[...(p.unsaved ? [{ value: 'unsaved', label: p.unsaved.label }] : []), ...options]} onValueChange={(v) => setRight(v === 'unsaved' ? 'unsaved' : Number(v))} className="h-8 w-full text-white" />
-        <span className="text-[11px] font-bold tracking-[0.07em] text-[#8C9BC0] uppercase">History</span>
+        <span className="text-[11px] font-bold tracking-[0.07em] text-stage-ink-3 uppercase">History</span>
         <ul className="flex flex-col gap-2">
           {sorted.map((v) => (
             <li key={v.id}>
-              <button type="button" aria-pressed={picked === v.version} onClick={() => (setPicked(v.version), setLeft(v.version))} className={cx('flex w-full flex-col gap-0.5 rounded-[10px] border px-3 py-2 text-left', picked === v.version ? 'border-[#5B7BFF] bg-[#1A2650]' : 'border-[#24314F] hover:border-[#3A4C7A]')}>
+              <button type="button" aria-pressed={picked === v.version} onClick={() => (setPicked(v.version), setLeft(v.version))} className={cx('flex w-full flex-col gap-0.5 rounded-[10px] border px-3 py-2 text-left', picked === v.version ? 'border-stage-primary-2 bg-navy-2' : 'border-stage-line-soft hover:border-stage-4')}>
                 <span className="flex items-center gap-2 text-[12.5px] text-white">
                   <b>{`v${v.version}`}</b>
-                  {v.editable ? <span className="rounded-[4px] bg-[#23349E] px-1.5 text-[10px] font-bold tracking-wide">EDITABLE</span> : null}
-                  <span className="ml-auto text-[11.5px] text-[#8C9BC0]">{v.created_at ? dateLabel(v.created_at) : ''}</span>
+                  {v.editable ? <span className="rounded-[4px] bg-stage-primary px-1.5 text-[10px] font-bold tracking-wide">EDITABLE</span> : null}
+                  <span className="ml-auto text-[11.5px] text-stage-ink-3">{v.created_at ? dateLabel(v.created_at) : ''}</span>
                 </span>
-                <span className="text-[12.5px] text-[#E6ECFA]">{v.note || v.summary || (v.version === oldest ? 'Original upload' : 'Saved')}</span>
-                {v.author ? <span className="text-[11.5px] text-[#8C9BC0]">{v.author}</span> : null}
+                <span className="text-[12.5px] text-stage-ink">{v.note || v.summary || (v.version === oldest ? 'Original upload' : 'Saved')}</span>
+                {v.author ? <span className="text-[11.5px] text-stage-ink-3">{v.author}</span> : null}
               </button>
             </li>
           ))}
@@ -151,7 +151,7 @@ export function CompareView(p: CompareProps) {
                 </DarkButton>
               ) : null}
             </div>
-            <span className="text-[12px] text-[#8C9BC0]">{`Restore makes a new version (v${p.current + 1}) from v${chosen.version}, so nothing in the history is lost.`}</span>
+            <span className="text-[12px] text-stage-ink-3">{`Restore makes a new version (v${p.current + 1}) from v${chosen.version}, so nothing in the history is lost.`}</span>
           </div>
         ) : null}
       </aside>

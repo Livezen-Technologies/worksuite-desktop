@@ -30,6 +30,7 @@ import { networkInfo } from '../lib/networks';
 import { accountStatusLabel, needsAttention } from '../lib/status';
 import { excerpt } from '../lib/text';
 import { addDays, inZone, todayInZone, weekStart, whenLabel, zonedToUtc } from '../lib/time';
+import { StatGrid } from '../../../components/StatCard';
 
 /** What the module status may add for the Open inbox tile (proposed: not in the status contract yet). */
 type StatusCounts = ModuleStatus['counts'] & { inbox_past_target?: number | null };
@@ -192,11 +193,13 @@ function KpiRow({ brand, w, status }: { brand: number | null; w: Span; status: M
 
   const off = (what: string) => <NotOffered what={what} compact />;
   return (
-    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+    <StatGrid>
       {weekQ.data?.offered === false ? (
         off('Scheduled this week')
       ) : (
         <Kpi
+          icon="calendar-clock"
+          accent="blue"
           label="Scheduled this week"
           value={weekQ.data ? full(week.filter((p) => p.status !== 'draft' && p.status !== 'cancelled').length) : '…'}
           sub={week.some((p) => p.status === 'in_review') ? `${week.filter((p) => p.status === 'in_review').length} in review` : undefined}
@@ -207,6 +210,8 @@ function KpiRow({ brand, w, status }: { brand: number | null; w: Span; status: M
         off('Published · last 7 days')
       ) : (
         <Kpi
+          icon="send"
+          accent="green"
           label="Published · last 7 days"
           value={lastQ.data ? full(last.filter(isPublished).length) : '…'}
           sub={last.some((p) => p.status === 'failed') ? `${last.filter((p) => p.status === 'failed').length} failed` : undefined}
@@ -216,14 +221,14 @@ function KpiRow({ brand, w, status }: { brand: number | null; w: Span; status: M
       {overviewQ.data?.offered === false ? (
         off('Engagements · last 7 days')
       ) : (
-        <Kpi label="Engagements · last 7 days" value={overviewQ.data ? (eng === null ? null : full(eng)) : '…'} sub={change !== null ? `${delta(change)} vs prior week` : undefined} tone={change !== null && change < 0 ? 'danger' : 'success'} />
+        <Kpi icon="heart" accent="violet" label="Engagements · last 7 days" value={overviewQ.data ? (eng === null ? null : full(eng)) : '…'} sub={change !== null ? `${delta(change)} vs prior week` : undefined} tone={change !== null && change < 0 ? 'danger' : 'success'} />
       )}
       {!status ? (
         off('Open inbox items')
       ) : (
-        <Kpi label="Open inbox items" value={full(status.counts.inbox_open)} sub={counts?.inbox_past_target ? `${counts.inbox_past_target} past reply target` : undefined} tone="danger" />
+        <Kpi icon="inbox" accent="amber" label="Open inbox items" value={full(status.counts.inbox_open)} sub={counts?.inbox_past_target ? `${counts.inbox_past_target} past reply target` : undefined} tone="danger" />
       )}
-    </div>
+    </StatGrid>
   );
 }
 

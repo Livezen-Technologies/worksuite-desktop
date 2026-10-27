@@ -12,6 +12,7 @@ import { Button, Chip, ErrorNote, Modal, Spinner, TextField, cx } from '../../..
 import { TYPES, type ContactType } from '../api';
 import { previewLine, providerLabel, statusLine, type SyncAccount, type SyncLogRow, type SyncProviders, type SyncSettings } from './api';
 import { SourceIcon } from './SourceIcon';
+import { SectionHeader, SettingsGroup } from '../../../components/SettingsKit';
 
 export const ACCOUNTS_KEY = ['contacts', 'sync', 'accounts'] as const;
 
@@ -52,13 +53,15 @@ export function AccountsSettings() {
 
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <h2 className="text-[22px] font-bold text-ink">Accounts &amp; sync</h2>
-        <Button variant="primary" icon="plus" onClick={() => setAdding(true)}>
-          Add account
-        </Button>
-      </div>
-      <p className="mb-5 text-[13.5px] text-ink-3">Contacts from Google, Outlook and iCloud stay in step with WorkSuite both ways. Somebody in two places is one contact here, linked to each.</p>
+      <SectionHeader
+        title="Accounts & sync"
+        hint="Contacts from Google, Outlook and iCloud stay in step with WorkSuite both ways. Somebody in two places is one contact here, linked to each."
+        actions={
+          <Button variant="primary" icon="plus" onClick={() => setAdding(true)}>
+            Add account
+          </Button>
+        }
+      />
       {conflicts ? (
         <button type="button" onClick={() => go('/contacts?view=tidy&tab=conflicts')} className="mb-4 flex w-full items-center gap-2 rounded-[10px] bg-warning-bg px-3 py-2 text-left text-[13px] text-warning">
           <Icon name="warning" size={15} /> {conflicts === 1 ? '1 field changed in both places' : `${conflicts} fields changed in both places`} — review the sync conflicts
@@ -71,11 +74,11 @@ export function AccountsSettings() {
         <div className="rounded-[12px] border border-dashed border-line px-5 py-8 text-center text-[13px] text-ink-3">No accounts yet. Add Google, Outlook or iCloud to bring their contacts in.</div>
       ) : null}
       {list.length ? (
-        <ul role="list" aria-label="Connected accounts" className="flex flex-col gap-2.5">
+        <SettingsGroup list="Connected accounts">
           {list.map((a) => (
             <AccountRow key={a.id} a={a} hereSecret={a.mode === 'server' || a.provider === 'macos' || !!device.data?.accounts.find((x) => x.accountId === a.id)?.hasSecret} onPreview={() => setPreviewing(a)} onChanged={refresh} />
           ))}
-        </ul>
+        </SettingsGroup>
       ) : null}
       {device.data && !device.data.persistent ? <p className="mt-3 text-[12px] text-warning">This computer has no secure keystore, so iCloud and CardDAV passwords are kept only until WorkSuite quits.</p> : null}
       {adding ? (
@@ -118,8 +121,8 @@ function AccountRow({ a, hereSecret, onPreview, onChanged }: { a: SyncAccount; h
   };
   const elsewhere = a.mode === 'device' && !hereSecret;
   return (
-    <li className="rounded-[12px] border border-line bg-surface">
-      <div className="flex items-center gap-3 px-4 py-3">
+    <li>
+      <div className="flex items-center gap-3 px-[18px] py-3">
         <SourceIcon provider={a.provider} size={28} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

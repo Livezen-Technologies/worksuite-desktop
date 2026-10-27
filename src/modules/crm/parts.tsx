@@ -1,33 +1,21 @@
 import type { ReactNode } from 'react';
 import { cx } from '../../components/ui';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /**
  * CRM's small shared pieces: money as the designs write it ("LKR 12.4M",
  * "LKR 950k", "LKR 1,840,000"), the lead rating and status chips, and the
- * bar rows the dashboard is made of. Panels, buttons and sheets are People's
- * (hr/parts), so CRM and HR look alike.
+ * bar rows the dashboard is made of. Panels, buttons and sheets are the page
+ * kit's (src/components/PageKit), so CRM and HR look alike. Money and the bar
+ * rows live in src/components/ReportKit, shared with Sales and Billing.
  */
 
-/** "LKR 12.4M", "LKR 950k", "LKR 800" — for tiles and boards. */
-export function money(n: number | null | undefined, currency?: string | null): string {
-  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
-  const v = Number(n);
-  const a = Math.abs(v);
-  const s = a >= 1_000_000 ? `${(v / 1_000_000).toFixed(a >= 10_000_000 ? 0 : 1).replace(/\.0$/, '')}M` : a >= 1000 ? `${Math.round(v / 1000)}k` : String(Math.round(v));
-  return currency ? `${currency} ${s}` : s;
-}
-
-/** "LKR 1,840,000.00" — for a record, where the exact figure matters. */
-export function moneyFull(n: number | null | undefined, currency?: string | null): string {
-  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
-  const s = Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return currency ? `${currency} ${s}` : s;
-}
+export { money, moneyFull, BarRow } from '../../components/ReportKit';
 
 const RATING: Record<string, string> = {
-  hot: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  warm: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  cold: 'bg-[#E8F1FB] text-[#1D5A99] dark:bg-[#172a44] dark:text-[#8DB8F0]',
+  hot: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  warm: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  cold: 'bg-selection text-sky-ink dark:bg-slate-bg dark:text-blue-ink',
 };
 
 export function Rating({ rating }: { rating: string | null | undefined }) {
@@ -37,29 +25,14 @@ export function Rating({ rating }: { rating: string | null | undefined }) {
 
 const STATUS: Record<string, string> = {
   new: 'bg-selection text-primary',
-  contacted: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  qualified: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
-  unqualified: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  converted: 'bg-[#E3F4F5] text-[#0B6770] dark:bg-teal/15 dark:text-teal',
+  contacted: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  qualified: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
+  unqualified: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  converted: 'bg-teal-bg text-teal-ink dark:bg-teal/15 dark:text-teal',
 };
 
 export function LeadStatus({ status }: { status: string }) {
   return <span className={cx('inline-flex rounded-full px-2 py-0.5 text-[11.5px] font-bold whitespace-nowrap', STATUS[status] ?? 'bg-subtle text-ink-2')}>{status}</span>;
-}
-
-/** A label, a value, and a bar under them as wide as `pct`. */
-export function BarRow({ label, value, pct, colour = 'var(--color-primary)' }: { label: ReactNode; value: ReactNode; pct: number; colour?: string }) {
-  return (
-    <div className="flex flex-col gap-[3px]">
-      <span className="flex text-[12.5px]">
-        <span className="min-w-0 flex-1 truncate text-ink-2">{label}</span>
-        <b className="text-ink tabular-nums">{value}</b>
-      </span>
-      <span className="h-2 overflow-hidden rounded-full bg-subtle">
-        <span className="block h-2 rounded-full" style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: colour }} />
-      </span>
-    </div>
-  );
 }
 
 /** A line in a dashboard list: a title, a line under it, and something on the right. */
@@ -101,35 +74,11 @@ export function crmCan(perms: readonly string[] | undefined, slug: string): bool
   return perms.includes(slug) || perms.includes('*') || (slug !== 'crm.view' && perms.includes('crm.manage'));
 }
 
-const KPI_TONE: Record<string, [string, string]> = {
-  blue: ['bg-primary', 'text-primary'],
-  green: ['bg-[#1F7A4D] dark:bg-success', 'text-[#145C39] dark:text-success'],
-  red: ['bg-danger', 'text-[#B42318] dark:text-danger'],
-  amber: ['bg-[#B45309] dark:bg-warning', 'text-[#9A4A06] dark:text-warning'],
-  plain: ['bg-line', 'text-ink'],
-};
+const KPI_TONE: Record<string, StatTone> = { blue: 'blue', violet: 'violet', green: 'green', red: 'red', amber: 'amber', cyan: 'cyan', plain: 'neutral', neutral: 'neutral' };
 
-/** A figure tile (the shared Kpi): a 4 px accent rule on the left, the label, the figure and a line under it. */
-export function Kpi({ label, value, sub, tone = 'plain', onClick, size = 'lg' }: { label: string; value: ReactNode; sub?: ReactNode; tone?: keyof typeof KPI_TONE; onClick?: () => void; size?: 'lg' | 'sm' }) {
-  const [rule, text] = KPI_TONE[tone] ?? KPI_TONE.plain!;
-  const body = (
-    <>
-      <span aria-hidden className={cx('absolute top-0 bottom-0 left-0 w-1', rule)} />
-      <span className="text-[12px] font-semibold text-ink-3">{label}</span>
-      <b className={cx('truncate tabular-nums', size === 'lg' ? 'text-[22px] leading-tight' : 'text-[17px]', text)}>{value}</b>
-      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-    </>
-  );
-  const cls = 'relative flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-[10px] border border-line bg-surface py-3 pr-3.5 pl-[18px] text-left';
-  return onClick ? (
-    <button type="button" data-kpi={label} onClick={onClick} className={cx(cls, 'hover:border-primary/50')}>
-      {body}
-    </button>
-  ) : (
-    <div data-kpi={label} className={cls}>
-      {body}
-    </div>
-  );
+/** A figure tile (the shared StatCard): the icon chip and label, the figure and a line under it. */
+export function Kpi({ label, value, sub, tone = 'plain', onClick, size = 'lg', icon }: { label: string; value: ReactNode; sub?: ReactNode; tone?: StatTone | 'plain'; onClick?: () => void; size?: 'lg' | 'sm'; icon?: string }) {
+  return <StatCard data-kpi={label} label={label} value={value} sub={sub} icon={icon} tone={KPI_TONE[tone] ?? 'neutral'} onClick={onClick} size={size === 'lg' ? 'md' : 'sm'} />;
 }
 
 /** The count line under a list or board ("300 leads · 60 new · 12 unassigned"). */

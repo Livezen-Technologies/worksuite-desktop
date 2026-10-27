@@ -5,8 +5,9 @@ import { useStore } from '../../core/store';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { type HrOverview } from './api';
 import { dayShort, parseYmd, ymd } from './dates';
-import { btn, btnPrimary, Empty, humanise, Initials, Kpi, PageHead, Panel, StatusChip } from './parts';
+import { btn, btnPrimary, Empty, humanise, Initials, Kpi, PageHead, Panel, StatusChip } from '../../components/PageKit';
 import { can, type HrView } from './Rail';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The HR dashboard (HrDashboard; hr.view): headcount, who is out today,
@@ -48,12 +49,12 @@ export default function Dashboard({ onPick, onGo }: { onPick: (v: HrView) => voi
           </button>
         ) : null}
       </PageHead>
-      <div className="grid grid-cols-4 gap-2.5">
-        <Kpi label="Employees" value={o.total} sub={[statuses, o.unlinked ? `${o.unlinked} without a login` : null].filter(Boolean).join(' · ')} />
-        <Kpi label="Out today" value={o.out_today.length} sub={o.out_today.length ? `${onLeave} on leave · ${o.out_today.length - onLeave} away` : 'Everyone is in'} />
-        <Kpi label="Pending leave" value={o.pending_leave} sub="Click to review" tone={o.pending_leave ? 'amber' : undefined} onClick={() => onPick('waiting')} />
-        <Kpi label="Missing check-outs" value={o.open_attendance ?? 0} sub="Waiting to be settled" tone={o.open_attendance ? 'red' : undefined} onClick={() => onPick('openatt')} />
-      </div>
+      <StatGrid>
+        <Kpi icon="users" tone="blue" label="Employees" value={o.total} sub={[statuses, o.unlinked ? `${o.unlinked} without a login` : null].filter(Boolean).join(' · ')} />
+        <Kpi icon="plane" tone="violet" label="Out today" value={o.out_today.length} sub={o.out_today.length ? `${onLeave} on leave · ${o.out_today.length - onLeave} away` : 'Everyone is in'} />
+        <Kpi icon="hourglass" label="Pending leave" value={o.pending_leave} sub="Click to review" tone={o.pending_leave ? 'amber' : undefined} onClick={() => onPick('waiting')} />
+        <Kpi icon="door" label="Missing check-outs" value={o.open_attendance ?? 0} sub="Waiting to be settled" tone={o.open_attendance ? 'red' : undefined} onClick={() => onPick('openatt')} />
+      </StatGrid>
       <div className="grid min-h-0 flex-1 grid-cols-3 gap-3">
         <Panel title="Out today">
           {o.out_today.length ? (
@@ -79,7 +80,7 @@ export default function Dashboard({ onPick, onGo }: { onPick: (v: HrView) => voi
                   <b className="flex-1 truncate text-ink">{x.name}</b>
                   <b className="text-primary">{x.percent}%</b>
                 </span>
-                <span className="h-1.5 overflow-hidden rounded-[3px] bg-[#E9ECF3] dark:bg-subtle">
+                <span className="h-1.5 overflow-hidden rounded-[3px] bg-info-bg dark:bg-subtle">
                   <span className="block h-1.5 bg-primary" style={{ width: `${Math.max(2, Math.min(100, x.percent))}%` }} />
                 </span>
                 <span className="truncate text-[12px] text-ink-3">

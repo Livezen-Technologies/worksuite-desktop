@@ -20,14 +20,14 @@ import { cx } from '../../components/ui';
  * Colours that are not the app's tokens come in pairs, light and dark, so each reads in both themes.
  */
 export const STATUS_TONE: Record<SupportStatus, { chip: string; dot: string }> = {
-  new: { chip: 'bg-[#E0EDFF] text-[#1D4ED8] dark:bg-[#15284F] dark:text-[#93C5FD]', dot: 'bg-[#2563EB]' },
-  open: { chip: 'bg-[#FEF3C7] text-[#92400E] dark:bg-[#3A2A0A] dark:text-[#FCD34D]', dot: 'bg-[#D97706]' },
-  in_progress: { chip: 'bg-[#E0E7FF] text-[#3730A3] dark:bg-[#1E1B4B] dark:text-[#A5B4FC]', dot: 'bg-[#4F46E5]' },
-  pending_customer: { chip: 'bg-[#EDE9FE] text-[#5B21B6] dark:bg-[#2A1F4A] dark:text-[#C4B5FD]', dot: 'bg-[#7C3AED]' },
-  pending_internal: { chip: 'bg-[#FAE8FF] text-[#86198F] dark:bg-[#3B0F3F] dark:text-[#F0ABFC]', dot: 'bg-[#C026D3]' },
-  escalated: { chip: 'bg-[#FEE2E2] text-[#991B1B] dark:bg-[#3A1614] dark:text-[#FCA5A5]', dot: 'bg-[#DC2626]' },
-  resolved: { chip: 'bg-[#DCFCE7] text-[#166534] dark:bg-[#12301F] dark:text-[#86EFAC]', dot: 'bg-[#16A34A]' },
-  closed: { chip: 'bg-[#E2E8F0] text-[#334155] dark:bg-[#1E293B] dark:text-[#CBD5E1]', dot: 'bg-[#64748B]' },
+  new: { chip: 'bg-blue-bg text-brand-soft dark:bg-info-bg dark:text-blue-ink', dot: 'bg-blue' },
+  open: { chip: 'bg-yellow-bg text-orange-ink dark:bg-warning-bg dark:text-amber', dot: 'bg-amber-strong' },
+  in_progress: { chip: 'bg-blue-bg text-primary dark:bg-info-soft dark:text-info-ink', dot: 'bg-brand-soft' },
+  pending_customer: { chip: 'bg-violet-bg text-violet-ink dark:bg-violet-bg', dot: 'bg-violet' },
+  pending_internal: { chip: 'bg-violet-bg text-violet-ink dark:bg-rose-bg', dot: 'bg-violet' },
+  escalated: { chip: 'bg-rose-bg text-danger-ink dark:bg-danger-bg', dot: 'bg-red' },
+  resolved: { chip: 'bg-success-bg text-success-ink dark:bg-success-bg', dot: 'bg-green' },
+  closed: { chip: 'bg-blue-bg text-slate-ink dark:bg-slate-bg', dot: 'bg-slate' },
 };
 
 const CHIP = 'inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[11.5px] font-semibold whitespace-nowrap';
@@ -65,9 +65,9 @@ export function PriorityChip({ priority, quiet = false, className }: { priority:
   if (quiet && (priority === 'normal' || priority === 'low')) return null;
   const tone =
     priority === 'urgent'
-      ? 'bg-[#DC2626] text-white dark:bg-[#E5484D]'
+      ? 'bg-red text-white'
       : priority === 'high'
-        ? 'bg-[#FFEDD5] text-[#C2410C] dark:bg-[#3B1D0A] dark:text-[#FDBA74]'
+        ? 'bg-orange-bg text-orange dark:text-orange-ink'
         : 'bg-subtle text-ink-3';
   return <span className={cx(CHIP, tone, className)}>{text(PRIORITY_LABEL[priority] ?? priority)}</span>;
 }
@@ -215,7 +215,7 @@ export function Reference({ children, className }: { children: ReactNode; classN
 
 /** AI content's mark: violet, and never sent without an agent's action (AC-17). */
 export function AiBadge({ className }: { className?: string }) {
-  return <span className={cx('inline-flex items-center rounded-[5px] bg-[#EDE9FE] px-1 text-[10px] font-bold text-[#6D28D9] dark:bg-[#2A1F4A] dark:text-[#C4B5FD]', className)}>AI</span>;
+  return <span className={cx('inline-flex items-center rounded-[5px] bg-violet-bg px-1 text-[10px] font-bold text-violet dark:text-violet-ink', className)}>AI</span>;
 }
 
 /**

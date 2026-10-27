@@ -3,8 +3,8 @@ import { useMemo, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { input } from '../garage/parts';
-import { PageHead } from '../hr/parts';
+import { input } from '../../components/FormKit';
+import { PageHead } from '../../components/PageKit';
 import AssignRoom from './Assign';
 import { day, errorText, K, pGetMeta, pPost, type ArrivalCard, type Stay } from './api';
 import { occupants, Refusal, usePms, VipPill } from './parts';
@@ -272,7 +272,7 @@ function Stays({ list, date, filter }: { list: 'departures' | 'inhouse'; date: s
                     {!s.posting_allowed ? <span className="ml-1.5 text-[11px] font-semibold text-warning">cash only</span> : null}
                   </td>
                   <td className="px-3 py-2 text-ink-2">
-                    {day(s.arrival_date)} → <b className={s.departure_date <= pms.businessDate ? 'text-[#ea580c]' : 'text-ink'}>{day(s.departure_date)}</b>
+                    {day(s.arrival_date)} → <b className={s.departure_date <= pms.businessDate ? 'text-red' : 'text-ink'}>{day(s.departure_date)}</b>
                     <span className="block text-[11.5px] text-ink-3">{occupants(s.adults, s.children)}</span>
                   </td>
                   <td className="px-3 py-2 text-[12px] text-ink-2">{s.key_status_label ?? '—'}</td>

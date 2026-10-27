@@ -8,11 +8,11 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../../components/PageKit';
 import { can, num, qty, stampWords, type Warehouse } from './api';
 import { DocChip } from './Adjustments';
 import { createTransfer, deleteTransfer, fetchTransfer, fetchTransfers, KC, PER, transferActions, transferAct, transferBody, type Pickable } from './control';
-import { minWidth } from './parts';
+import { minWidth } from '../../components/ListKit';
 import { BatchPick, pick, ProductPick, WarehousePick } from './pickers';
 
 /**
@@ -105,7 +105,7 @@ export default function Transfers({
                   type="button"
                   data-transfer={t.id}
                   onClick={() => onOpen(t.id)}
-                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === t.id && 'bg-[#F4F6FE] dark:bg-selection/40')}
+                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === t.id && 'bg-info-soft dark:bg-selection/40')}
                 >
                   <b className="min-w-0 flex-1 truncate text-ink">{t.reference}</b>
                   <span className="shrink-0 truncate text-ink-2" style={{ width: W.from }}>

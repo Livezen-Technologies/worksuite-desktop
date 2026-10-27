@@ -371,7 +371,7 @@ export function usePermission(): (perm: string) => boolean {
 
 export const PROJECT_STATUS: Record<ProjectStatus, { label: string; tone: string }> = {
   planning: { label: 'Planning', tone: 'bg-subtle text-ink-2' },
-  pending_approval: { label: 'Pending approval', tone: 'bg-[#EDE9FE] text-[#5B21B6] dark:bg-[#5B21B6]/25 dark:text-[#C4B5FD]' },
+  pending_approval: { label: 'Pending approval', tone: 'bg-violet-bg text-violet-ink dark:bg-violet/25' },
   active: { label: 'Active', tone: 'bg-selection text-primary' },
   on_hold: { label: 'On hold', tone: 'bg-warning-bg text-warning-ink' },
   completed: { label: 'Completed', tone: 'bg-success-bg text-success' },
@@ -397,7 +397,7 @@ export const ROLE: Record<string, { label: string; tone: string }> = {
   manager: { label: 'Manager', tone: 'bg-ink text-surface' },
   lead: { label: 'Lead', tone: 'bg-selection text-primary' },
   member: { label: 'Member', tone: 'bg-subtle text-ink-2' },
-  reviewer: { label: 'Reviewer', tone: 'bg-[#EDE9FE] text-[#5B21B6] dark:bg-[#5B21B6]/25 dark:text-[#C4B5FD]' },
+  reviewer: { label: 'Reviewer', tone: 'bg-violet-bg text-violet-ink dark:bg-violet/25' },
   observer: { label: 'Observer', tone: 'border border-line text-ink-2' },
 };
 

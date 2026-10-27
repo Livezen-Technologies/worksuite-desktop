@@ -6,6 +6,7 @@ import { Select } from '../../components/Select';
 import { shortDate } from '../finance/api';
 import { fetchGroups, KIND_LABEL, PILLS, STATUS_LABEL, type RunList } from './api';
 import { Badge, Card, Kbd, Pills, Table, amt, td, tdr, useReadOnly } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Payroll runs (D02): status pills, a pay-group filter, and the list. ↑↓ move, ↵ opens, ⌘↵ opens in a new window,
@@ -78,13 +79,13 @@ export default function Runs({ figures, active, onOpen, onNew }: { figures: bool
         <div ref={body} tabIndex={0} role="grid" aria-label="Payroll runs" aria-activedescendant={items[at] ? `run-${items[at]!.id}` : undefined} onKeyDown={onKey} className="outline-none">
           <Table head={['Run', 'Pay group', 'Period', 'Type', ['Staff', 'r'], ['Net', 'r'], 'Status', 'Updated']}>
             {items.map((r, i) => (
-              <tr
+              <tr tabIndex={0} onKeyDown={clickOnKey}
                 key={r.id}
                 id={`run-${r.id}`}
                 aria-selected={i === at}
                 onClick={() => setAt({ key: fkey, i })}
                 onDoubleClick={() => onOpen(r.id, 'tab')}
-                className={cx('cursor-default', i === at ? 'bg-[#EEF1FD] shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : r.status === 'submitted' ? 'bg-[#FFFCF3] dark:bg-warning-bg/30' : 'hover:bg-subtle')}
+                className={cx('cursor-default', i === at ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)] dark:bg-selection' : r.status === 'submitted' ? 'bg-rail dark:bg-warning-bg/30' : 'hover:bg-subtle')}
               >
                 <td className={td}>
                   <button type="button" className="font-mono text-[11px] text-primary hover:underline" onClick={() => onOpen(r.id, 'here', r.status === 'submitted')}>

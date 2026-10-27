@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Select } from '../../components/Select';
 import { ErrorNote, IconButton, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { errorText, gGet, gPost, K, nice, type BoardColumn } from './api';
 import { JobCardView, useGarage } from './parts';
 import { Checkbox } from '../../components/Checkbox';
@@ -86,7 +86,7 @@ export default function Board() {
                 e.preventDefault();
                 void drop(col.key);
               }}
-              className={cx('flex w-[252px] shrink-0 flex-col overflow-hidden rounded-[12px] border', over === col.key ? 'border-primary bg-selection' : 'border-line bg-[#F6F7FA] dark:bg-surface')}
+              className={cx('flex w-[252px] shrink-0 flex-col overflow-hidden rounded-[12px] border', over === col.key ? 'border-primary bg-selection' : 'border-line bg-ground dark:bg-surface')}
             >
               <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
                 <b className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{col.label}</b>

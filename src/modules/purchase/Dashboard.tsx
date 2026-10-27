@@ -1,11 +1,12 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnPrimary, Kpi, Panel } from '../hr/parts';
+import { btnPrimary, Kpi, Panel } from '../../components/PageKit';
 import { short, whole } from '../inventory/api';
-import { Line, ListPanel } from '../inventory/parts';
+import { Line, ListPanel } from '../../components/ListKit';
 import type { PurchaseDashboard, QueueItem } from './api';
 import { Head } from './parts';
 import type { PurView } from './Rail';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The Purchasing dashboard (S-01; the "Purchasing dashboard" design): what we have committed, what has arrived and
@@ -50,7 +51,7 @@ export default function Dashboard({
   return (
     <div className="flex flex-col gap-4 px-6 py-5">
       {notBilled > 0 ? (
-        <button type="button" onClick={() => onGo('bill')} className="rounded-[10px] border border-[#F3D9A4] bg-[#FFF8EA] px-3.5 py-2 text-left text-[12.5px] text-[#7A3E05] hover:underline dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+        <button type="button" onClick={() => onGo('bill')} className="rounded-[10px] border border-warning-line bg-warning-bg px-3.5 py-2 text-left text-[12.5px] text-warning-strong hover:underline dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           {notBilled} {notBilled === 1 ? 'order has' : 'orders have'} goods received that nobody has billed. Until the bill is entered, the cost is on the shelf but not in the ledger — enter it.
         </button>
       ) : null}
@@ -61,13 +62,13 @@ export default function Dashboard({
           </button>
         ) : null}
       </Head>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Kpi label="Awaiting approval" value={d.awaiting.approval} sub={queue ? `${mine} waiting on you` : undefined} tone={mine ? 'amber' : undefined} onClick={() => onGo(mine ? 'appr' : 'po', mine ? '' : '&st=pending')} />
-        <Kpi label="Awaiting delivery" value={d.awaiting.receipt} sub={d.open_value !== null ? `${short(d.open_value, cur)} on order` : undefined} onClick={() => onGo('rcv')} />
-        <Kpi label="Deliveries already late" value={late.length} sub={late.length ? `oldest ${Math.max(...late.map((x) => x.days_late))} days` : 'none'} tone={late.length ? 'red' : undefined} onClick={() => onGo('po')} />
-        <Kpi label="Received, not billed" value={notBilled} tone={notBilled ? 'amber' : undefined} onClick={() => onGo('bill')} />
-        <Kpi label="Owed to vendors" value={short(d.payables.total, cur)} sub={pastDue ? `${short(pastDue, cur)} past due` : 'nothing past due'} tone={pastDue ? 'red' : undefined} onClick={() => onGo('bill')} />
-      </div>
+      <StatGrid min={200}>
+        <Kpi icon="hourglass" label="Awaiting approval" value={d.awaiting.approval} sub={queue ? `${mine} waiting on you` : undefined} tone={mine ? 'amber' : undefined} onClick={() => onGo(mine ? 'appr' : 'po', mine ? '' : '&st=pending')} />
+        <Kpi icon="truck" tone="blue" label="Awaiting delivery" value={d.awaiting.receipt} sub={d.open_value !== null ? `${short(d.open_value, cur)} on order` : undefined} onClick={() => onGo('rcv')} />
+        <Kpi icon="clock" label="Deliveries already late" value={late.length} sub={late.length ? `oldest ${Math.max(...late.map((x) => x.days_late))} days` : 'none'} tone={late.length ? 'red' : undefined} onClick={() => onGo('po')} />
+        <Kpi icon="receipt" label="Received, not billed" value={notBilled} tone={notBilled ? 'amber' : undefined} onClick={() => onGo('bill')} />
+        <Kpi icon="wallet" label="Owed to vendors" value={short(d.payables.total, cur)} sub={pastDue ? `${short(pastDue, cur)} past due` : 'nothing past due'} tone={pastDue ? 'red' : undefined} onClick={() => onGo('bill')} />
+      </StatGrid>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title="Committed each month" sub={`Approved orders, by order date${cur ? ` · ${cur}` : ''}`} bodyClassName="flex items-end gap-3 px-4 py-3">
           {months.length ? (

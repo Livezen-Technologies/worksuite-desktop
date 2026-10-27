@@ -78,10 +78,10 @@ export function eventName(type: string): string {
 
 /** The chip colour for an event: approvals amber, decisions green or red, the rest plain. */
 export function eventTone(type: string): string {
-  if (type === 'approved') return 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success';
-  if (type === 'rejected' || type === 'deleted') return 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger';
-  if (type === 'approval_step' || type === 'submitted') return 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning';
-  if (type === 'status' || type === 'assigned') return 'bg-[#EEF1FC] text-[#23349E] dark:bg-selection dark:text-primary';
+  if (type === 'approved') return 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success';
+  if (type === 'rejected' || type === 'deleted') return 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger';
+  if (type === 'approval_step' || type === 'submitted') return 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning';
+  if (type === 'status' || type === 'assigned') return 'bg-selection text-primary dark:bg-selection dark:text-primary';
   return 'bg-subtle text-ink-2';
 }
 
@@ -260,9 +260,9 @@ export function couponRuns(c: Pick<Coupon, 'starts_at' | 'ends_at'>): string {
 export const couponUsed = (c: Pick<Coupon, 'redeemed_count' | 'usage_limit'>) => `${c.redeemed_count} / ${c.usage_limit > 0 ? c.usage_limit : '∞'}`;
 
 export const COUPON_STATE: Record<Coupon['state'], { label: string; chip: string }> = {
-  live: { label: 'Live', chip: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success' },
-  scheduled: { label: 'Scheduled', chip: 'bg-[#EEF1FC] text-[#23349E] dark:bg-selection dark:text-primary' },
-  expired: { label: 'Expired', chip: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger' },
+  live: { label: 'Live', chip: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success' },
+  scheduled: { label: 'Scheduled', chip: 'bg-selection text-primary dark:bg-selection dark:text-primary' },
+  expired: { label: 'Expired', chip: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger' },
   inactive: { label: 'Inactive', chip: 'bg-subtle text-ink-2' },
 };
 
@@ -442,10 +442,10 @@ export function channelTone(s: ChannelStatus | string): 'ok' | 'bad' | 'warn' | 
 }
 
 export const TONE_CHIP: Record<ReturnType<typeof channelTone>, string> = {
-  ok: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
-  bad: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  warn: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  busy: 'bg-[#EEF1FC] text-[#23349E] dark:bg-selection dark:text-primary',
+  ok: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
+  bad: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  warn: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  busy: 'bg-selection text-primary dark:bg-selection dark:text-primary',
   idle: 'bg-subtle text-ink-2',
 };
 

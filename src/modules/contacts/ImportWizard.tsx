@@ -165,7 +165,7 @@ export function ImportWizard({ onClose }: { onClose: () => void }) {
                 setOver(false);
                 choose(e.dataTransfer.files[0]);
               }}
-              className={cx('flex h-[120px] flex-col items-center justify-center gap-1 rounded-[12px] border-2 border-dashed', over ? 'border-primary bg-selection' : 'border-[#B8C2DA] bg-ground dark:border-line')}
+              className={cx('flex h-[120px] flex-col items-center justify-center gap-1 rounded-[12px] border-2 border-dashed', over ? 'border-primary bg-selection' : 'border-primary-soft bg-ground dark:border-line')}
             >
               <b className="text-ink">
                 {busy ? 'Reading the file…' : (

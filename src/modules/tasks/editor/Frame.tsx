@@ -62,7 +62,7 @@ export function TaskEditorFrame({
   }, [onClose]);
 
   return (
-    <div className="no-drag fixed inset-0 z-40 flex items-center justify-center bg-[#0B1020]/45 p-5" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="no-drag fixed inset-0 z-40 flex items-center justify-center bg-stage/45 p-5" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-label={label} className="flex h-full max-h-[860px] w-full flex-col overflow-hidden rounded-[14px] border border-line bg-surface text-[13px] shadow-2xl" style={{ maxWidth }}>
         <div className="flex shrink-0 items-center gap-2 border-b border-line px-5 py-3">
           {crumb}

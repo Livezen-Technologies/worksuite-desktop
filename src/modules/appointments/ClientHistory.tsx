@@ -5,6 +5,7 @@ import { Button, cx } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
 import { addNote, editNote, fetchClient, K, money, withdrawNote } from './api';
 import { Chips, errText, Head, input, Section, StatusPill, td, th, useDesk } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * D15 · Client history: the tallies, every appointment (with its invoice where the reader may see Billing), and the
@@ -75,7 +76,7 @@ export default function ClientHistory({ id, onBack }: { id: number; onBack: () =
             <thead><tr>{(tab === 'appointments' ? ['Date', 'Service', 'With', 'Location', 'Status'] : ['Date', 'Appointment', 'Invoice', 'Total', 'Status']).map((x) => <th key={x} className={th}>{x}</th>)}</tr></thead>
             <tbody>
               {h.timeline.filter((v) => tab === 'appointments' || v.invoice).map((v) => (
-                <tr key={v.id} className="cursor-pointer hover:bg-subtle" onClick={() => desk.open(v.id)}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={v.id} className="cursor-pointer hover:bg-subtle" onClick={() => desk.open(v.id)}>
                   <td className={cx(td, 'tabular-nums')}>{`${v.date ?? ''} ${v.time ?? ''}`}</td>
                   {tab === 'appointments' ? (
                     <>

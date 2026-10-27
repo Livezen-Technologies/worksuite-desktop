@@ -170,6 +170,8 @@ try {
   await send('Runtime.enable');
   await send('Page.enable');
 
+  // The page can be listed before the preload has exposed its bridge (as smoke.mjs, wait for it).
+  await waitFor('!!window.worksuite', 'the bridge');
   const supported = await evaluate(`window.worksuite.accounts.state().then(r => !(r && r.__wsError))`);
   if (!supported) {
     console.log('SKIP  this build answers accounts:state with UNSUPPORTED (no accounts main process yet).');

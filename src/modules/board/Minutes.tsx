@@ -88,7 +88,7 @@ export default function Minutes({ meetingId, onRoom }: { meetingId: number; onRo
         <nav aria-label="Agenda" className="flex flex-col border-r border-line bg-surface p-2">
           <ol className="flex-1 overflow-y-auto">
             {(agenda.data ?? []).map((i) => (
-              <li key={i.id}><button type="button" aria-current={i.id === itemId ? 'true' : undefined} onClick={() => setFollow(i.id === m.presenting?.agenda_item_id ? null : i.id)} className={cx('flex w-full gap-2 rounded-[7px] px-2 py-1.5 text-left text-[12.5px]', i.id === itemId ? 'bg-[#EEF1FD] font-bold text-primary dark:bg-selection' : 'text-ink-2 hover:bg-subtle')}><b className="w-[24px]">{i.number}</b>{i.title}</button></li>
+              <li key={i.id}><button type="button" aria-current={i.id === itemId ? 'true' : undefined} onClick={() => setFollow(i.id === m.presenting?.agenda_item_id ? null : i.id)} className={cx('flex w-full gap-2 rounded-[7px] px-2 py-1.5 text-left text-[12.5px]', i.id === itemId ? 'bg-selection font-bold text-primary dark:bg-selection' : 'text-ink-2 hover:bg-subtle')}><b className="w-[24px]">{i.number}</b>{i.title}</button></li>
             ))}
           </ol>
           <Muted>Minutes follow the item the chair presents.</Muted>

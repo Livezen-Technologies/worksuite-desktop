@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Button, ErrorNote, Spinner } from '../../components/ui';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { gGet, K, nice, type Overview as Data } from './api';
 import { JobCardView, Section, Tile, useGarage } from './parts';
+import { StatGrid, type StatTone } from '../../components/StatCard';
 
 /** Today at a glance (FR-DSH-01..03): jobs by stage — each a way into its list — what is late, and the bays. */
 export default function Overview() {
@@ -12,10 +13,8 @@ export default function Overview() {
   if (q.error || !q.data) return <div className="p-6"><ErrorNote error={q.error ?? new Error('The overview could not be loaded.')} onRetry={() => void q.refetch()} /></div>;
   const d = q.data;
   const c = d.counts;
-  const tile = (label: string, value: number | undefined, list?: string) => (
-    <button key={label} type="button" disabled={!list} onClick={() => list && g.go('jobs', { list })} className="text-left disabled:cursor-default">
-      <Tile label={label} value={String(value ?? 0)} />
-    </button>
+  const tile = (label: string, value: number | undefined, list: string | undefined, icon: string, tone: StatTone) => (
+    <Tile key={label} label={label} value={String(value ?? 0)} icon={icon} tone={tone} onClick={list ? () => g.go('jobs', { list }) : undefined} />
   );
 
   return (
@@ -27,17 +26,17 @@ export default function Overview() {
           </Button>
         ) : null}
       </PageHead>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        {tile('Open jobs', c.open, 'open')}
-        {tile('Checked in today', d.checked_in_today)}
-        {tile('Awaiting approval', c.approval, 'approval')}
-        {tile('Waiting for parts', c.parts, 'parts')}
-        {tile('In progress', c.progress, 'progress')}
-        {tile('Ready for delivery', c.ready, 'ready')}
-        {tile('Overdue', c.overdue, 'overdue')}
-        {tile('Delivered today', d.delivered_today)}
-        {tile('Bays available', d.bays.AVAILABLE)}
-      </div>
+      <StatGrid min={190}>
+        {tile('Open jobs', c.open, 'open', 'wrench', 'blue')}
+        {tile('Checked in today', d.checked_in_today, undefined, 'log-in', 'violet')}
+        {tile('Awaiting approval', c.approval, 'approval', 'hourglass', 'amber')}
+        {tile('Waiting for parts', c.parts, 'parts', 'package', 'amber')}
+        {tile('In progress', c.progress, 'progress', 'hammer', 'cyan')}
+        {tile('Ready for delivery', c.ready, 'ready', 'car', 'green')}
+        {tile('Overdue', c.overdue, 'overdue', 'alert', c.overdue ? 'red' : 'neutral')}
+        {tile('Delivered today', d.delivered_today, undefined, 'check-circle', 'green')}
+        {tile('Bays available', d.bays.AVAILABLE, undefined, 'warehouse', 'neutral')}
+      </StatGrid>
       <div className="grid gap-4 lg:grid-cols-3">
         <Section title="Overdue" className="lg:col-span-2">
           {d.overdue.length === 0 ? (

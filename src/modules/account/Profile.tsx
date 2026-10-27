@@ -10,10 +10,10 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { useMe, UserPicture } from '../../components/UserPicture';
 import { attendanceTime, useAttendance, useNow } from '../hr/attendance';
 import type { Profile as HrProfile } from '../hr/api';
-import { btnPrimary } from '../hr/parts';
+import { btnPrimary } from '../../components/PageKit';
 import type { OpenEditor } from './AccountPage';
 import { useHasApp, useMfa, usePasskeys, usePictures, useProfile, useSessions, useSignIns, type Section } from './api';
-import { Card, daysAgo, KeyValues, Pill, weekdays } from './parts';
+import { Card, daysAgo, KeyValues, Pill, weekdays } from '../../components/CardKit';
 
 /**
  * My profile (AcctProfile): who I am to everybody else — my picture and
@@ -80,7 +80,7 @@ export default function Profile({ onPick, onEdit }: { onPick: (s: Section) => vo
   return (
     <div className="flex max-w-[1180px] flex-col gap-4">
       <section aria-label="Profile header" className="overflow-hidden rounded-[16px] border border-line bg-surface shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/.04)]">
-        <div className="relative h-[104px] bg-[linear-gradient(120deg,#1B2A85_0%,#23349E_45%,#3B5BDB_100%)]">
+        <div className="relative h-[104px] bg-[linear-gradient(120deg,var(--ws-navy-2)_0%,var(--ws-stage-primary)_45%,var(--ws-brand)_100%)]">
           <svg aria-hidden className="absolute inset-0 h-full w-full opacity-[.14]" preserveAspectRatio="none" viewBox="0 0 400 104">
             <circle cx="340" cy="-10" r="90" fill="#fff" />
             <circle cx="60" cy="130" r="70" fill="#fff" />
@@ -95,6 +95,7 @@ export default function Profile({ onPick, onEdit }: { onPick: (s: Section) => vo
           </div>
           <div className="min-w-0 flex-1 pt-[58px]">
             <h1 className="m-0 truncate text-[24px] font-bold tracking-[-0.3px] text-ink">{me?.name ?? p.name}</h1>
+            {p.preferred_name && p.preferred_name !== (me?.name ?? p.name) ? <div className="mt-0.5 truncate text-[13.5px] text-ink-2">{`Goes by ${p.preferred_name}`}</div> : null}
             {job ? <div className="mt-0.5 truncate text-[13.5px] text-ink-2">{job}</div> : null}
             <div className="mt-2.5 flex flex-wrap gap-2">
               {hasHr && today?.check_in ? (
@@ -175,7 +176,7 @@ export default function Profile({ onPick, onEdit }: { onPick: (s: Section) => vo
             <div className="flex flex-col">
               {steps.map((s) => (
                 <div key={s.label} className="flex min-h-[34px] items-center gap-2.5 border-t border-line/70 py-1.5 text-[13px]">
-                  <span className={cx('flex h-5 w-5 shrink-0 items-center justify-center rounded-full', s.done ? 'bg-[#22A861] text-white' : 'border-[1.5px] border-dashed border-ink-3/60')}>{s.done ? <Icon name="check" size={12} strokeWidth={3} /> : null}</span>
+                  <span className={cx('flex h-5 w-5 shrink-0 items-center justify-center rounded-full', s.done ? 'bg-green text-white' : 'border-[1.5px] border-dashed border-ink-3/60')}>{s.done ? <Icon name="check" size={12} strokeWidth={3} /> : null}</span>
                   <span className={cx('min-w-0 flex-1', s.done ? 'text-ink-3 line-through' : 'font-semibold text-ink')}>{s.label}</span>
                   {!s.done && s.act ? <Link onClick={s.act.run}>{s.act.label}</Link> : null}
                 </div>

@@ -84,7 +84,7 @@ export default function NewAppointment({ prefill, onClose, onBooked }: { prefill
             {step(2, 'Service')}
             <div className="flex max-h-[180px] flex-col gap-1 overflow-y-auto scroll-thin">
               {services.map((s) => (
-                <button key={s.id} type="button" aria-pressed={service === s.id} onClick={() => (setService(s.id), setSlot(null))} className={cx('flex items-center gap-2 rounded-[8px] border px-2.5 py-1.5 text-left text-[13px]', service === s.id ? 'border-primary bg-[#EEF1FD] font-bold dark:bg-selection' : 'border-line hover:bg-subtle')}>
+                <button key={s.id} type="button" aria-pressed={service === s.id} onClick={() => (setService(s.id), setSlot(null))} className={cx('flex items-center gap-2 rounded-[8px] border px-2.5 py-1.5 text-left text-[13px]', service === s.id ? 'border-primary bg-selection font-bold dark:bg-selection' : 'border-line hover:bg-subtle')}>
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color ?? '#9AA1B5' }} />
                   <span className="flex-1 truncate">{s.name}</span>
                   <span className="text-[11.5px] text-ink-3">{`${s.duration_min} min`}</span>
@@ -105,7 +105,7 @@ export default function NewAppointment({ prefill, onClose, onBooked }: { prefill
             {step(4, `Time · ${loc?.name ?? ''}`)}
             <div className="mb-2 flex gap-1 overflow-x-auto scroll-thin">
               {Array.from({ length: 7 }, (_, i) => addDays(today(loc?.timezone), i)).map((d) => (
-                <button key={d} type="button" aria-pressed={d === date} onClick={() => (setDate(d), setSlot(null))} className={cx('min-w-[52px] rounded-[8px] border px-1.5 py-1 text-center text-[11px]', d === date ? 'border-primary bg-[#EEF1FD] font-bold text-[#23349E] dark:bg-selection dark:text-primary' : 'border-line text-ink-2')}>
+                <button key={d} type="button" aria-pressed={d === date} onClick={() => (setDate(d), setSlot(null))} className={cx('min-w-[52px] rounded-[8px] border px-1.5 py-1 text-center text-[11px]', d === date ? 'border-primary bg-selection font-bold text-primary dark:bg-selection dark:text-primary' : 'border-line text-ink-2')}>
                   {dayLabel(d, { weekday: 'short' })}<br /><b className="text-[13px]">{Number(d.slice(8))}</b>
                 </button>
               ))}
@@ -116,7 +116,7 @@ export default function NewAppointment({ prefill, onClose, onBooked }: { prefill
                 {times.map((s) => {
                   const on = slot?.starts_at === s.starts_at && slot.provider === s.provider;
                   return (
-                    <button key={`${s.provider}-${s.starts_at}`} type="button" aria-pressed={on} title={provider === 'any' ? undefined : s.name} onClick={() => setSlot(s)} className={cx('h-8 rounded-[8px] border text-[12px] tabular-nums', on ? 'border-primary bg-[#23349E] font-bold text-white dark:bg-primary' : wanted === s.label ? 'border-primary text-primary' : 'border-line text-ink hover:bg-subtle')}>
+                    <button key={`${s.provider}-${s.starts_at}`} type="button" aria-pressed={on} title={provider === 'any' ? undefined : s.name} onClick={() => setSlot(s)} className={cx('h-8 rounded-[8px] border text-[12px] tabular-nums', on ? 'border-primary bg-stage-primary font-bold text-white dark:bg-primary' : wanted === s.label ? 'border-primary text-primary' : 'border-line text-ink hover:bg-subtle')}>
                       {s.label}
                     </button>
                   );
@@ -127,7 +127,7 @@ export default function NewAppointment({ prefill, onClose, onBooked }: { prefill
           </div>
           <label><span className={label}>Note for the client</span><input className={input} value={notes} maxLength={500} onChange={(e) => setNotes(e.target.value)} /></label>
           <label><span className={label}>Internal note</span><input className={input} value={internal} maxLength={500} onChange={(e) => setInternal(e.target.value)} /></label>
-          {svc?.deposit ? <p className="m-0 rounded-[8px] bg-[#FDF1E3] px-3 py-2 text-[12px] text-[#9A4A06] dark:bg-warning/15 dark:text-warning">{`Deposit ${money(svc.deposit.due as number | undefined, svc.deposit.currency ?? null)} asked → starts as Pending until it is paid.`}</p> : null}
+          {svc?.deposit ? <p className="m-0 rounded-[8px] bg-warning-bg px-3 py-2 text-[12px] text-warning-ink dark:bg-warning/15 dark:text-warning">{`Deposit ${money(svc.deposit.due as number | undefined, svc.deposit.currency ?? null)} asked → starts as Pending until it is paid.`}</p> : null}
           <Refused>{err}</Refused>
         </div>
         <button type="submit" hidden />

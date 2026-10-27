@@ -57,13 +57,13 @@ export function SalesRail({ view, status, onPick, onNew, counts, org, orgs, onOr
         title={label}
         aria-current={on ? 'page' : undefined}
         onClick={() => onPick(id, opts.status ?? null)}
-        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
       >
         <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
         <Icon name={icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {badge ? (
-          <span className={cx('flex h-[18px] min-w-5 shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold tabular-nums', opts.tone === 'amber' ? 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' : on ? 'bg-surface text-primary' : 'bg-selection text-primary')}>{badge}</span>
+          <span className={cx('flex h-[18px] min-w-5 shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold tabular-nums', opts.tone === 'amber' ? 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning' : on ? 'bg-surface text-primary' : 'bg-selection text-primary')}>{badge}</span>
         ) : null}
       </button>
     );
@@ -77,7 +77,7 @@ export function SalesRail({ view, status, onPick, onNew, counts, org, orgs, onOr
         type="button"
         aria-current={on ? 'page' : undefined}
         onClick={() => onPick('orders', s)}
-        className={cx('flex h-[24px] shrink-0 items-center gap-[7px] rounded-[7px] pr-2 pl-[26px] text-left text-[12px]', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : dim ? 'text-ink-3 hover:bg-subtle' : 'text-ink hover:bg-subtle')}
+        className={cx('flex h-[24px] shrink-0 items-center gap-[7px] rounded-[7px] pr-2 pl-[26px] text-left text-[12px]', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : dim ? 'text-ink-3 hover:bg-subtle' : 'text-ink hover:bg-subtle')}
       >
         <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: statusOf(s).dot }} />
         <span className="min-w-0 flex-1 truncate">{statusOf(s).label}</span>
@@ -95,7 +95,7 @@ export function SalesRail({ view, status, onPick, onNew, counts, org, orgs, onOr
   const head = (label: string) => <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>;
 
   return (
-    <nav aria-label="Orders" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="Orders" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         {canCreate ? (
           <PrimaryActionButton data-guide="sales.new-order" label="New order" onClick={onNew} />

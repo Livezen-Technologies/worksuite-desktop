@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../../components/PageKit';
 import { qty, type Warehouse } from '../inventory/api';
 import { pick, ProductPick, WarehousePick } from '../inventory/pickers';
 import { createRequest, OFFLINE_WRITE, refreshPurchase, rfqFromRequest, usePurchaseCan, usePurchaseOffline } from './api';
@@ -158,7 +158,7 @@ function RequestCard({
               {l.name} <span className="text-ink-3">{l.code}</span>
             </span>
             <b className="w-[80px] text-right text-ink tabular-nums">{qty(l.quantity, l.unit)}</b>
-            <span className="w-[160px] truncate text-ink-2">{l.vendor ?? <span className="text-[#9A4A06] dark:text-warning">no vendor set</span>}</span>
+            <span className="w-[160px] truncate text-ink-2">{l.vendor ?? <span className="text-warning-ink dark:text-warning">no vendor set</span>}</span>
             <span className="w-[200px] truncate text-ink-3">{l.note ?? ''}</span>
           </span>
         ))}

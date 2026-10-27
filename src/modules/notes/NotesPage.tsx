@@ -117,8 +117,8 @@ export default function NotesPage(_props: ModuleProps) {
             <button key={c.id} type="button" role="listitem" aria-current={c.id === opened ? 'true' : undefined} onClick={() => open(c.id)} className={cx('flex w-full flex-col gap-[3px] border-b border-line/60 px-3.5 py-2.5 text-left', c.id === opened ? 'bg-selection' : 'hover:bg-subtle')}>
               <span className="flex items-center gap-1.5">
                 <b className="min-w-0 flex-1 truncate text-ink">{c.title}</b>
-                {c.is_favorite ? <span className="text-[#B45309]" aria-label="Favorite">★</span> : null}
-                {c.is_pinned ? <span className="text-[10.5px] font-bold text-[#9A4A06] dark:text-warning">Pinned</span> : null}
+                {c.is_favorite ? <span className="text-warning" aria-label="Favorite">★</span> : null}
+                {c.is_pinned ? <span className="text-[10.5px] font-bold text-warning-ink dark:text-warning">Pinned</span> : null}
               </span>
               <span className="line-clamp-2 text-[12px] leading-[1.4] text-ink-3">{c.excerpt || 'No additional text'}</span>
               <span className="flex gap-1.5 text-[11px] text-ink-3">

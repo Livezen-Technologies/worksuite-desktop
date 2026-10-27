@@ -4,7 +4,7 @@ import { call, isMac } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
 import { cx, initials } from '../../components/ui';
 import { formatClock } from '../chat/parts';
-import { RoundButton, VideoView, Wave } from './parts';
+import { RoundButton, VideoView, Wave } from '../../components/CallKit';
 import { session } from './session';
 
 /**
@@ -80,21 +80,21 @@ export function VoiceWindow({
 
   if (compact) {
     return (
-      <div role="dialog" aria-label="Call in progress" className="drag flex h-full items-center gap-2.5 bg-[#0F1B3D] pr-2.5 pl-3 text-white" style={{ paddingRight: isMac ? 10 : 140 }}>
-        <span className={cx('flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-[#E3F4F5] text-[13px] font-bold text-[#0B6770]', connected && 'shadow-[0_0_0_2px_#3DD68C]')}>{initials(name)}</span>
+      <div role="dialog" aria-label="Call in progress" className="drag flex h-full items-center gap-2.5 bg-navy pr-2.5 pl-3 text-white" style={{ paddingRight: isMac ? 10 : 140 }}>
+        <span className={cx('flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-teal-bg text-[13px] font-bold text-teal-ink', connected && 'shadow-[0_0_0_2px_var(--ws-stage-green-bright)]')}>{initials(name)}</span>
         <button type="button" onClick={() => shrink(false)} title="Open the call window" className="no-drag flex min-w-0 flex-1 flex-col text-left">
           <b className="truncate text-[13px]">{name}</b>
-          <span className={cx('truncate text-[11.5px] tabular-nums', steady ? 'text-[#9EE6C3]' : 'text-[#C9D3EE]')}>
+          <span className={cx('truncate text-[11.5px] tabular-nums', steady ? 'text-stage-success' : 'text-navy-ink')}>
             {steady ? `${clock ?? '0:00'}${muted ? ' · muted' : ''}` : status[0]}
           </span>
         </button>
-        <button type="button" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => void s.toggleMic()} className={cx('no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-full', muted ? 'bg-white text-[#0F1B3D]' : 'bg-white/12 text-white')}>
+        <button type="button" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => void s.toggleMic()} className={cx('no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-full', muted ? 'bg-white text-stage-on-light' : 'bg-white/12 text-white')}>
           <Icon name={muted ? 'mic-off' : 'mic'} size={17} />
         </button>
         <button type="button" aria-label="Open call window" onClick={() => shrink(false)} className="no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/12 text-white">
           <Icon name="maximize" size={16} />
         </button>
-        <button type="button" aria-label="Hang up" onClick={() => void s.hangUp()} className="no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E5484D] text-white">
+        <button type="button" aria-label="Hang up" onClick={() => void s.hangUp()} className="no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-stage-red text-white">
           <Icon name="phone-off" size={17} />
         </button>
       </div>
@@ -103,7 +103,7 @@ export function VoiceWindow({
 
   const bar = (
     <div className="drag flex h-11 shrink-0 items-center gap-2 pr-2.5" style={{ paddingLeft: isMac ? 78 : 14, paddingRight: isMac ? 10 : 140 }}>
-      <span className="flex min-w-0 flex-1 items-center justify-center gap-1.5 text-[12.5px] font-semibold text-[#C9D3EE]">
+      <span className="flex min-w-0 flex-1 items-center justify-center gap-1.5 text-[12.5px] font-semibold text-navy-ink">
         <Icon name="lock" size={12} />
         <span className="truncate">{title}</span>
       </span>
@@ -113,12 +113,12 @@ export function VoiceWindow({
         aria-pressed={pinned}
         title="Keep on top"
         onClick={() => void call('windows:setAlwaysOnTop', { value: !pinned }).then(setPinned)}
-        className={cx('no-drag flex h-[30px] w-[30px] items-center justify-center rounded-[8px]', pinned ? 'bg-white/16 text-white' : 'text-[#8FA0CC] hover:text-white')}
+        className={cx('no-drag flex h-[30px] w-[30px] items-center justify-center rounded-[8px]', pinned ? 'bg-white/16 text-white' : 'text-stage-ink-3 hover:text-white')}
       >
         <Icon name="pin" size={14} />
       </button>
       {s.phase !== 'ended' ? (
-        <button type="button" aria-label="Minimise" title="Shrink to a bar that stays on top" onClick={() => shrink(true)} className="no-drag flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[#C9D3EE] hover:text-white">
+        <button type="button" aria-label="Minimise" title="Shrink to a bar that stays on top" onClick={() => shrink(true)} className="no-drag flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-navy-ink hover:text-white">
           <Icon name="minimize" size={14} />
         </button>
       ) : null}
@@ -127,7 +127,7 @@ export function VoiceWindow({
         aria-label={maximized ? 'Restore the window' : 'Maximise the window'}
         title={maximized ? 'Restore' : 'Maximise'}
         onClick={() => void call('windows:toggleMaximize').then(setMaximized, () => undefined)}
-        className="no-drag flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[#C9D3EE] hover:text-white"
+        className="no-drag flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-navy-ink hover:text-white"
       >
         <Icon name={maximized ? 'app-window' : 'maximize'} size={14} />
       </button>
@@ -139,9 +139,9 @@ export function VoiceWindow({
       <div role="dialog" aria-label="Call ended" className="flex h-full flex-col text-white" style={{ background: GRADIENT }} onMouseMove={() => s.stay()}>
         {bar}
         <div className="flex flex-1 flex-col items-center justify-center gap-2.5 pb-10">
-          <span className="flex h-[110px] w-[110px] items-center justify-center rounded-full bg-[rgba(227,244,245,.5)] text-[36px] font-bold text-[#0B6770]">{initials(name)}</span>
+          <span className="flex h-[110px] w-[110px] items-center justify-center rounded-full bg-[rgba(227,244,245,.5)] text-[36px] font-bold text-stage-ink-4">{initials(name)}</span>
           <b className="text-[20px]">Call ended</b>
-          <span className="text-[13px] text-[#AFC0E8]">
+          <span className="text-[13px] text-stage-accent">
             {name}
             {s.endedAfter ? ` · ${formatClock(s.endedAfter / 1000)}` : ''}
           </span>
@@ -162,37 +162,37 @@ export function VoiceWindow({
       {bar}
       <div className="flex min-h-0 flex-1 flex-col items-center gap-2.5 overflow-y-auto px-[18px] pt-[34px] pb-3 scroll-thin">
         {remoteVideo ? (
-          <VideoView track={remoteVideo} className="aspect-video w-full rounded-[12px] bg-[#24365F] object-contain" />
+          <VideoView track={remoteVideo} className="aspect-video w-full rounded-[12px] bg-navy-3 object-contain" />
         ) : (
-          <span className="relative flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded-full bg-[#E3F4F5] text-[38px] font-bold text-[#0B6770] transition-shadow" style={{ boxShadow: glow }} aria-hidden>
+          <span className="relative flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded-full bg-teal-bg text-[38px] font-bold text-teal-ink transition-shadow" style={{ boxShadow: glow }} aria-hidden>
             {initials(name)}
             {muted ? (
-              <span className="absolute right-1 bottom-1 flex h-[30px] w-[30px] items-center justify-center rounded-full border-2 border-[#13224A] bg-[#0F1B3D] text-[#FFD9A8]">
+              <span className="absolute right-1 bottom-1 flex h-[30px] w-[30px] items-center justify-center rounded-full border-2 border-navy-2 bg-navy text-stage-warning">
                 <Icon name="mic-off" size={14} />
               </span>
             ) : null}
           </span>
         )}
         <b className="mt-3.5 max-w-full truncate text-center text-[22px] tracking-[-0.2px]">{name}</b>
-        {where && !connected ? <span className="text-[12.5px] text-[#AFC0E8]">{where}</span> : null}
-        <span role="status" className={cx('flex items-center gap-1.5 text-[13.5px] font-semibold tabular-nums', steady ? 'text-[#9EE6C3]' : outgoing ? 'text-[#C9D3EE]' : status[1])}>
-          {steady ? <span className="h-[7px] w-[7px] rounded-full bg-[#3DD68C]" /> : null}
+        {where && !connected ? <span className="text-[12.5px] text-stage-accent">{where}</span> : null}
+        <span role="status" className={cx('flex items-center gap-1.5 text-[13.5px] font-semibold tabular-nums', steady ? 'text-stage-success' : outgoing ? 'text-navy-ink' : status[1])}>
+          {steady ? <span className="h-[7px] w-[7px] rounded-full bg-stage-green-bright" /> : null}
           {status[0]}
         </span>
-        {remotes.length > 1 ? <span className="text-[12px] text-[#AFC0E8]">{remotes.length + 1} in the call</span> : null}
+        {remotes.length > 1 ? <span className="text-[12px] text-stage-accent">{remotes.length + 1} in the call</span> : null}
         {connected ? <Wave live={speaking} muted={muted} /> : null}
         {connected && muted ? (
-          <span className="flex items-center gap-1.5 rounded-[12px] bg-white/10 px-2.5 py-1 text-[11.5px] text-[#FFD9A8]">
+          <span className="flex items-center gap-1.5 rounded-[12px] bg-white/10 px-2.5 py-1 text-[11.5px] text-stage-warning">
             <Icon name="mic-off" size={13} />
             You are muted
           </span>
         ) : null}
-        {connected && s.noise ? <span className="rounded-[12px] bg-[rgba(61,214,140,.14)] px-2.5 py-1 text-[11.5px] text-[#9EE6C3]">Noise suppression on</span> : null}
+        {connected && s.noise ? <span className="rounded-[12px] bg-[rgba(61,214,140,.14)] px-2.5 py-1 text-[11.5px] text-stage-success">Noise suppression on</span> : null}
         {ringing ? (
-          <label className="mt-3.5 flex w-[250px] items-center gap-2 text-[11.5px] text-[#AFC0E8]">
+          <label className="mt-3.5 flex w-[250px] items-center gap-2 text-[11.5px] text-stage-accent">
             <Icon name={ringback.muted ? 'volume-off' : 'volume'} size={14} />
-            <input type="range" min={0} max={1} step={0.05} value={ringback.volume} aria-label="Ringtone" disabled={ringback.muted} onChange={(e) => ringback.setVolume(Number(e.target.value))} className="no-drag min-w-0 flex-1 accent-[#7FA2FF]" />
-            <button type="button" onClick={ringback.toggle} className="no-drag font-semibold whitespace-nowrap text-[#C9D3EE] hover:text-white">
+            <input type="range" min={0} max={1} step={0.05} value={ringback.volume} aria-label="Ringtone" disabled={ringback.muted} onChange={(e) => ringback.setVolume(Number(e.target.value))} className="no-drag min-w-0 flex-1 accent-stage-ink-3" />
+            <button type="button" onClick={ringback.toggle} className="no-drag font-semibold whitespace-nowrap text-navy-ink hover:text-white">
               {ringback.muted ? 'Ringtone on' : 'Mute the ringtone'}
             </button>
           </label>
@@ -262,19 +262,19 @@ function AudioMenu({ onClose }: { onClose: () => void }) {
   const item = 'no-drag flex h-8 w-full items-center gap-2 rounded-[8px] px-2.5 text-left text-[12.5px] text-white hover:bg-white/10';
   const pick = (id: string) => void s.setSpeaker(id);
   return (
-    <div ref={ref} role="menu" aria-label="Audio" className="absolute bottom-[calc(100%+6px)] left-1/2 z-20 w-60 -translate-x-1/2 rounded-[12px] bg-[#13224A] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,.45)]">
-      <div className="px-2.5 pt-1 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-[#8FA0CC] uppercase">Speaker</div>
+    <div ref={ref} role="menu" aria-label="Audio" className="absolute bottom-[calc(100%+6px)] left-1/2 z-20 w-60 -translate-x-1/2 rounded-[12px] bg-navy-2 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,.45)]">
+      <div className="px-2.5 pt-1 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-stage-ink-3 uppercase">Speaker</div>
       {[{ deviceId: '', label: 'System default' }, ...s.speakers.map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Speaker ${i + 1}` }))].map((d) => (
         <button key={d.deviceId || 'default'} type="button" role="menuitemradio" aria-checked={s.speakerId === d.deviceId} onClick={() => pick(d.deviceId)} className={item}>
-          <Icon name={s.speakerId === d.deviceId ? 'check' : 'volume'} size={14} className={s.speakerId === d.deviceId ? 'text-[#9EE6C3]' : 'text-[#8FA0CC]'} />
+          <Icon name={s.speakerId === d.deviceId ? 'check' : 'volume'} size={14} className={s.speakerId === d.deviceId ? 'text-stage-success' : 'text-stage-ink-3'} />
           <span className="truncate">{d.label}</span>
         </button>
       ))}
       <div className="my-1 h-px bg-white/10" />
       <button type="button" role="menuitemcheckbox" aria-checked={s.noise} onClick={() => void s.toggleNoise()} className={item}>
-        <Icon name="audio-lines" size={14} className={s.noise ? 'text-[#9EE6C3]' : 'text-[#8FA0CC]'} />
+        <Icon name="audio-lines" size={14} className={s.noise ? 'text-stage-success' : 'text-stage-ink-3'} />
         <span className="flex-1">Noise suppression</span>
-        <span className="text-[11px] text-[#AFC0E8]">{s.noise ? 'On' : 'Off'}</span>
+        <span className="text-[11px] text-stage-accent">{s.noise ? 'On' : 'Off'}</span>
       </button>
     </div>
   );

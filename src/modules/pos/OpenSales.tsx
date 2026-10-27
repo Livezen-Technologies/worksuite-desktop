@@ -70,7 +70,7 @@ export function OpenSalesDialog({ totalOf, onClose, server, nameOf }: { totalOf:
             <div key={x.id} className={cx('flex min-h-[250px] flex-col gap-2.5 rounded-[18px] p-4', on ? ON : OFF)}>
               <div className="flex items-center gap-2.5">
                 <span className={cx('flex h-[30px] w-[30px] items-center justify-center rounded-[9px] text-[14px] font-extrabold', on ? 'bg-primary text-white' : 'bg-pos-line text-ink-2')}>{i + 1}</span>
-                <span className={cx('rounded-full px-2.5 py-[3px] text-[11px] font-extrabold', on ? 'bg-[#DBEAFE] text-[#1E40AF]' : 'bg-pos-key text-ink-2')}>{on ? t('pos.open.now') : t('pos.open.open')}</span>
+                <span className={cx('rounded-full px-2.5 py-[3px] text-[11px] font-extrabold', on ? 'bg-blue-bg text-blue-ink' : 'bg-pos-key text-ink-2')}>{on ? t('pos.open.now') : t('pos.open.open')}</span>
               </div>
               <div>
                 <div className="truncate text-[16px] font-extrabold">{who(x.cart, t('pos.walkIn'))}</div>
@@ -81,7 +81,7 @@ export function OpenSalesDialog({ totalOf, onClose, server, nameOf }: { totalOf:
               <div className="mt-auto flex gap-1.5">
                 <PosButton
                   tone={on ? 'quiet' : 'primary'}
-                  className={cx('h-touch flex-1 text-[13px] font-extrabold', on && 'bg-pos-panel text-primary shadow-[inset_0_0_0_1px_#c7cde6]')}
+                  className={cx('h-touch flex-1 text-[13px] font-extrabold', on && 'bg-pos-panel text-primary shadow-[inset_0_0_0_1px_var(--ws-primary-soft)]')}
                   onClick={() => {
                     cartActions.switchTo(x.id);
                     onClose();
@@ -106,7 +106,7 @@ export function OpenSalesDialog({ totalOf, onClose, server, nameOf }: { totalOf:
               cartActions.newSale();
               onClose();
             }}
-            className="flex min-h-[250px] flex-col items-center justify-center gap-2.5 rounded-[18px] border-2 border-dashed border-[#b8c0d6] bg-pos-ground text-primary hover:bg-pos-key"
+            className="flex min-h-[250px] flex-col items-center justify-center gap-2.5 rounded-[18px] border-2 border-dashed border-primary-soft bg-pos-ground text-primary hover:bg-pos-key"
           >
             <span className="flex h-touch-md w-touch-md items-center justify-center rounded-pos-lg bg-primary text-white">
               <Icon name="plus" size={28} />
@@ -183,7 +183,7 @@ export function HoldDialog({ id, onClose, server, nameOf, totalOf }: { id: strin
         onKeyDown={(e) => e.key === 'Enter' && !busy && void hold()}
         placeholder={t('pos.held.note')}
         aria-label={t('pos.held.note')}
-        className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+        className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
       />
       <div className="flex gap-2.5">
         <PosButton className="h-touch-lg w-40" onClick={onClose}>

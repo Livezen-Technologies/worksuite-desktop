@@ -8,8 +8,8 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, PageHead, Seg, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, Field, input, PageHead, Seg, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, K, money, MONTHS, problemsOf, refusal, shortDate, type Company } from './api';
 import {
   approveBudget,
@@ -38,7 +38,7 @@ import {
   type Grid,
   type Line12,
 } from './close';
-import { ConfirmSheet, LoadFailed, Notice } from './parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
 import type { FinanceView, ScreenProps } from './Rail';
 
 /**

@@ -4,7 +4,7 @@ import { Button, ErrorNote, Spinner } from '../../components/ui';
 import { call, DesktopError } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { type LockConnection, type LockOutcome, type LockServer as Server, type LockServerView, LOCK_CONNECTIONS, type LockVendor, lockServerProblem } from '@shared/pms-locks';
-import { Field, input, Section } from '../garage/parts';
+import { Field, input, Section } from '../../components/FormKit';
 import { errorText } from './api';
 import { doorLocks, lockServer, readCard, syncKeyEncoder, type KeyDone } from './locks';
 import { usePms } from './parts';

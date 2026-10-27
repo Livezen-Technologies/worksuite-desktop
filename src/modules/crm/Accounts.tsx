@@ -9,7 +9,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Caps, Field, input, PageHead, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Caps, Field, input, PageHead, Sheet } from '../../components/PageKit';
 import type { Account, AccountDetail } from './api';
 import { TimelineList, useOwners } from './Leads';
 import { crmCan, initialsOf, money, moneyFull, stageColour, StatusBar } from './parts';
@@ -19,6 +19,8 @@ import { exportCrmCsv } from './exportCsv';
 import { NewDeal } from './Pipeline';
 import { ScheduleFollowUp } from './Schedule';
 import { CompanyField, orgIdFor, useCrmScope } from './scope';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Accounts (CrmAccounts, desk-account): the customers, prospects and
@@ -39,9 +41,9 @@ const TYPES: Array<[string, string]> = [
   ['other', 'Other'],
 ];
 const HEALTH: Record<string, [string, string]> = {
-  good: ['Good', 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success'],
-  watch: ['Watch', 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning'],
-  at_risk: ['At risk', 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger'],
+  good: ['Good', 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success'],
+  watch: ['Watch', 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning'],
+  at_risk: ['At risk', 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger'],
 };
 
 interface AccountList {
@@ -129,7 +131,7 @@ export default function Accounts({ openId, creating, initialQuery = '', onOpen, 
       </div>
 
       <div className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
-        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-[#F7F8FB] px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-info-soft px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
           <span className="w-[240px] shrink-0">Account</span>
           <span className="w-[100px] shrink-0">Type</span>
           <span className="w-[90px] shrink-0">Health</span>
@@ -142,7 +144,7 @@ export default function Accounts({ openId, creating, initialQuery = '', onOpen, 
         <div className="min-h-0 overflow-y-auto scroll-thin">
           {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
           {rows.map((a) => (
-            <div key={a.id} data-account={a.id} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle', openId === a.id && 'bg-selection')} onClick={() => onOpen(a.id)}>
+            <div key={a.id} data-account={a.id} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle', openId === a.id && 'bg-selection')} role="button" tabIndex={0} onKeyDown={clickOnKey} onClick={() => onOpen(a.id)}>
               <span className="flex w-[240px] min-w-0 shrink-0 flex-col">
                 <b className="truncate text-ink">{a.name}</b>
                 <span className="truncate text-[11.5px] text-ink-3">{[a.industry, a.email ?? a.contact_person].filter(Boolean).join(' · ') || '—'}</span>
@@ -227,7 +229,7 @@ function Account360({ id, onBack, onChanged, onOpenDeal, onOpenQuote, onNewQuote
       {d && a ? (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <span aria-hidden className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[10px] bg-[#0F172A] text-[15px] font-bold text-white dark:bg-well">{initialsOf(a.name)}</span>
+            <span aria-hidden className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[10px] bg-stage text-[15px] font-bold text-white dark:bg-well">{initialsOf(a.name)}</span>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <h1 className="m-0 truncate text-[20px] font-bold text-ink">{a.name}</h1>
               <span className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-3">
@@ -256,14 +258,14 @@ function Account360({ id, onBack, onChanged, onOpenDeal, onOpenQuote, onNewQuote
               </button>
             ) : null}
           </div>
-          <div className="grid grid-cols-3 gap-2 min-[1100px]:grid-cols-6">
-            <Tile label="Open deals" value={String(d.summary.open_deals)} sub={money(d.summary.open_value, a.currency)} />
-            <Tile label="Won" value={money(d.summary.won_value, a.currency)} sub={d.summary.lost_count ? `${d.summary.lost_count} lost` : 'none lost'} />
-            <Tile label="Projects" value={String(d.summary.projects)} />
-            <Tile label="Open tasks" value={String(d.summary.open_tasks)} />
-            <Tile label="Meetings" value={String(d.summary.meetings)} />
-            <Tile label="Quotes" value={String(d.summary.quotes)} />
-          </div>
+          <StatGrid min={150}>
+            <Tile icon="handshake" tone="blue" label="Open deals" value={String(d.summary.open_deals)} sub={money(d.summary.open_value, a.currency)} />
+            <Tile icon="trophy" tone="green" label="Won" value={money(d.summary.won_value, a.currency)} sub={d.summary.lost_count ? `${d.summary.lost_count} lost` : 'none lost'} />
+            <Tile icon="kanban" tone="violet" label="Projects" value={String(d.summary.projects)} />
+            <Tile icon="tasks" tone="amber" label="Open tasks" value={String(d.summary.open_tasks)} />
+            <Tile icon="calendar" tone="cyan" label="Meetings" value={String(d.summary.meetings)} />
+            <Tile icon="file-text" tone="neutral" label="Quotes" value={String(d.summary.quotes)} />
+          </StatGrid>
 
           <div className="grid min-h-0 items-start gap-3 min-[1000px]:grid-cols-[1fr_1.2fr]">
             <div className="flex min-w-0 flex-col gap-3">
@@ -296,7 +298,7 @@ function Account360({ id, onBack, onChanged, onOpenDeal, onOpenQuote, onNewQuote
                           {x.owner ? ` · ${x.owner}` : ''}
                         </span>
                       }
-                      right={<b className={cx('tabular-nums', x.stage_kind === 'won' ? 'text-[#145C39] dark:text-success' : 'text-ink')}>{moneyFull(x.amount, x.currency)}</b>}
+                      right={<b className={cx('tabular-nums', x.stage_kind === 'won' ? 'text-success-ink dark:text-success' : 'text-ink')}>{moneyFull(x.amount, x.currency)}</b>}
                     />
                   ))
                 ) : (
@@ -376,14 +378,8 @@ function Account360({ id, onBack, onChanged, onOpenDeal, onOpenQuote, onNewQuote
   );
 }
 
-function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div data-tile={label} className="flex min-w-0 flex-col rounded-[10px] border border-line bg-surface px-3 py-2.5">
-      <span className="text-[12px] text-ink-3">{label}</span>
-      <b className="truncate text-[17px] text-ink tabular-nums">{value}</b>
-      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-    </div>
-  );
+function Tile({ label, value, sub, icon, tone }: { label: string; value: string; sub?: string; icon?: string; tone?: StatTone }) {
+  return <StatCard data-tile={label} size="sm" label={label} value={value} sub={sub} icon={icon} tone={tone} />;
 }
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {

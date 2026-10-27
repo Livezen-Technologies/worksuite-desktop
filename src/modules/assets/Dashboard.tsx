@@ -4,6 +4,7 @@ import { shortDate } from '../finance/api';
 import { statusLabel, type Can, type Dashboard as Dash } from './api';
 import { Badge, Btn, Card, Kpi, Note, PageHead, amt, compact, useReadOnly } from './parts';
 import type { AssetView } from './Rail';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Dashboard (D04): the server's KPIs, assets by status, warranty ending, upcoming maintenance and what waits on me —
@@ -41,14 +42,14 @@ export default function Dashboard({ data, can, onGo, onAsset }: { data: UseQuery
           {can.manage ? <Btn disabled={ro} onClick={() => onGo('unfiled')}>File them</Btn> : null}
         </Note>
       ) : null}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
-        <Kpi label="Live assets" value={k.active} />
-        <Kpi label="Assigned" value={k.assigned} />
-        <Kpi label="Available" value={k.available} />
-        <Kpi label="Maintenance / repair" value={k.maintenance + k.repair} />
-        <Kpi label={`Cost (${cur})`} value={<span title={amt(k.asset_value, cur)}>{compact(k.asset_value)}</span>} />
-        <Kpi label={`Book value (${cur})`} value={<span title={amt(k.net_book_value, cur)}>{compact(k.net_book_value)}</span>} sub={`${amt(k.monthly_depreciation, cur)} a month`} />
-      </div>
+      <StatGrid min={200}>
+        <Kpi icon="box" tone="blue" label="Live assets" value={k.active} />
+        <Kpi icon="user-check" tone="violet" label="Assigned" value={k.assigned} />
+        <Kpi icon="package-check" tone="green" label="Available" value={k.available} />
+        <Kpi icon="wrench" tone="amber" label="Maintenance / repair" value={k.maintenance + k.repair} />
+        <Kpi icon="banknote" tone="blue" label={`Cost (${cur})`} value={<span title={amt(k.asset_value, cur)}>{compact(k.asset_value)}</span>} />
+        <Kpi icon="scale" tone="cyan" label={`Book value (${cur})`} value={<span title={amt(k.net_book_value, cur)}>{compact(k.net_book_value)}</span>} sub={`${amt(k.monthly_depreciation, cur)} a month`} />
+      </StatGrid>
       <div className="flex flex-wrap gap-3">
         <div className="grid min-w-0 flex-[3_1_560px] grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
           <Card title="By status">

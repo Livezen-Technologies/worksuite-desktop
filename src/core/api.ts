@@ -10,6 +10,7 @@ import { safeHeaders } from '@shared/http-headers';
 import { app } from './app-state';
 import { call } from './bridge';
 import { text } from './i18n';
+import { noteServedFromCopy, offlineWriteRefusal } from './offline-read';
 
 export const API_BASE = 'app://bundle/__api';
 
@@ -92,6 +93,9 @@ async function localRequest<T>(method: string, path: string, opts: { query?: Que
 
 export async function request<T = unknown>(method: string, path: string, opts: { query?: Query; body?: unknown; signal?: AbortSignal; headers?: Record<string, string> } = {}): Promise<ApiResult<T>> {
   if (app.get().session.mode === 'guest') return localRequest<T>(method, path, opts);
+  // Read-only offline (D-G14): a write to a module that only reads offline is refused before it is sent.
+  const refused = offlineWriteRefusal(method, path);
+  if (refused) throw new ApiError(0, refused, 'OFFLINE_READ_ONLY');
   // ASCII only (#238): the main process reads these bytes back as UTF-8, so U+202F, Sinhala, Tamil or an emoji in a
   // header would fail there. A value outside it is percent-encoded; one that cannot be sent is this screen's error.
   let headers: Record<string, string>;
@@ -119,6 +123,7 @@ export async function request<T = unknown>(method: string, path: string, opts: {
     const requestId = res.headers.get('x-request-id') || (typeof json?.request_id === 'string' ? json.request_id : null);
     throw new ApiError(res.status, message, typeof json?.code === 'string' ? json.code : null, json?.errors ?? json?.data ?? null, requestId);
   }
+  if (res.headers.get('x-ws-offline') === '1') noteServedFromCopy(path, res.headers.get('x-ws-cached-at'));
   return {
     data: (json && 'data' in json ? json.data : json) as T,
     offline: res.headers.get('x-ws-offline') === '1',

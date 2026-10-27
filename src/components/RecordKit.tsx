@@ -1,8 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import { Icon } from '../../components/Icon';
-import { cx } from '../../components/ui';
-import { btn, btnPrimary, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { Icon } from './Icon';
+import { cx } from './ui';
+import { btn, btnPrimary, Sheet } from './PageKit';
+import { Pill } from './ListKit';
+
+/** Notices, confirm and reason sheets, amounts and pills first drawn for Finance (it was `finance/parts`), shared by
+ * Expenses, Payroll, Assets, Cheque Manager and Label (audit D-G08). */
 
 /**
  * A read that failed. Never "no accounts" or "open the books first": a failed
@@ -65,11 +68,11 @@ export function PeriodPill({ status }: { status: string }) {
 export function Notice({ tone, children, className }: { tone: 'amber' | 'red' | 'green' | 'grey'; children: ReactNode; className?: string }) {
   const c =
     tone === 'amber'
-      ? 'border-[#F5D48A] bg-[#FFF8E6] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning'
+      ? 'border-warning-line bg-warning-bg text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning'
       : tone === 'red'
-        ? 'border-[#F1B8A8] bg-[#FDF1EE] text-[#8C2A14] dark:border-danger/40 dark:bg-danger-bg dark:text-danger'
+        ? 'border-danger-line bg-danger-bg text-danger-ink dark:border-danger/40 dark:bg-danger-bg dark:text-danger'
         : tone === 'green'
-          ? 'border-[#B9E2C8] bg-[#EFF8F2] text-[#145C39] dark:border-success/40 dark:bg-success-bg dark:text-success'
+          ? 'border-success-line bg-slate-bg text-success-ink dark:border-success/40 dark:bg-success-bg dark:text-success'
           : 'border-line bg-subtle text-ink-2';
   return <div className={cx('rounded-[10px] border px-3.5 py-2.5 text-[12.5px] leading-relaxed', c, className)}>{children}</div>;
 }

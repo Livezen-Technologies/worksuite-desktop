@@ -4,6 +4,22 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.1 — 2026-10-27
+
+**Changed**
+
+- the parts this module shares with others now come from src/components (the page, list, record, form, card, call, console and report kits), and a lint rule keeps modules from importing each other (audit D-G08). Nothing a person sees changes.
+
+## 1.1.0 — 2026-10-27
+
+**Added**
+
+- read-only offline from the encrypted cache — what was last read, under an "Offline · read-only" banner with its "as of" time; every change waits for the connection and is refused before it is sent; secrets, files, exports and one-time answers are never kept (D-G14)
+
+**Changed**
+
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+
 ## 1.0.0 — 2026-10-20
 
 - Recruitment on the desktop (WS-REC SRS §9, gap doc §9.3 D01–D05) over the staff API `/api/recruitment`, app id

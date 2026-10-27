@@ -33,6 +33,7 @@ export function defaultPreferences(): Preferences {
     appearance: normalizeAppearance(null),
     density: 'comfortable',
     hardwareAcceleration: true,
+    spellcheck: true,
     notificationSounds: true,
     notificationPrivacy: 'SENDER_ONLY',
     notificationsEnabled: true,
@@ -94,6 +95,11 @@ export class SettingsService {
   private defaultLanguage: string;
   private policy: DesktopPolicy | null = null;
   private listeners = new Set<(p: Preferences) => void>();
+  /**
+   * Desktop settings over the preferences (shared/desktop-settings.ts preferenceOverlay): the synced and managed
+   * `prefs.*`, and the preferences a feature that is off holds off — with the locks that come with them.
+   */
+  private overlay: { values: Partial<Preferences>; locks: PreferenceLock[] } = { values: {}, locks: [] };
 
   constructor(private readonly db: Database) {
     const stored = db.getConfig<Partial<Preferences>>('preferences') ?? {};
@@ -184,12 +190,25 @@ export class SettingsService {
     return this.policy?.notification_min_privacy ?? null;
   }
 
+  /** What desktop settings put over the preferences; the windows hear of it when it changes anything. */
+  setDesktopOverlay(overlay: { values: Partial<Preferences>; locks: PreferenceLock[] }): void {
+    if (JSON.stringify(overlay) === JSON.stringify(this.overlay)) return;
+    this.overlay = { values: { ...overlay.values }, locks: [...overlay.locks] };
+    this.emit();
+  }
+
   setPolicy(policy: DesktopPolicy | null): void {
     this.policy = policy;
     this.emit();
   }
 
   locks(): PreferenceLock[] {
+    const out = this.policyLocks();
+    for (const l of this.overlay.locks) if (!out.some((o) => o.key === l.key)) out.push(l);
+    return out;
+  }
+
+  private policyLocks(): PreferenceLock[] {
     const p = this.policy;
     if (!p) return [];
     const out: PreferenceLock[] = [];
@@ -221,10 +240,14 @@ export class SettingsService {
 
   /** Preferences as they take effect, with policy constraints applied. */
   effective(): Preferences {
-    const p = { ...this.prefs, backgroundServices: { ...this.prefs.backgroundServices } };
+    const p = { ...this.prefs, ...this.overlay.values, backgroundServices: { ...this.prefs.backgroundServices } };
     const pol = this.policy;
+    // Desktop settings put nested preferences over the person's field by field (links: only `openInApp`).
+    if (this.overlay.values.links) p.links = { ...this.prefs.links, ...this.overlay.values.links };
     // The organisation's colour profile stands in for the person's until they pick one, or always when locked.
     p.appearance = withOrganisation(this.prefs.appearance!, this.orgProfile(), pol?.appearance_locked === true);
+    // A synced or managed `prefs.theme` is the mode the colour profiles show.
+    if (this.overlay.values.theme) p.appearance = { ...p.appearance, mode: this.overlay.values.theme };
     if (!pol) return p;
     if (pol.locked_answer_calls === false) p.lockedAnswerCalls = false;
     if (pol.locked_show_caller_details === false) p.lockedShowCallerDetails = false;

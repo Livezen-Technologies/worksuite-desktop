@@ -17,10 +17,10 @@ export function RecordingFeedback({ active, since, now, phase = 'idle', error, s
   const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   const permission = fix === 'screen-permission';
   return <div className="no-drag flex flex-wrap items-center gap-2 text-[11.5px]">
-    {active ? <span role="status" className="flex flex-wrap items-center gap-1.5 rounded bg-[#3A1A14] px-2 py-1 font-bold text-[#FFB4A2]"><span className="h-2 w-2 shrink-0 rounded-full bg-red-500 motion-safe:animate-pulse" />Recording On{since ? ` · ${clock}` : ''}{size ? <span className="tabular-nums" data-testid="recording-size"> · {bytes(size)}</span> : null}<span className="font-normal">This meeting is being recorded</span></span> : null}
+    {active ? <span role="status" className="flex flex-wrap items-center gap-1.5 rounded bg-stage-gray px-2 py-1 font-bold text-stage-danger"><span className="h-2 w-2 shrink-0 rounded-full bg-red-500 motion-safe:animate-pulse" />Recording On{since ? ` · ${clock}` : ''}{size ? <span className="tabular-nums" data-testid="recording-size"> · {bytes(size)}</span> : null}<span className="font-normal">This meeting is being recorded</span></span> : null}
     {phase === 'starting' || phase === 'stopping' ? <span role="status" className="flex items-center gap-1.5"><Spinner />{phase === 'starting' ? 'Starting Recording…' : 'Stopping Recording…'}</span> : null}
     {error && permission ? (
-      <span role="alert" className="flex flex-wrap items-center gap-1.5 rounded bg-[#3A2A10] px-2 py-1 text-[#FFD9A0]">
+      <span role="alert" className="flex flex-wrap items-center gap-1.5 rounded bg-stage-gray-2 px-2 py-1 text-stage-warning">
         <b>Screen Recording permission needed.</b> {error}
         {openSettings ? <Button size="sm" variant="primary" onClick={openSettings}>Open System Settings</Button> : null}
         {retry ? <Button size="sm" onClick={retry}>Check again</Button> : null}

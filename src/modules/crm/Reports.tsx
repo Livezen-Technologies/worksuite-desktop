@@ -7,13 +7,14 @@ import { addDays, todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, PageHead, Panel, Seg } from '../hr/parts';
+import { btn, PageHead, Panel, Seg } from '../../components/PageKit';
 import type { CrmReports } from './api';
 import { exportCrmCsv } from './exportCsv';
 import { isMissing } from './logic';
 import { BarRow, crmCan, Kpi, money } from './parts';
 import { useOwnerList } from './Schedule';
 import { useCrmScope } from './scope';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Reports (Insight → Reports, W5): for the company the CRM is showing and a
@@ -25,8 +26,8 @@ import { useCrmScope } from './scope';
  */
 type Range = '90' | '180' | '365';
 
-const WON = 'bg-[#3346B8] dark:bg-[#6F86F5]';
-const FORECAST = 'bg-[#00939F] dark:bg-[#21A3AE]';
+const WON = 'bg-primary dark:bg-brand-soft';
+const FORECAST = 'bg-teal';
 
 export default function Reports() {
   const scope = useCrmScope();
@@ -69,12 +70,12 @@ export default function Reports() {
       ) : null}
       {r ? (
         <>
-          <div className="grid grid-cols-2 gap-2.5 min-[900px]:grid-cols-4">
-            <Kpi label="Won" value={money(r.won_vs_forecast.reduce((a, m) => a + m.won, 0), cur)} sub={`${r.win_loss.won} ${r.win_loss.won === 1 ? 'deal' : 'deals'}`} tone="green" />
-            <Kpi label="Win rate" value={decided ? `${Math.round((r.win_loss.won / decided) * 100)}%` : '—'} sub={`${r.win_loss.won} won · ${r.win_loss.lost} lost`} />
-            <Kpi label="Sales cycle" value={r.cycle.avg_days === null ? '—' : `${r.cycle.avg_days} d`} sub="lead to won, on average" tone="blue" />
-            <Kpi label="Leads" value={r.sources.reduce((a, s) => a + s.leads, 0)} sub={`${r.sources.reduce((a, s) => a + s.converted, 0)} converted`} />
-          </div>
+          <StatGrid>
+            <Kpi icon="trophy" label="Won" value={money(r.won_vs_forecast.reduce((a, m) => a + m.won, 0), cur)} sub={`${r.win_loss.won} ${r.win_loss.won === 1 ? 'deal' : 'deals'}`} tone="green" />
+            <Kpi icon="percent" tone="cyan" label="Win rate" value={decided ? `${Math.round((r.win_loss.won / decided) * 100)}%` : '—'} sub={`${r.win_loss.won} won · ${r.win_loss.lost} lost`} />
+            <Kpi icon="timer" label="Sales cycle" value={r.cycle.avg_days === null ? '—' : `${r.cycle.avg_days} d`} sub="lead to won, on average" tone="blue" />
+            <Kpi icon="user-plus" tone="violet" label="Leads" value={r.sources.reduce((a, s) => a + s.leads, 0)} sub={`${r.sources.reduce((a, s) => a + s.converted, 0)} converted`} />
+          </StatGrid>
 
           <Panel
             title="Won against forecast"

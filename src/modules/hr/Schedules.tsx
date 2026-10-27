@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { pickable, type EmployeeRow } from './api';
 import { dayLong, ymd } from './dates';
-import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Seg, Sheet, SidePanel, StatusChip } from './parts';
+import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Seg, Sheet, SidePanel, StatusChip } from '../../components/PageKit';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
@@ -130,7 +130,7 @@ export default function Schedules() {
               <div className="flex flex-wrap items-center gap-1.5">
                 <b className="mr-1 text-ink">{s.name}</b>
                 {s.is_default ? <StatusChip>Default</StatusChip> : null}
-                {s.current?.flexible ? <StatusChip className="!bg-[#F1EAFB] !text-[#5B2FA0] dark:!bg-[#2A1F45] dark:!text-[#C4A8F0]">Flexible</StatusChip> : null}
+                {s.current?.flexible ? <StatusChip className="!bg-stage-ink !text-brand dark:!bg-stage-line-soft dark:!text-stage-violet">Flexible</StatusChip> : null}
                 {s.status !== 'active' ? <StatusChip>{s.status === 'archived' ? 'Archived' : 'Inactive'}</StatusChip> : null}
                 <span className="rounded-[9px] bg-subtle px-[7px] py-px text-[11px] font-bold text-ink-2">
                   {s.employees} {s.employees === 1 ? 'employee' : 'employees'}

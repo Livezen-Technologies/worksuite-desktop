@@ -234,7 +234,7 @@ describe('L-03 · wall mode, names hidden', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Wall mode' }));
     const wall = screen.getByRole('dialog', { name: 'Website chats — live, wall mode' });
     expect(address.get('wall')).toBe('1');
-    expect(wall.className).toContain('bg-[#0b1430]');
+    expect(wall.className).toContain('bg-stage');
     // The screen is kept awake and the whole screen taken (MAP-16, WF-M3).
     await waitFor(() => expect(request).toHaveBeenCalledWith('screen'));
     expect(enter).toHaveBeenCalled();

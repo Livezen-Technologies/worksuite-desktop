@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Button, Spinner } from '../../components/ui';
-import { Field, input } from '../garage/parts';
+import { Field, input } from '../../components/FormKit';
 import { codeOf, errorData, errorText, K, newKey, pGet, pPost, type GuestHit, type GuestProfile } from './api';
 import { Refusal, usePms, VipPill } from './parts';
 

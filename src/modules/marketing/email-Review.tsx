@@ -220,7 +220,7 @@ function CheckItem({ kind, text }: { kind: 'blocker' | 'warning' | 'passed'; tex
   const cut = text.search(/[.:]\s/);
   const head = cut > 0 && cut < text.length - 2 ? text.slice(0, cut + 1) : text;
   const rest = head === text ? '' : text.slice(head.length).trim();
-  const tone = kind === 'blocker' ? 'text-danger' : kind === 'warning' ? 'text-[#9A4A06] dark:text-warning' : 'text-success';
+  const tone = kind === 'blocker' ? 'text-danger' : kind === 'warning' ? 'text-warning-ink dark:text-warning' : 'text-success';
   return (
     <li className="flex gap-2.5 border-b border-line/70 py-2 last:border-b-0">
       <Icon name={kind === 'passed' ? 'check' : 'warning'} size={16} className={cx('mt-0.5 shrink-0', tone)} />

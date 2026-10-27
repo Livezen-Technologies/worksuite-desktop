@@ -7,7 +7,7 @@ import { toast } from '../../../../core/toasts';
 import { CollapsibleSection } from '../../../../components/Collapsible';
 import { Select } from '../../../../components/Select';
 import { Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
-import { Note, SettingRow } from '../../../account/parts';
+import { Note, SettingRow } from '../../../../components/CardKit';
 import {
   GUIDES,
   MAX_MINUTES,
@@ -299,18 +299,18 @@ export function EmbedColumn({ code, seen, site, wide }: { code: string | null; s
   const fresh = seen ? seen.seconds_ago < STALE_SECONDS : false;
   return (
     <div className={cx('flex shrink-0 flex-col gap-3 overflow-y-auto pb-4 scroll-thin', wide ? 'w-full max-w-[560px]' : 'w-[400px]')}>
-      <section className="flex flex-col gap-2.5 rounded-[12px] bg-[#111b3b] px-4 py-3.5 text-[#f1f4fb]">
+      <section className="flex flex-col gap-2.5 rounded-[12px] bg-stage-2 px-4 py-3.5 text-stage-ink">
         <div className="flex items-center">
           <h2 className="flex-1 text-[14px] font-bold">Embed code</h2>
-          <button type="button" disabled={!code} onClick={copy} className="h-7 rounded-[7px] border border-[#3a4468] px-2.5 text-[12px] font-semibold text-[#f1f4fb] hover:bg-white/10 disabled:opacity-50">
+          <button type="button" disabled={!code} onClick={copy} className="h-7 rounded-[7px] border border-stage-4 px-2.5 text-[12px] font-semibold text-stage-ink hover:bg-white/10 disabled:opacity-50">
             Copy
           </button>
         </div>
-        <p className="text-[12px] text-[#9aa3c4]">{text('Paste before </body> on every page of {site}.', { site })}</p>
-        <pre aria-label="Embed code" className="rounded-[8px] bg-[#0b1430] px-3 py-2.5 font-mono text-[11.5px] leading-[1.6] break-all whitespace-pre-wrap text-[#dfe3f0]">{code ? snippetLines(code) : '—'}</pre>
+        <p className="text-[12px] text-ink-4">{text('Paste before </body> on every page of {site}.', { site })}</p>
+        <pre aria-label="Embed code" className="rounded-[8px] bg-stage px-3 py-2.5 font-mono text-[11.5px] leading-[1.6] break-all whitespace-pre-wrap text-stage-ink">{code ? snippetLines(code) : '—'}</pre>
         {seen !== undefined ? (
-          <p role="status" aria-label="Install check" className={cx('flex items-center gap-2 text-[12px]', fresh ? 'text-[#8fe0b5]' : 'text-[#9aa3c4]')}>
-            <span aria-hidden className={cx('h-[7px] w-[7px] shrink-0 rounded-full', fresh ? 'bg-[#2f9e67]' : seen ? 'bg-[#e8a33d]' : 'bg-[#5a6488]')} />
+          <p role="status" aria-label="Install check" className={cx('flex items-center gap-2 text-[12px]', fresh ? 'text-stage-success' : 'text-stage-ink-3')}>
+            <span aria-hidden className={cx('h-[7px] w-[7px] shrink-0 rounded-full', fresh ? 'bg-green' : seen ? 'bg-amber' : 'bg-slate')} />
             {seenText(seen, site)}
           </p>
         ) : null}

@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { EMPLOYMENT_TYPES, hasLeft, pickable, SETTABLE_STATUSES, type EmployeeDetail, type EmployeeRow } from './api';
 import { dayLong, rangeLabel, ymd } from './dates';
-import { btn, btnPrimary, Caps, Cell, Empty, Field, Facts, humanise, Initials, input, PageHead, row, Seg, Sheet, SidePanel, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Caps, Cell, Empty, Field, Facts, humanise, Initials, input, PageHead, row, Seg, Sheet, SidePanel, StatusChip, THead } from '../../components/PageKit';
 import { can } from './Rail';
 import { Select } from '../../components/Select';
 

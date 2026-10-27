@@ -217,7 +217,7 @@ export function AllergyGate({
       )}
 
       {covering ? (
-        <div className="flex items-start gap-2 rounded-[12px] bg-[#F0FDF4] px-3.5 py-3 text-[14px] text-[#166534] dark:bg-success-bg dark:text-success">
+        <div className="flex items-start gap-2 rounded-[12px] bg-rail px-3.5 py-3 text-[14px] text-success-ink dark:bg-success-bg dark:text-success">
           <Icon name="check" size={16} className="mt-0.5 shrink-0" />
           <span>
             Patch test {dayMonth(covering.tested_at)}

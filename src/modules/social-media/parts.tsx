@@ -7,6 +7,7 @@ import { Button, cx, Empty, ErrorNote, Spinner } from '../../components/ui';
 import { isNotOffered, NOT_OFFERED, rowsOf, useBrands, type Account, type Brand, type Optional, type PostMedia } from './api';
 import { networkInfo } from './lib/networks';
 import { ACCOUNT_STATUS, accountStatusLabel, POST_STATUS, TARGET_STATUS, TONE_CLASS, type AccountStatus, type PostStatus, type TargetStatus, type Tone } from './lib/status';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /**
  * Social Media Manager's shared pieces (design "WorkSuite Social Media Manager — UI", 18 artboards): neutral letter
@@ -150,17 +151,23 @@ export function PanelLink({ children, onClick }: { children: ReactNode; onClick:
   );
 }
 
-/** A KPI tile (W01, W07, A03). `value` null is "Not measured", never a zero (WF-12). */
-export function Kpi({ label, value, sub, tone, title }: { label: string; value: ReactNode | null; sub?: ReactNode; tone?: 'success' | 'danger' | 'warning' | 'muted'; title?: string }) {
+/**
+ * A KPI tile (W01, W07, A03), drawn as the shared StatCard. `value` null is "Not measured", never a zero (WF-12).
+ * `tone` colours the line under the figure (a change that is good or bad news, which also carries its sign);
+ * `accent` colours the icon chip.
+ */
+export function Kpi({ label, value, sub, tone, title, icon, accent }: { label: string; value: ReactNode | null; sub?: ReactNode; tone?: 'success' | 'danger' | 'warning' | 'muted'; title?: string; icon?: string; accent?: StatTone }) {
   const colour = tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : tone === 'success' ? 'text-success' : 'text-ink-3';
   return (
-    <div title={title} className="flex min-w-0 flex-col gap-1 rounded-[12px] border border-line bg-surface px-4 py-3">
-      <span className="truncate text-[12px] text-ink-3">{label}</span>
-      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-        {value === null ? <span className="text-[14px] font-semibold text-ink-3">Not measured</span> : <span className="text-[24px] leading-none font-bold text-ink tabular-nums">{value}</span>}
-        {sub ? <span className={cx('text-[12px] font-semibold', colour)}>{sub}</span> : null}
-      </span>
-    </div>
+    <StatCard
+      label={label}
+      value={value === null ? <>Not measured</> : value}
+      empty={value === null ? true : undefined}
+      sub={sub ? <span className={cx('font-semibold', colour)}>{sub}</span> : undefined}
+      icon={icon}
+      tone={accent}
+      title={title}
+    />
   );
 }
 

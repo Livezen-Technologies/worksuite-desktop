@@ -6,7 +6,7 @@ import { useStore } from '../../core/store';
 import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Empty, PageHead, Panel, Seg, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Empty, PageHead, Panel, Seg, Sheet } from '../../components/PageKit';
 import { OFFLINE_WRITE, useSalesOffline } from './offline';
 import { approveReturn, creditReturn, K, receiveReturn, type ReturnRow, type Returns as Board } from './api';
 import { moneyFull } from './parts';
@@ -85,7 +85,7 @@ export default function Returns({ board }: { org: string; board: UseQueryResult<
         ]}
       />
       {b.no_document.length ? (
-        <div className="rounded-[10px] border border-[#F5D48A] bg-[#FFF8E6] px-3.5 py-2.5 text-[12.5px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+        <div className="rounded-[10px] border border-warning-line bg-warning-bg px-3.5 py-2.5 text-[12.5px] text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           <b>
             {b.no_document.length} {b.no_document.length === 1 ? 'order is' : 'orders are'} marked returned with no return document.
           </b>{' '}

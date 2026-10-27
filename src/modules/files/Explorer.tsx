@@ -479,13 +479,13 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                     className={cx('grid cursor-default items-center border-b border-line/70 px-6 py-1.5 select-none', cols, on ? 'bg-selection' : 'hover:bg-ground', isFolder && dragOver === item.f.id && 'outline-2 -outline-offset-2 outline-primary')}
                   >
                     {/* The lead column every list shares (worksuite-desktop#290); the list shows its boxes all the time. */}
-                    <span onClick={(e) => e.stopPropagation()}>
+                    <span role="presentation" onClick={(e) => e.stopPropagation()}>
                       <RowLead checked={on} selecting onPick={() => toggle(item)} label={`Select ${item.f.name}`} />
                     </span>
                     <span role="cell" className="flex min-w-0 items-center gap-2.5">
                       {isFolder ? <FolderIcon color={item.f.color} locked={item.f.is_locked} /> : <FileIcon f={item.f} />}
                       <span className="truncate font-semibold text-ink">{item.f.name}</span>
-                      {item.f.starred ? <Icon name="star" size={13} label="Starred" className="shrink-0 fill-current text-[#E9A23B]" /> : null}
+                      {item.f.starred ? <Icon name="star" size={13} label="Starred" className="shrink-0 fill-current text-stage-amber" /> : null}
                       {!isFolder ? <PhotoMarks f={item.f} /> : null}
                       {isFolder && item.f.is_locked ? <span className="shrink-0 rounded-[5px] bg-warning-bg px-1.5 py-0.5 text-[10.5px] font-bold text-warning">Locked</span> : null}
                     </span>
@@ -526,9 +526,9 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                     <button key={f.id} type="button" data-row={fileKey(f.id)} draggable onDragStart={(e) => dragStart(item, e)} onClick={(e) => pick(item, e)} onDoubleClick={() => d.open(item, files)} onContextMenu={(e) => (e.preventDefault(), e.stopPropagation(), openMenu(item, { x: e.clientX, y: e.clientY }))} className={cx('flex flex-col overflow-hidden rounded-[11px] bg-surface text-left', on ? 'border-2 border-primary' : 'border border-line hover:border-ink-3')}>
                       <span className="relative block w-full">
                         <Tile f={f} />
-                        {f.starred ? <span className="absolute top-[7px] right-[7px] flex h-5 w-5 items-center justify-center rounded-full bg-surface text-[#E9A23B] shadow"><Icon name="star" size={11} className="fill-current" /></span> : null}
-                        {f.edited ? <span className="absolute top-[7px] left-[7px] rounded-[6px] bg-[#0F1B3D]/85 px-1.5 py-0.5 text-[10.5px] font-bold text-white">{`Edited · v${f.version ?? 1}`}</span> : null}
-                        {f.rating?.mine ? <span aria-label={`Rated ${f.rating.mine} of 5`} className="absolute bottom-[7px] left-[7px] rounded-[6px] bg-black/55 px-1.5 text-[11px] text-[#F5B400]">{'★'.repeat(f.rating.mine)}</span> : null}
+                        {f.starred ? <span className="absolute top-[7px] right-[7px] flex h-5 w-5 items-center justify-center rounded-full bg-surface text-stage-amber shadow"><Icon name="star" size={11} className="fill-current" /></span> : null}
+                        {f.edited ? <span className="absolute top-[7px] left-[7px] rounded-[6px] bg-navy/85 px-1.5 py-0.5 text-[10.5px] font-bold text-white">{`Edited · v${f.version ?? 1}`}</span> : null}
+                        {f.rating?.mine ? <span aria-label={`Rated ${f.rating.mine} of 5`} className="absolute bottom-[7px] left-[7px] rounded-[6px] bg-black/55 px-1.5 text-[11px] text-stage-amber">{'★'.repeat(f.rating.mine)}</span> : null}
                       </span>
                       <span className="flex flex-col gap-0.5 px-2.5 py-2">
                         <span className="truncate text-[12.5px] font-semibold text-ink">{f.name}</span>
@@ -600,7 +600,7 @@ function PhotoMarks({ f }: { f: DriveFile }) {
   return (
     <>
       {f.edited ? <span className="shrink-0 rounded-[5px] bg-selection px-1.5 py-0.5 text-[10.5px] font-bold text-primary">{`Edited · v${f.version ?? 1}`}</span> : null}
-      {f.rating?.mine ? <span aria-label={`Rated ${f.rating.mine} of 5`} className="shrink-0 text-[11px] text-[#E9A23B]">{'★'.repeat(f.rating.mine)}</span> : null}
+      {f.rating?.mine ? <span aria-label={`Rated ${f.rating.mine} of 5`} className="shrink-0 text-[11px] text-stage-amber">{'★'.repeat(f.rating.mine)}</span> : null}
     </>
   );
 }
@@ -614,18 +614,18 @@ function SelectionBar({ items, size, onClear }: { items: Item[]; size: number; o
   const one = items.length === 1 ? items[0]! : null;
   const btn = 'flex h-[30px] items-center rounded-[7px] px-2.5 text-white hover:bg-white/10';
   return (
-    <div role="toolbar" aria-label="Selection" className="mx-6 mb-2 flex h-[42px] shrink-0 items-center gap-1 rounded-[10px] bg-[#0F1B3D] pr-2 pl-3.5 text-[12.5px] font-semibold text-white">
+    <div role="toolbar" aria-label="Selection" className="mx-6 mb-2 flex h-[42px] shrink-0 items-center gap-1 rounded-[10px] bg-navy pr-2 pl-3.5 text-[12.5px] font-semibold text-white">
       <span className="mr-2.5">{items.length} selected{size ? ` · ${bytes(size)}` : ''}</span>
-      {files.length > 1 && files.length === items.length && files.every((f) => IMAGE_EDIT_EXTS.includes(extOf(f.name, f.extension))) ? <button type="button" className={cx(btn, 'bg-[#3B5BDB] hover:bg-[#4C6EF5]')} onClick={() => d.batchEdit(files)}>{`Batch edit ${files.length} photos`}</button> : null}
+      {files.length > 1 && files.length === items.length && files.every((f) => IMAGE_EDIT_EXTS.includes(extOf(f.name, f.extension))) ? <button type="button" className={cx(btn, 'bg-brand-soft hover:bg-blue')} onClick={() => d.batchEdit(files)}>{`Batch edit ${files.length} photos`}</button> : null}
       {one && can(one.f.access, 'share') ? <button type="button" data-guide="files.share" className={btn} onClick={() => d.share(one)}>Share…</button> : null}
       {all('move') ? <button type="button" className={btn} onClick={() => d.move(items, 'move')}>Move…</button> : null}
       {files.length === items.length && all('download') ? <button type="button" className={btn} onClick={() => d.move(items, 'copy')}>Copy to…</button> : null}
       {files.length && files.every((f) => can(f.access, 'download')) ? <button type="button" className={btn} onClick={() => d.download(files)}>Download</button> : null}
       {files.length > 1 && files.length === items.length && all('download') ? <button type="button" className={btn} onClick={() => d.zip(files)}>Zip</button> : null}
       {one && chat && can(one.f.access, 'chat_share') ? <button type="button" className={btn} onClick={() => d.sendToChat(one)}>Send to Chat…</button> : null}
-      {all('delete') ? <button type="button" className={cx(btn, 'text-[#FFB4A3]')} onClick={() => d.trash(items)}>Move to trash</button> : null}
+      {all('delete') ? <button type="button" className={cx(btn, 'text-stage-danger')} onClick={() => d.trash(items)}>Move to trash</button> : null}
       <span className="flex-1" />
-      <button type="button" onClick={onClear} className="h-[30px] rounded-[7px] border border-[#33477E] px-2.5 text-white hover:bg-white/10">Clear</button>
+      <button type="button" onClick={onClear} className="h-[30px] rounded-[7px] border border-primary px-2.5 text-white hover:bg-white/10">Clear</button>
     </div>
   );
 }

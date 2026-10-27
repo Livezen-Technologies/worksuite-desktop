@@ -27,6 +27,7 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Chip, Modal, TextField, cx } from '../../components/ui';
+import { LockBadge } from '../../components/SettingsKit';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
@@ -117,18 +118,12 @@ export function ColorProfiles({ prefs }: { prefs: Preferences }) {
   const busy = saving || !!lock;
 
   return (
-    <section aria-label="Colour profiles" className="flex flex-col gap-3 border-b border-line py-3.5">
+    <section aria-label="Colour profiles" data-setting-row data-loose="" className="flex flex-col gap-3 px-[18px] py-3.5">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h3 className="m-0 flex items-center gap-2 text-[14px] font-semibold text-ink">
             Colour profile
-            {lock ? (
-              <span title={lock.reason}>
-                <Chip tone="warning">
-                  <Icon name="lock" size={11} /> Set by your organization
-                </Chip>
-              </span>
-            ) : null}
+            {lock ? <LockBadge reason={lock.reason} /> : null}
           </h3>
           <p className="m-0 mt-0.5 text-[12.5px] text-ink-3">
             {lock ? lock.reason : 'Light mode uses the Light profile and Dark mode the Dark one; System follows your computer.'}
@@ -440,7 +435,7 @@ export function MiniPreview({ tokens: t, label }: { tokens: Tokens; label: strin
               <span key={n} className="flex items-center justify-between rounded-[4px] px-1 text-[9px] font-semibold" style={{ color: t['--ws-navy-ink'], background: i === 1 ? t['--ws-navy-3'] : 'transparent' }}>
                 {n}
                 {i === 1 ? (
-                  <span className="rounded-full px-1 text-[8px] leading-[12px] text-white" style={{ background: '#e0522f' }}>
+                  <span className="rounded-full px-1 text-[8px] leading-[12px] text-white" style={{ background: 'var(--ws-badge)' }}>
                     3
                   </span>
                 ) : null}

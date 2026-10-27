@@ -7,8 +7,8 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Field, input, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Field, input, PageHead, Seg, Sheet, SidePanel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import {
   advanceJournal,
   can,
@@ -30,7 +30,7 @@ import {
   type Company,
   type DraftLine,
 } from './api';
-import { ConfirmSheet, JournalPill, LoadFailed, Notice, ReasonSheet, Withheld } from './parts';
+import { ConfirmSheet, JournalPill, LoadFailed, Notice, ReasonSheet, Withheld } from '../../components/RecordKit';
 
 /**
  * The journals, newest first, and one journal's lines.
@@ -238,7 +238,7 @@ function JournalPanel({ company, id, base, onOpen }: { company: Company; id: num
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate">
                     <b className="font-mono text-[12px] text-ink">{l.account_code}</b> <span className="text-ink-2">{l.account_name}</span>
-                    {l.account_status && l.account_status !== 'active' ? <span className="ml-1 text-[11.5px] text-[#9A4A06] dark:text-warning">({l.account_status})</span> : null}
+                    {l.account_status && l.account_status !== 'active' ? <span className="ml-1 text-[11.5px] text-warning-ink dark:text-warning">({l.account_status})</span> : null}
                   </span>
                   {l.description ? <span className="truncate text-[12px] text-ink-3">{l.description}</span> : null}
                 </span>

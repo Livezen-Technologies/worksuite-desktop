@@ -67,7 +67,7 @@ export function LockScreen() {
           void unlock();
         }}
       >
-        <Avatar name={lock?.userName} size={64} className="!bg-[#EEF1FD] !text-[#23349E]" />
+        <Avatar name={lock?.userName} size={64} className="!bg-selection !text-primary" />
         <h1 className="mt-4 text-[22px] font-bold">{t('lock.title')}</h1>
         <p className="mt-1 text-[13px] text-navy-ink/80">
           {lock?.userName ?? ''} · {reason}
@@ -111,7 +111,7 @@ export function LockScreen() {
           )}
         </label>
         {error ? (
-          <p id="lock-error" role="alert" className="mt-2 w-full text-[12.5px] text-[#F7A39C]">
+          <p id="lock-error" role="alert" className="mt-2 w-full text-[12.5px] text-stage-danger">
             {error}
           </p>
         ) : null}
@@ -147,13 +147,13 @@ export function LockScreen() {
       </form>
       <div className="mt-6 flex gap-5 text-[12.5px] text-navy-ink/80">
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-[#43B581]" /> Notifications running (content hidden)
+          <span className="h-2 w-2 rounded-full bg-stage-green" /> Notifications running (content hidden)
         </span>
         <span className="flex items-center gap-1.5">
-          <span className={`h-2 w-2 rounded-full ${status?.network === 'OFFLINE' ? 'bg-[#8A90A2]' : 'bg-[#43B581]'}`} /> Background services running
+          <span className={`h-2 w-2 rounded-full ${status?.network === 'OFFLINE' ? 'bg-stage-green' : 'bg-stage-green'}`} /> Background services running
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-[#8A90A2]" /> No work session is being monitored
+          <span className="h-2 w-2 rounded-full bg-stage-green" /> No work session is being monitored
         </span>
       </div>
     </div>

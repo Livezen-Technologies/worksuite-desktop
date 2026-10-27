@@ -8,6 +8,7 @@ import { Empty, cx } from '../../components/ui';
 import { AccountBadge } from '../../app/accounts/AccountBadge';
 import { openRemove, openSignOut } from '../../app/accounts/dialogs';
 import { isSignedIn, settingsTitle, signInLabel } from '../../app/accounts/labels';
+import { SectionHeader, SettingsGroup } from '../../components/SettingsKit';
 import { ConnectionHealth } from './ConnectionHealth';
 
 /** The line under an account in Settings: who, and what state it is in. */
@@ -63,15 +64,15 @@ export function AccountsServers() {
     <>
       <Heading />
       <div className="flex flex-wrap items-start gap-6">
-        <section aria-label="Accounts" className="min-w-[320px] flex-1 overflow-hidden rounded-[14px] border border-line bg-surface">
-          <ul className="m-0 list-none p-0">
+        <SettingsGroup label="Accounts" className="!mb-0 min-w-[320px] flex-1">
+          <ul className="m-0 list-none divide-y divide-line p-0">
             {list.map((a) => {
               const line = accountLine(a);
               const signedIn = isSignedIn(a);
               return (
                 <li
                   key={a.id}
-                  className={cx('flex flex-wrap items-center gap-3 border-b border-line px-4 py-3.5', shown?.id === a.id && 'bg-selection/40')}
+                  className={cx('flex flex-wrap items-center gap-3 px-[18px] py-3.5', shown?.id === a.id && 'bg-selection/40')}
                   data-testid={`account-row-${a.id}`}
                 >
                   <AccountBadge account={a} size={36} />
@@ -107,13 +108,13 @@ export function AccountsServers() {
             })}
           </ul>
           {accounts.allowPersonal || accounts.allowAddEnterprise ? (
-            <div className="px-4 py-3">
+            <div className="px-[18px] py-3">
               <button type="button" className={cx(SB, 'text-primary')} onClick={() => startAdding('choose')}>
                 + Add Account
               </button>
             </div>
           ) : null}
-        </section>
+        </SettingsGroup>
         {shown ? (
           <div className="w-[360px] max-w-full">
             <ConnectionHealth key={shown.id} account={shown} />
@@ -125,10 +126,5 @@ export function AccountsServers() {
 }
 
 function Heading() {
-  return (
-    <div className="mb-5">
-      <h2 className="text-[22px] font-bold text-ink">Accounts &amp; Servers</h2>
-      <p className="mt-1 text-[13.5px] text-ink-3">Personal and Enterprise accounts on this computer, side by side. Each keeps its own data, sign-in and settings.</p>
-    </div>
-  );
+  return <SectionHeader title="Accounts & Servers" hint="Personal and Enterprise accounts on this computer, side by side. Each keeps its own data, sign-in and settings." />;
 }

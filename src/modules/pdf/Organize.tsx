@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { PdfSessionView } from '@shared/pdf';
 import { cx } from '../../components/ui';
 import { Thumb } from './Panels';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Organize (PDF Studio, stage D2): every page as a thumbnail, to select —
@@ -32,12 +33,14 @@ export function Organize({ view, selected, onSelect, onMove, onOpen, disabled }:
     }
   };
   return (
-    <div role="listbox" aria-label="Pages" aria-multiselectable="true" className="min-h-0 flex-1 overflow-auto bg-[#E4E7EE] p-5 scroll-thin dark:bg-[#1B2233]">
+    <div role="listbox" aria-label="Pages" aria-multiselectable="true" className="min-h-0 flex-1 overflow-auto bg-info-bg p-5 scroll-thin dark:bg-slate-bg">
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
         {view.pages.map((size, p) => (
           <div
             key={p}
             role="option"
+            tabIndex={0}
+            onKeyDown={clickOnKey}
             aria-selected={selected.includes(p)}
             draggable={!disabled}
             onDragStart={(e) => {

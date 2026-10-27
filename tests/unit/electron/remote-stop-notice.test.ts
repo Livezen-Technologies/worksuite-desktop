@@ -48,7 +48,8 @@ describe('the notice after the emergency stop', () => {
 });
 
 describe('the quit guard', () => {
-  const main = read('electron/main/index.ts');
+  // The composition root's tray and lifecycle wiring (electron/main/wiring, audit D-G13).
+  const main = read('electron/main/wiring/tray.ts') + read('electron/main/wiring/lifecycle.ts');
   const menu = read('electron/main/menu.ts');
 
   it('asks before quitting while somebody controls this computer', () => {
@@ -77,6 +78,6 @@ describe('the quit guard', () => {
   });
 
   it('is reached when the last window closes off a Mac', () => {
-    expect(main).toMatch(/if \(process\.platform !== 'darwin'\) quit\(\);/);
+    expect(main).toMatch(/if \(process\.platform !== 'darwin'\) root\.quit\(\);/);
   });
 });

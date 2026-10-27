@@ -1,10 +1,11 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { dateLabel } from '../../core/time';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { Empty, Kpi, PageHead, Panel } from '../hr/parts';
+import { Empty, Kpi, PageHead, Panel } from '../../components/PageKit';
 import { MOVING, SOURCE, statusOf, type Overview } from './api';
 import { money, PriorityPill, StatusPill } from './parts';
 import type { SalesView } from './Rail';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The Orders dashboard (OmsDashboard): how many, how much is still open (per
@@ -43,12 +44,12 @@ export default function Dashboard({ overview, onOpen, onList, onPick }: {
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
       <PageHead title="Orders" sub="Where every order stands, and what is waiting on somebody. Refreshed every 30 seconds." />
-      <div className="grid grid-cols-4 gap-2.5">
-        <Kpi label="Orders" value={o.total} sub={`${o.today} raised today`} />
-        <Kpi label="Still moving" value={stillMoving} sub="not yet delivered or invoiced" onClick={() => onList(null)} />
-        <Kpi label="Open order value" value={open.length === 1 ? money(open[0]!.value, open[0]!.currency) : open.length ? `${open.length} currencies` : '—'} sub={open.length > 1 ? byCur(open) : `${open[0]?.orders ?? 0} orders committed`} />
-        <Kpi label="Delivered or completed" value={finished} sub={done.length ? `${byCur(done)} finished` : 'none yet'} />
-      </div>
+      <StatGrid>
+        <Kpi icon="cart" tone="blue" label="Orders" value={o.total} sub={`${o.today} raised today`} />
+        <Kpi icon="truck" tone="amber" label="Still moving" value={stillMoving} sub="not yet delivered or invoiced" onClick={() => onList(null)} />
+        <Kpi icon="coins" tone="violet" label="Open order value" value={open.length === 1 ? money(open[0]!.value, open[0]!.currency) : open.length ? `${open.length} currencies` : '—'} sub={open.length > 1 ? byCur(open) : `${open[0]?.orders ?? 0} orders committed`} />
+        <Kpi icon="package-check" tone="green" label="Delivered or completed" value={finished} sub={done.length ? `${byCur(done)} finished` : 'none yet'} />
+      </StatGrid>
       <div className="grid grid-cols-3 gap-3">
         <Panel title="Where the orders are" sub={`${stillMoving} still moving`} className="col-span-2" bodyClassName="flex flex-col gap-2 px-3.5 py-3">
           {moving.map((s) => (
@@ -71,7 +72,7 @@ export default function Dashboard({ overview, onOpen, onList, onPick }: {
               .filter(([n]) => n > 0)
               .map(([n, label, go, tone]) => (
                 <button key={label} type="button" onClick={go} className="flex items-center gap-3 border-b border-line/70 px-3.5 py-2.5 text-left last:border-b-0 hover:bg-subtle">
-                  <b className={cx('text-[18px] tabular-nums', tone === 'red' ? 'text-danger' : 'text-[#9A4A06] dark:text-warning')}>{n}</b>
+                  <b className={cx('text-[18px] tabular-nums', tone === 'red' ? 'text-danger' : 'text-warning-ink dark:text-warning')}>{n}</b>
                   <span className="text-[12.5px] text-ink">{label}</span>
                 </button>
               ))
@@ -106,7 +107,7 @@ export default function Dashboard({ overview, onOpen, onList, onPick }: {
                   <b className="tabular-nums">{s.count}</b>
                 </span>
                 <span className="h-2 overflow-hidden rounded-[4px] bg-subtle">
-                  <span className="block h-2 rounded-[4px] bg-[#0E7C86]" style={{ width: `${(s.count / topSource) * 100}%` }} />
+                  <span className="block h-2 rounded-[4px] bg-teal" style={{ width: `${(s.count / topSource) * 100}%` }} />
                 </span>
               </div>
             ))

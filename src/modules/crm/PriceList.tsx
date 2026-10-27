@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Field, input, PageHead, Sheet } from '../../components/PageKit';
 import type { Product } from './api';
 import { crmCan, moneyFull } from './parts';
 import { Checkbox } from '../../components/Checkbox';
@@ -60,7 +60,7 @@ export default function PriceList() {
         </label>
       </div>
       <div className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
-        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-[#F7F8FB] px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-info-soft px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
           <span className="w-[110px] shrink-0">Code</span>
           <span className="min-w-0 flex-1">Name</span>
           <span className="w-[110px] shrink-0">Kind</span>

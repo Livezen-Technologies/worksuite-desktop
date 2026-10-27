@@ -5,8 +5,8 @@ import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
-import { btn, btnPrimary } from '../hr/parts';
-import { Note } from './parts';
+import { btn, btnPrimary } from '../../components/PageKit';
+import { Note } from '../../components/CardKit';
 
 /**
  * Turn on two-factor authentication (AcctTwoFactor): scan the key into an
@@ -205,7 +205,7 @@ export function TwoFactorSheet({ onClose, onDone }: { onClose: () => void; onDon
             </div>
           )}
         </div>
-        <div className="flex items-center justify-end gap-2 border-t border-line bg-[#FAFBFD] px-6 py-3.5 dark:bg-well">
+        <div className="flex items-center justify-end gap-2 border-t border-line bg-rail px-6 py-3.5 dark:bg-well">
           {step === 1 ? (
             <>
               <button type="button" className={btn} onClick={onClose}>

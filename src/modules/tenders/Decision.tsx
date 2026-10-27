@@ -5,7 +5,7 @@ import { dateLabel, timeLabel, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
-import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, Panel, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, Panel, Sheet } from '../../components/PageKit';
 import { K, money, refusalOf, wallParts, type Workspace as Data } from './api';
 import { addEvaluation, EVALUATION_KINDS, evaluationBody, labelOf, METHODS, recordSubmission, submissionBody } from './work';
 
@@ -182,7 +182,7 @@ function SubmitSheet({ id, bid, currency, onClose }: { id: number; bid: string |
         </Field>
       </div>
       {refused ? (
-        <div className="flex flex-col gap-1 rounded-[9px] bg-[#FFF4E0] px-3 py-2 text-[12.5px] text-[#7A3B05] dark:bg-warning-bg dark:text-warning" aria-label="Outstanding">
+        <div className="flex flex-col gap-1 rounded-[9px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-strong dark:bg-warning-bg dark:text-warning" aria-label="Outstanding">
           <b>{refused.message}</b>
           {refused.blockers.map((b, i) => (
             <span key={i}>· {b}</span>

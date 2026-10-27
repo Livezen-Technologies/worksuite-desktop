@@ -198,7 +198,7 @@ export default function NewBooking() {
             />
           )}
           {quote.data && deposit > 0 ? (
-            <div className="rounded-[12px] border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2.5 text-[13px] text-[#92400E] dark:border-[var(--ws-note-line)] dark:bg-warning-bg dark:text-warning-ink">
+            <div className="rounded-[12px] border border-warning-line bg-rail px-3 py-2.5 text-[13px] text-orange-ink dark:border-[var(--ws-note-line)] dark:bg-warning-bg dark:text-warning-ink">
               {quote.data.deposit.reason ? `${quote.data.deposit.reason} · ` : ''}
               <b>{amount(deposit, quote.data.currency)} deposit</b> asked
             </div>
@@ -264,7 +264,7 @@ export default function NewBooking() {
               );
             })}
           </div>
-          <button type="button" disabled={lines.length >= 8} onClick={() => setAdding(true)} className="min-h-12 w-full rounded-[12px] border border-dashed border-[#C9CEDD] bg-surface text-[14px] font-bold text-primary hover:bg-subtle disabled:opacity-50 dark:border-line">
+          <button type="button" disabled={lines.length >= 8} onClick={() => setAdding(true)} className="min-h-12 w-full rounded-[12px] border border-dashed border-slate-line bg-surface text-[14px] font-bold text-primary hover:bg-subtle disabled:opacity-50 dark:border-line">
             + Add a service
           </button>
         </Panel>
@@ -342,7 +342,7 @@ export default function NewBooking() {
                     }}
                     className={cx(
                       'rounded-[8px] py-[13px] text-[16px] tabular-nums',
-                      !s.free ? 'border border-dashed border-line bg-[#F8FAFC] text-[#94A3B8] line-through dark:bg-subtle dark:text-ink-3' : slot === s.starts_at ? 'border border-primary bg-primary font-bold text-white' : 'border border-[#CBD5E1] bg-surface text-ink hover:bg-subtle dark:border-line',
+                      !s.free ? 'border border-dashed border-line bg-rail text-ink-4 line-through dark:bg-subtle dark:text-ink-3' : slot === s.starts_at ? 'border border-primary bg-primary font-bold text-white' : 'border border-slate-line bg-surface text-ink hover:bg-subtle dark:border-line',
                     )}
                   >
                     {s.label}

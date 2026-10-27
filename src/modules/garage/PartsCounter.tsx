@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { Select } from '../../components/Select';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { errorText, gGet, gPost, K, newKey, partCounts, qty, remaining, when, type PartUsage } from './api';
 import { Field, input, PartPill, Section, useGarage } from './parts';
 

@@ -41,7 +41,7 @@ export function BoardView({ tasks, me, today, now, selected, canMove, onOpen, on
             setOver(null);
             if (t && t.status !== c.id) onMove(t, c.id);
           }}
-          className={cx('flex min-h-0 flex-col gap-2 rounded-[12px] bg-[#EAEDF4] p-2 dark:bg-subtle', over === c.id && 'ring-2 ring-primary/40')}
+          className={cx('flex min-h-0 flex-col gap-2 rounded-[12px] bg-info-bg p-2 dark:bg-subtle', over === c.id && 'ring-2 ring-primary/40')}
         >
           <div className="flex items-center gap-1.5 px-1 pt-0.5">
             <span className="h-2 w-2 rounded-full" style={{ background: c.dot }} />
@@ -70,7 +70,7 @@ export function BoardView({ tasks, me, today, now, selected, canMove, onOpen, on
                   }}
                   onClick={() => onOpen(t)}
                   aria-label={t.title}
-                  className={cx('flex flex-col gap-[7px] rounded-[10px] border bg-surface p-2.5 text-left', selected === t.id ? 'border-primary' : 'border-line hover:border-[#B8C1DA]', canMove && 'cursor-grab')}
+                  className={cx('flex flex-col gap-[7px] rounded-[10px] border bg-surface p-2.5 text-left', selected === t.id ? 'border-primary' : 'border-line hover:border-primary-soft', canMove && 'cursor-grab')}
                 >
                   <span className="flex flex-wrap gap-[5px]">
                     {t.priority !== 'none' ? <span className={cx('rounded-[5px] px-1.5 py-px text-[10.5px] font-bold', pr.tone)}>{pr.label}</span> : null}
@@ -83,7 +83,7 @@ export function BoardView({ tasks, me, today, now, selected, canMove, onOpen, on
                     </span>
                   ) : null}
                   <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
-                    <span className={cx('font-semibold', due.tone === 'overdue' ? 'text-danger' : due.tone === 'soon' ? 'text-[#B45309] dark:text-warning' : due.tone === 'done' ? 'text-success' : '')}>{due.label}</span>
+                    <span className={cx('font-semibold', due.tone === 'overdue' ? 'text-danger' : due.tone === 'soon' ? 'text-warning dark:text-warning' : due.tone === 'done' ? 'text-success' : '')}>{due.label}</span>
                     <span className="min-w-0 flex-1 truncate">{due.tone === 'overdue' ? `Overdue${meta ? ` · ${meta}` : ''}` : meta}</span>
                     {t.assignee_name ? (
                       <span title={t.assignee_id === me ? 'You' : t.assignee_name} className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-selection text-[9px] font-bold text-primary">
@@ -116,7 +116,7 @@ function ColumnAdd({ label, onAdd }: { label: string; onAdd: (title: string) => 
       }}
       aria-label={`Add a task to ${label}`}
       placeholder="+ Task title…"
-      className="h-[30px] shrink-0 rounded-[8px] border border-dashed border-[#B8C1DA] bg-transparent px-2 text-[12px] text-ink outline-none focus:border-solid focus:border-primary focus:bg-surface dark:border-line"
+      className="h-[30px] shrink-0 rounded-[8px] border border-dashed border-primary-soft bg-transparent px-2 text-[12px] text-ink outline-none focus:border-solid focus:border-primary focus:bg-surface dark:border-line"
     />
   );
 }

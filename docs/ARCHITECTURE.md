@@ -10,6 +10,18 @@
 | **pdf-worker** (`electron/workers`) | PDF Studio's engine: PDFium (WebAssembly) for one open document | utility process per document, no network; reads only the one file main names |
 | **local-ai-worker** (`electron/workers`) | Local AI: llama.cpp (node-llama-cpp) with the default model, GPU or CPU | one utility process, started on first request, ended after 10 idle minutes or at sign-out; no network; loads only the verified model file main names. Main (`services/local-ai/host.ts`) holds the catalog — the server registry (`/api/ai/local/catalog`, G-02), the signed CDN only for a server without that route — and downloads; 3 crashes in 10 minutes stop it until **Restart**. The windows use `src/core/local-ai.ts` (status, models, `askLocal` streaming by request id); Settings → Local AI and the Ask panel's **On this computer** are its screens; `scripts/local-ai-catalog.mjs` makes and signs the CDN catalog |
 
+**The composition root.** `electron/main/index.ts` creates the services and accounts and hands each area its wiring
+in `electron/main/wiring/` (audit D-G13): `navigation.ts` (deep links, notification and tray clicks, the desks that
+open windows), `status.ts` (the status snapshot and `emitStatus`), `presence.ts` (attendance and chat presence),
+`tray.ts`, `webchat.ts` (website chats ringing like calls), `live-desk.ts`, `quick-ask.ts`, `marketing.ts`,
+`access.ts` (what the person may open, the menu, what the caches keep), `session.ts` (signing in, out and back in, and
+the server being reachable again), `ipc.ts` (app://, the API proxy, the IPC router and its context), `accounts.ts`
+(accounts side by side, background accounts, WorkSuite OS sign-in) and `lifecycle.ts`. Each takes what it reads as a typed `…Deps` object: values that already exist are
+passed as they are; one that is set later or reassigned is a getter (and a setter when the wiring writes it), so it
+reads the current value as the inline code did. The IPC contract is split the same way: `shared/ipc/contract.ts`
+spreads `contract-*.ts` by area (transfers, documents, remote control, Meet, the desks, offline, ringing, mail) and
+its schemas and `ch` are in `contract-kit.ts`; `shared/types.ts` re-exports `shared/types-*.ts`.
+
 Utility processes are run by the `ServiceSupervisor`: pinged every 10 s,
 restarted with exponential backoff (1 s → 5 min), marked FAILED after 5
 restarts in 10 minutes, shown in Diagnostics and the tray. A helper failing
@@ -197,9 +209,17 @@ bar and sidebar, `bg-navy`) is the same navy in both themes; it is the frame, no
   `text-ink`/`-2`/`-3`, `border-line`, `bg-rail` for a module's narrow rail, `bg-warning-bg` with
   `text-warning-ink` for a warning banner, the `success`/`warning`/`danger` tones for status). Each token has its
   dark value, so a screen built from them is right in both themes with no `dark:` variant.
-- A hex colour (`bg-[#FBFBFD]`, `text-[#9A4A06]`) or `bg-white` in module content is a bug unless it has its
-  `dark:` partner — and a new one should be a token instead. Data that brings its colour (an app, a calendar, a
-  person) uses `DATA_TEXT` / `avatarTone` (`src/components/ui.tsx`).
+- **No raw hex colours** (audit D-G23). Lint refuses a hex in a class (`bg-[#FBFBFD]`, `shadow-[…_#cbd5e1]`) or a
+  JSX `style` (`colors/no-raw-hex`, `build-tools/eslint-colors.mjs`). Use a token: the semantic ones above; the
+  colour families, each light and dark — `{hue}-bg` (a tint), `{hue}-ink` (words on it), `{hue}-line` (its edge) and
+  the bare hue (solid) for success, danger, warning, info, violet, teal, sky, rose, orange, amber, yellow, green,
+  red, blue and slate; `ink-4`, `muted`, `primary-soft`. Surfaces dark in both themes — the call and meeting stage,
+  ring cards, media viewers, the image and code editors, the lock screen — use the **stage** tokens (`stage`,
+  `stage-2…4`, `stage-line`, `stage-ink…ink-4`, `stage-accent`, `stage-success`…), the same in both themes. In an
+  arbitrary value use `var(--ws-…)`. Data that brings its colour (an app, a calendar, a person) uses `DATA_TEXT` /
+  `avatarTone` (`src/components/ui.tsx`), and `x.color ?? '#…'` (the person's own colour, with a default) is allowed.
+  The reviewed allow-list in `eslint.config.mjs` names the rest: other companies' marks, the website widget preview,
+  email content, a QR code, text drawn onto a picture.
 - The exceptions are deliberate and few: a QR code is black on a white plate in both themes (a camera needs the
   contrast — `QrCode` in `src/modules/chat/channels/LinkPhone.tsx`), and so is content somebody else designed.
 
@@ -224,6 +244,24 @@ so focus, Space, labels, form values and screen-reader state come from the platf
 
 Clicks, double-clicks and Space on the box do not reach the element around it, so ticking a row never opens it.
 Size and colour come from the component; pass only layout classes (margins, opacity) in `className`.
+
+## Stat cards
+
+Every KPI, stat or summary figure is `StatCard`, laid out by `StatGrid` (`src/components/StatCard.tsx`, styles
+`.ws-stat*` and the `--ws-tone-*` tokens in `src/styles.css`). A module's own `Kpi` / `Tile` / `Figure` / `Stat`
+helpers are thin wrappers that map their old tone names onto it; new screens use `StatCard` directly.
+
+- `label`, `value`, `sub` — the label (medium, muted), the figure (tabular, in the text colour, never the tone's),
+  the muted line under it. A figure of 0, "LKR 0.00", "—" or nothing is drawn muted; `empty` says so explicitly.
+- `icon` (a name from `Icon.tsx`) and `tone` — `blue`, `violet`, `green`, `amber`, `red`, `cyan` or `neutral` — draw
+  the tinted chip. The tone colours the chip only; what a card means is said by its label and icon.
+- `onClick` or `href` make it a button or a link with the focus ring and a one-pixel lift on hover (none with
+  reduced motion). A group is named by its label; a button by the label and the figure, or `ariaLabel`.
+- `trend` — `{ direction, text, good?, label? }` — a pill with an arrow and words as well as green or red.
+  `sparkline` is a slot beside the figure. `loading` keeps the label and draws a skeleton. `size` is `md` (the
+  default: 16 px in, at least 96 px tall), `sm` for a second row or a drawer, `lg` for a wallboard.
+- `StatGrid` is auto-fill columns of at least 220 px (`min` lowers it for narrow panels), 12 px apart. With a
+  `label` it is a region of that name; `role="list"` with `role="listitem"` cards for a list of figures.
 
 ## Opening documents from other modules
 
@@ -272,6 +310,37 @@ start-up a stored refresh token resumes the session; if the server is
 unreachable the cached bootstrap starts the app offline and read-only until it
 revalidates.
 
+## Desktop settings and the Settings screens
+
+Features, apps and the startup screen, per person, with the organisation's policy (docs/BACKEND.md › Desktop
+settings):
+
+- `shared/desktop-settings.ts` — the keys, the desktop's own catalogue, `resolveSettings` (managed policy › the
+  person › a default policy entry › the catalogue), `preferenceOverlay`, `migrationValues` and `startupTarget`. Pure,
+  used by both processes.
+- `electron/services/desktop-settings.ts` — the server's document per account and person in the profile database
+  (`desktop_settings:<scope>`, with `asOf`, the ETag and the changes not yet sent), refreshed with every bootstrap, on
+  `desktop.settings.changed` and on a realtime resync. IPC: `desktopSettings:get|set|refresh`, event
+  `desktopSettings:changed`.
+- **Enforcement.** `SessionController.disabledApps` takes the apps whose server slug is turned off out of
+  `visibleApps()` (the tray, the menu, windows, links, notifications), and the renderer's `appsFor` out of `app.apps`
+  (the launcher, the sidebar, search, the palette, tabs — `closeTabsForApps` closes theirs).
+  `SettingsService.setDesktopOverlay` puts managed and synced `prefs.*` (mapped by `SYNCED_PREFS`) and a feature's
+  overlay (itemLinks: links open in the browser) over the preferences, with locks, so `settings:set` refuses them and
+  every service that reads `settings.effective()` follows. The features: launcherSearch in the launcher,
+  globalShortcut in `globalKeysOn` (main), itemLinks in the deep-link handler, officeEditing in `core/access`
+  (`office`) and `office:open` / `office:openInDesktopApp`, fileSync in `syncAllowed` and `desktop.files.sync`,
+  offlineFiles in `desktop.files.offline` and `office:readOffline|writeOffline`.
+- **Startup.** After the tabs are restored, `core/startup.ts` opens `startup.screen` in front (`last` keeps the tab
+  in front; an app turned off or not given opens Home and says so).
+- **Settings UI.** `src/components/SettingsKit.tsx` (D-G09; `modules/settings/kit.tsx` re-exports it) is the one look
+  for every settings screen, in Settings and in each module's own settings: `SectionHeader` (`level={1}` on a module's
+  page), `SettingsGroup` cards (`list` for a card that is a list, `label` when it has no title), `SettingRowFrame` for
+  a row laid out its own way, `SettingsNavItem`/`SettingsNavGroup` for a settings rail,
+  `SettingsGroup` cards, `SettingRow` (label, description, control; `LockBadge` "Managed by your organization" with the
+  reason as tooltip; `ResetButton`), `RadioCards`, and the sidebar's search over `search-index.ts`. Rows written
+  straight under a header are joined into cards by `styles.css` (`[data-setting-row][data-loose]`).
+
 ## Server API families
 
 `probeServer` decides per server:
@@ -309,6 +378,15 @@ Vault-sealed, so the database file alone gives nothing to guess against.
 - `modules/` — one folder per desktop module with a validated manifest
   (`modules/registry.ts`, §15). Modules are lazy chunks; each renders inside
   its own error boundary.
+- **Module boundaries (audit D-G08).** A module does not import another module's files: the lint rule
+  `boundaries/no-module-imports` (`build-tools/eslint-boundaries.mjs`) refuses it. What modules share is in
+  `src/components` — the page kit (`PageKit.tsx`: page heads, panels, sheets, buttons, fields, tables; was `hr/parts`),
+  `ListKit.tsx` (was `inventory/parts`), `RecordKit.tsx` (was `finance/parts`), `FormKit.tsx` (Garage's form pieces,
+  used by the hotel desk), `CardKit.tsx` (was `account/parts`), `CallKit.tsx` (was `calls/parts`), `ConsoleKit.tsx`
+  (Assets' and Hosting's console look) and `ReportKit.tsx` (dashboard money and bars) — or in `src/core` and `shared/`.
+  The pairs that still import each other (an API client, a whole screen) are a reviewed allow-list in
+  `build-tools/module-boundaries.mjs`, each with why; `tests/unit/build/module-boundaries.test.ts` fails on an entry
+  nothing needs, so the list only shrinks.
 - A module's documents leave through the download manager by what they are,
   never by a path: `transfers:download` takes a typed variant (Garage's
   `garageDoc` — a check-in sheet, an estimate, a work order sheet, a delivery
@@ -319,8 +397,16 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   `pms:download` (`shared/pms-files.ts`), with the same shape and the
   `desktop.downloads` check repeated in its handler.
 - READ_CACHE is declared in a module's manifest and served by the main
-  process for the prefixes in `CACHE_PREFIXES` (`electron/main/index.ts`),
+  process for the prefixes in `CACHE_PREFIXES` (`electron/main/wiring/access.ts`),
   per module, so an app taken away takes its saved answers with it.
+- Read-only offline (D-G14): Finance, Expenses, Marketing, Cheque Manager and
+  Recruitment keep their reads by the allow-lists in `shared/offline-reads.ts`
+  (never share links, exports, files, webhooks, credentials or one-time print
+  checks). `src/core/offline-read.ts` refuses their writes offline before they
+  are sent (`OFFLINE_READ_ONLY`), and `OfflineReadOnlyBanner`
+  (`src/components/OfflineReadOnly.tsx`) says "Offline · read-only" with the
+  "as of" time of the oldest copy shown. Board declares its vault
+  (`PARTIAL_WRITE`: packs read offline, comments and circular responses queued).
 - Garage (`modules/garage`) is a shell with a rail (`GarageShell.tsx`), the
   day's screens, the Job 360° (`JobCard.tsx`) whose heavier tabs are lazy
   chunks under `job/`, the check-in, vehicles, customers, reports and the
@@ -364,7 +450,7 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   (`routes.ts`), so a deep link, a notification's link and a window's route
   open the same screen. Offline it reads the rack and lists from READ_CACHE
   (per property: `shared/pms-cache.ts`, matched by pattern in
-  `electron/main/index.ts`) and refuses every write. The desk's hardware is
+  `electron/main/wiring/ipc.ts`) and refuses every write. The desk's hardware is
   reached through `devices.ts`, a seam of typed providers ("no device" and
   the OS print dialog ship); printed cards, receipts and reports are laid out
   in `print.ts` from the server's data and printed with no script and no
@@ -411,7 +497,7 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   registrations and attendees. It never sees the key: it asks the main
   process to scan (`eventdesk:scan`) and reads the desk's status, queue and
   offline search over IPC (`desk.ts`). READ_CACHE keeps its options, the
-  events and their gates (`eventsCached`, matched in `electron/main/index.ts`)
+  events and their gates (`eventsCached`, matched in `electron/main/wiring/ipc.ts`)
   so a desk opened offline still knows what the person may do; someone who
   loses the Events app loses their copies, and the desk does nothing for them.
 - POS (`modules/pos`, `electron/services/pos-*.ts`, `shared/pos.ts`): this computer as a paired till. The main
@@ -608,6 +694,34 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   printed here are stamped (`labels/printed`); a licence names the Expense subscription paying for it
   (`licenses/{id}/subscription`, list from `/api/expense/subscriptions`); a consumable kept in Inventory moves at a
   warehouse (`warehouse_id`, list from `/api/inventory/warehouses`).
+- Hosting & Domains (`modules/hosting`, main process `electron/services/hosting-alerts.ts`, rules in
+  `shared/hosting.ts`; Hosting & Domains SRS v1.0 HDM-DSK-01…05, the desktop boards D-01…D-08) over `/api/hosting`
+  (the server's `app/Modules/Hosting`). `api.ts` reads the controllers' own shapes: `{status, message, data}`, a list
+  as `{<key>: [...], summary, meta: {total, page, per_page, pages, sort}}` (`pageOf`), one domain or server with what
+  its page shows, the overview as `Overview::build` writes it. The shell (`HostingShell.tsx`,
+  `/hosting?tab=overview|domains|expiring|dns|certificates|servers|monitors|costs|accounts|history|new|register|import|
+  reports`; one domain as `/hosting?domain=<id>&view=overview|dns|certificates|monitors|costs|activity`, one server as
+  `/hosting?server=<id>`, a certificate selected with `&certificate=<id>` — the web's deep links) has an 88 px rail
+  (`Rail.tsx`), ⌘N / ⌘⇧S / F5 / Alt+1…0 and command palette entries while it is open; domains and servers open in
+  tabs or record windows (`openInWindow`). Lists tick rows for `POST bulk` (`Bulk.tsx`) and have a right-click menu
+  (`ContextMenu`); Export is the server's file (`export/{kind}?format=csv|xlsx`, saved with `files:saveText` or, for a
+  workbook, `office:saveCopy`), the renewal schedule prints from `print/renewals` with `print:print`, and an import
+  file is read with `assets:openFile` and sent as multipart to `import/preview` / `import/apply` (`Import.tsx`).
+  Links are picked from `domains/lookups` — the row's own company (`Links.tsx`, `ServerForm.tsx`). The DNS editor
+  (`DnsEditor.tsx`) checks a record by type and the CNAME rule (`recordProblem`) before the server checks it again,
+  sends `host` and, on a change or delete, the record as it was seen (`was`), shows the fresh copy a refusal sends
+  (`refusedCopy`), compares the copy with public resolvers (`domains/{id}/lookup`) and exports the copy as BIND
+  (`toBind`). Renew, the transfer code, register and power off answer 428 `errors.step_up` until the same request
+  carries `current_password` or `totp_code`: `withStepUp` (`StepUp.tsx`) asks and sends it again. Power off needs
+  the server's name typed (`confirmsName`). "Explain with AI" is `GET certificates/{id}/explain` or
+  `GET domains/{id}/explain?record=` → `{text, ai}` and hides itself for the session on a 404. Routes an older
+  server lacks go through `orNull`: a 404 is "needs a server update". Offline the READ_CACHE keeps the GETs
+  `hostingCached()` allows — never a transfer code, a live lookup, metrics or an export — `ReadOnly` turns every
+  change off, and the banner gives the oldest saved answer's time (`asOf`, from the proxy's `x-ws-cached-at`). The
+  alerts poll the domains, certificates and servers expiring within 7 days, the monitors down (`state=down`) and the
+  overview (`monitors.down`) every 10 minutes while signed in, raise each once (per subject and rung, per outage a
+  day) and feed the tray's Hosting line and badge (`hostingBadge`), and — through the status snapshot's
+  `unread.hosting` — the Dock icon macOS gets painted (`core/dock-badge`).
 - Cheque Manager (`modules/cheque`, main process `electron/services/cheque-print.ts` and the shared
   `electron/services/core-print.ts`, data and schemas in `shared/cheque.ts`; Cheque SRS v1.0, the desktop boards
   D01–D06): the certified print station over `/api/cheque` as the server's `docs/cheque-api.md` describes it. The

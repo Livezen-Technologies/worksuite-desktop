@@ -69,7 +69,7 @@ export function PointerLayer({ sharer }: { sharer: CallPerson }) {
               title={t.label}
               aria-pressed={tool === t.id}
               onClick={() => setTool(t.id)}
-              className={cx('no-drag rounded-[9px] p-1.5', tool === t.id ? 'bg-[#3B5BDB] text-white' : 'text-[#AFC0E8] hover:bg-white/10')}
+              className={cx('no-drag rounded-[9px] p-1.5', tool === t.id ? 'bg-brand text-white' : 'text-stage-accent hover:bg-white/10')}
             >
               <Icon name={t.icon} size={17} />
             </button>
@@ -83,7 +83,7 @@ export function PointerLayer({ sharer }: { sharer: CallPerson }) {
               aria-pressed={color === c}
               onClick={() => setColor(c)}
               style={{ background: c }}
-              className={cx('no-drag my-0.5 h-4.5 w-4.5 rounded-full', color === c && 'ring-2 ring-white ring-offset-2 ring-offset-[#070C1A]')}
+              className={cx('no-drag my-0.5 h-4.5 w-4.5 rounded-full', color === c && 'ring-2 ring-white ring-offset-2 ring-offset-primary')}
             />
           ))}
         </div>
@@ -107,7 +107,7 @@ function StageButton({ icon, pressed, disabled, title, onClick, children }: { ic
       aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
-      className={cx('no-drag flex h-8 items-center gap-1.5 rounded-[8px] px-2.5 font-semibold shadow-lg disabled:opacity-40', pressed ? 'bg-[#3B5BDB] text-white' : 'bg-[rgba(11,18,38,.85)] text-[#E6ECFA] hover:bg-[rgba(22,37,79,.95)]')}
+      className={cx('no-drag flex h-8 items-center gap-1.5 rounded-[8px] px-2.5 font-semibold shadow-lg disabled:opacity-40', pressed ? 'bg-brand text-white' : 'bg-[rgba(11,18,38,.85)] text-stage-ink hover:bg-[rgba(22,37,79,.95)]')}
     >
       <Icon name={icon} size={15} />
       {children}

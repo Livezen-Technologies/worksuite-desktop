@@ -41,11 +41,11 @@ export function AssetsRail({ view, counts, access, cached, onPick }: {
         type="button"
         aria-current={on ? 'page' : undefined}
         onClick={(e: MouseEvent) => onPick(id, e.metaKey || e.ctrlKey)}
-        className={cx('flex h-[30px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left', on ? 'bg-[#EEF1FD] font-bold text-[#3B5BDB] dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
+        className={cx('flex h-[30px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left', on ? 'bg-selection font-bold text-brand-soft dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
       >
         <Icon name={icon} size={15} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {n ? <span className="shrink-0 rounded-[9px] bg-[#EAEDFB] px-1.5 text-[11px] font-bold text-[#23349E] tabular-nums dark:bg-primary/15 dark:text-primary">{n}</span> : null}
+        {n ? <span className="shrink-0 rounded-[9px] bg-info-bg px-1.5 text-[11px] font-bold text-primary tabular-nums dark:bg-primary/15 dark:text-primary">{n}</span> : null}
       </button>
     );
   };
@@ -53,7 +53,7 @@ export function AssetsRail({ view, counts, access, cached, onPick }: {
   const s = access.staff;
 
   return (
-    <nav aria-label="Assets" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="Assets" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="px-4 pt-3.5 pb-1 text-[15px] font-extrabold">Assets</div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pt-1 pb-2.5 scroll-thin">
         {head('Overview')}
@@ -81,7 +81,7 @@ export function AssetsRail({ view, counts, access, cached, onPick }: {
         {item('import', 'Import & export', 'upload', access.manage)}
         {item('labels', 'Labels', 'printer', access.assign || access.manage)}
         {item('settings', 'Settings', 'settings', access.settings || access.manage)}
-        {cached ? <div className="mx-1 mt-3 rounded-[8px] bg-[#EFFAF4] px-2.5 py-2 text-[11px] text-[#13734A] dark:bg-success/10 dark:text-success">{`Offline-ready: ${cached} assets cached. Read-only until you reconnect.`}</div> : null}
+        {cached ? <div className="mx-1 mt-3 rounded-[8px] bg-slate-bg px-2.5 py-2 text-[11px] text-success dark:bg-success/10 dark:text-success">{`Offline-ready: ${cached} assets cached. Read-only until you reconnect.`}</div> : null}
       </div>
       <div className="border-t border-line px-4 py-2 text-[11px] text-ink-3">Open in new tab · ⌘-click</div>
     </nav>

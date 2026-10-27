@@ -7,12 +7,14 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { Empty, input, Kpi, PageHead, Panel, Seg } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { Empty, input, Kpi, Seg } from '../../components/PageKit';
+import { StatGrid, type StatTone } from '../../components/StatCard';
+import { Pill } from '../../components/ListKit';
 import { can, longDate, MONTHS, refusal, shortDate, type Company } from './api';
-import { ConfirmSheet, LoadFailed, Notice } from './parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
 import type { FinanceView, ScreenProps } from './Rail';
 import { applyPreset, calendarDay, endOfDay, expandPreset, fetchMembers, fetchSettings, forbiddenWhy, KS, levelChoices, reachesNothing, setArea, type AccessCell, type Area, type Member, type Preset, type ProfileField } from './setup';
+import { SectionHeader, SettingRowFrame, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Finance's settings: the company's accounting profile, and — for those who
@@ -37,22 +39,24 @@ export default function Settings({ company, onGo }: ScreenProps) {
   const shown: Tab = mayGrant ? tab : 'profile';
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
-      <PageHead
+      <SectionHeader
+        level={1}
         title="Settings"
-        sub="Finance keeps no installation-wide settings. A company's base currency and financial year are set once when its books are opened, and its account roles on the chart of accounts."
-      >
-        {mayGrant ? (
-          <Seg<Tab>
-            label="Settings"
-            value={shown}
-            onChange={setTab}
-            options={[
-              { id: 'profile', label: 'Accounting profile' },
-              { id: 'access', label: 'Area access' },
-            ]}
-          />
-        ) : null}
-      </PageHead>
+        hint="Finance keeps no installation-wide settings. A company's base currency and financial year are set once when its books are opened, and its account roles on the chart of accounts."
+        actions={
+          mayGrant ? (
+            <Seg<Tab>
+              label="Settings"
+              value={shown}
+              onChange={setTab}
+              options={[
+                { id: 'profile', label: 'Accounting profile' },
+                { id: 'access', label: 'Area access' },
+              ]}
+            />
+          ) : null
+        }
+      />
       {shown === 'access' ? <AreaAccess company={company} /> : <Profile company={company} onGo={onGo} />}
     </div>
   );
@@ -98,18 +102,18 @@ function Profile({ company, onGo }: { company: Company; onGo: (v: FinanceView, e
       </Notice>
     );
   }
-  const counts: Array<[string, number | undefined, FinanceView]> = [
-    ['Accounts', d.counts?.accounts, 'accounts'],
-    ['Journals', d.counts?.journals, 'journals'],
-    ['Posted', d.counts?.posted, 'journals'],
-    ['Tax codes', d.counts?.tax_codes, 'tax'],
-    ['Financial years', d.counts?.years, 'periods'],
+  const counts: Array<[string, number | undefined, FinanceView, string, StatTone]> = [
+    ['Accounts', d.counts?.accounts, 'accounts', 'list', 'blue'],
+    ['Journals', d.counts?.journals, 'journals', 'notebook', 'violet'],
+    ['Posted', d.counts?.posted, 'journals', 'check-check', 'green'],
+    ['Tax codes', d.counts?.tax_codes, 'tax', 'percent', 'amber'],
+    ['Financial years', d.counts?.years, 'periods', 'calendar-days', 'cyan'],
   ];
   return (
     <>
-      <Panel title={`Accounting profile · ${d.company.name}`} bodyClassName="flex flex-col">
+      <SettingsGroup title={`Accounting profile · ${d.company.name}`} className="!mb-0">
         {(d.profile ?? []).map((f) => (
-          <div key={f.key} className="flex items-start gap-3 border-b border-line/60 px-3.5 py-2.5 text-[13px] last:border-b-0">
+          <SettingRowFrame key={f.key} className="flex items-start gap-3 !py-2.5 text-[13px]">
             <span className="w-[190px] shrink-0 text-ink-3">{f.label}</span>
             <span className="flex min-w-0 flex-1 flex-col">
               <b className={profileValue(f) === null ? 'font-medium text-ink-3' : 'text-ink'}>{profileValue(f) ?? 'Not set'}</b>
@@ -121,28 +125,28 @@ function Profile({ company, onGo }: { company: Company; onGo: (v: FinanceView, e
                 <Icon name="lock" size={11} /> Fixed
               </span>
             )}
-          </div>
+          </SettingRowFrame>
         ))}
-      </Panel>
+      </SettingsGroup>
 
-      <div className="grid grid-cols-5 gap-2.5">
-        {counts.map(([label, n, go]) => (
-          <Kpi key={label} label={label} value={n ?? 0} onClick={() => onGo(go)} />
+      <StatGrid min={180}>
+        {counts.map(([label, n, go, icon, tone]) => (
+          <Kpi key={label} label={label} value={n ?? 0} icon={icon} tone={tone} onClick={() => onGo(go)} />
         ))}
-      </div>
+      </StatGrid>
 
-      <Panel
+      <SettingsGroup
         title="Default accounts"
-        sub="The accounts the posting engine reaches for by name. An unmapped one is not cosmetic — it is a posting that will refuse later. Nominate them on the chart of accounts."
-        action={
+        className="!mb-0"
+        description="The accounts the posting engine reaches for by name. An unmapped one is not cosmetic — it is a posting that will refuse later. Nominate them on the chart of accounts."
+        actions={
           <button type="button" className="text-[12.5px] font-semibold text-primary hover:underline" onClick={() => onGo('accounts')}>
             Chart of accounts
           </button>
         }
-        bodyClassName="flex flex-col"
       >
         {(d.roles ?? []).map((r) => (
-          <div key={r.role} className="flex items-center gap-3 border-b border-line/60 px-3.5 py-2 text-[13px] last:border-b-0">
+          <SettingRowFrame key={r.role} className="flex items-center gap-3 !py-2 text-[13px]">
             <span className="w-[190px] shrink-0 text-ink-3">{r.label}</span>
             <span className="min-w-0 flex-1 truncate">
               {r.mapped ? (
@@ -150,13 +154,13 @@ function Profile({ company, onGo }: { company: Company; onGo: (v: FinanceView, e
                   <span className="font-mono text-[12px] text-ink-3">{r.code}</span> {r.name}
                 </>
               ) : (
-                <span className="text-[#9A4A06] dark:text-warning">Not mapped</span>
+                <span className="text-warning-ink">Not mapped</span>
               )}
             </span>
-            <Icon name={r.mapped ? 'check-circle' : 'warning'} size={15} className={cx('shrink-0', r.mapped ? 'text-success' : 'text-[#9A4A06] dark:text-warning')} />
-          </div>
+            <Icon name={r.mapped ? 'check-circle' : 'warning'} size={15} className={cx('shrink-0', r.mapped ? 'text-success' : 'text-warning-ink')} />
+          </SettingRowFrame>
         ))}
-      </Panel>
+      </SettingsGroup>
     </>
   );
 }
@@ -257,11 +261,12 @@ function AreaAccess({ company }: { company: Company }) {
       </div>
 
       {rows.length === 0 ? (
-        <div className="rounded-[12px] border border-line bg-surface">
+        <SettingsGroup>
           <Empty text={find.trim() ? 'Nobody matches that.' : 'Nobody has access to this company’s books yet.'} />
-        </div>
+        </SettingsGroup>
       ) : (
-        <div className="overflow-x-auto rounded-[12px] border border-line bg-surface">
+        <SettingsGroup>
+          <div className="overflow-x-auto">
           <div style={{ minWidth: 28 + 240 + areas.length * (AREA_W + 10) }}>
             <div className="flex gap-2.5 border-b border-line bg-ground px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
               {/* Sticky, or scrolling right loses whose row you are on. */}
@@ -289,7 +294,8 @@ function AreaAccess({ company }: { company: Company }) {
               />
             ))}
           </div>
-        </div>
+          </div>
+        </SettingsGroup>
       )}
 
       {asking ? <PresetSheet m={asking.m} p={asking.p} areas={areas} busy={busy === asking.m.user_id} onYes={() => void preset(asking.m, asking.p)} onClose={() => setAsking(null)} /> : null}
@@ -385,7 +391,7 @@ function PersonRow({
                   ) : null}
                   <span className="flex flex-wrap items-center gap-1 empty:hidden">
                     {cell.granted !== null || cell.via === 'suspended' ? <Pill tone={LEVEL_TONE[cell.level] ?? 'grey'}>{word(cell.level)}</Pill> : null}
-                    {cell.via === 'company-grant' ? <span className="text-[11px] font-semibold text-[#9A4A06] dark:text-warning">narrowed</span> : null}
+                    {cell.via === 'company-grant' ? <span className="text-[11px] font-semibold text-warning-ink dark:text-warning">narrowed</span> : null}
                     {cell.via === 'suspended' ? <span className="text-[11px] font-semibold text-danger">suspended</span> : null}
                     {cell.expires_at ? <Pill tone="amber">until {shortDate(calendarDay(cell.expires_at))}</Pill> : null}
                   </span>

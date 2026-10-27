@@ -225,7 +225,7 @@ export default function Calendar({ date, mode, provider, active, onNav, onPrint 
           ) : null}
           <div role="group" aria-label="View" className="flex overflow-hidden rounded-[8px] border border-line">
             {(['day', 'week'] as const).map((m) => (
-              <button key={m} type="button" aria-pressed={mode === m} onClick={() => onNav({ mode: m === 'week' ? 'week' : null })} className={cx('h-7 px-3 text-[12px] font-semibold', mode === m ? 'bg-[#EAEDFB] text-[#23349E] dark:bg-selection dark:text-primary' : 'bg-surface text-ink-2')}>
+              <button key={m} type="button" aria-pressed={mode === m} onClick={() => onNav({ mode: m === 'week' ? 'week' : null })} className={cx('h-7 px-3 text-[12px] font-semibold', mode === m ? 'bg-info-bg text-primary dark:bg-selection dark:text-primary' : 'bg-surface text-ink-2')}>
                 {m === 'day' ? 'Day' : 'Week'}
               </button>
             ))}
@@ -262,7 +262,7 @@ export default function Calendar({ date, mode, provider, active, onNav, onPrint 
                     const p = providers.find((x) => x.id === weekProvider);
                     return p ? column(d, d, p, (week.data?.items ?? []).filter((a) => a.local.date === d && a.status !== 'cancelled'), null) : null;
                   })}
-              {nowLine !== null && nowLine > 0 && mode === 'day' ? <div className="pointer-events-none absolute right-0 left-[52px] border-t-2 border-[#DB2777]" style={{ top: nowLine }} /> : null}
+              {nowLine !== null && nowLine > 0 && mode === 'day' ? <div className="pointer-events-none absolute right-0 left-[52px] border-t-2 border-rose" style={{ top: nowLine }} /> : null}
             </div>
             {(mode === 'day' ? day.isPending : week.isPending) ? <p className="m-0 p-3 text-[12px] text-ink-3">Reading the calendar…</p> : null}
             {mode === 'day' && day.data && !day.data.providers.length ? <p className="m-0 p-3 text-[12px] text-ink-3">Nobody works here that day.</p> : null}
@@ -310,7 +310,7 @@ export function MiniMonth({ date, onPick }: { date: string; onPick: (d: string) 
       <div className="grid grid-cols-7 gap-0.5 text-center text-[11px]">
         {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((w, i) => <span key={i} className="text-ink-3">{w}</span>)}
         {Array.from({ length: 42 }, (_, i) => addDays(start, i)).map((d) => (
-          <button key={d} type="button" onClick={() => onPick(d)} aria-pressed={d === date} className={cx('h-6 rounded-[6px] tabular-nums', d === date ? 'bg-[#23349E] font-bold text-white dark:bg-primary' : d === t ? 'font-bold text-primary' : d.slice(0, 7) === month ? 'text-ink hover:bg-subtle' : 'text-ink-3/60')}>
+          <button key={d} type="button" onClick={() => onPick(d)} aria-pressed={d === date} className={cx('h-6 rounded-[6px] tabular-nums', d === date ? 'bg-stage-primary font-bold text-white dark:bg-primary' : d === t ? 'font-bold text-primary' : d.slice(0, 7) === month ? 'text-ink hover:bg-subtle' : 'text-ink-3/60')}>
             {Number(d.slice(8))}
           </button>
         ))}

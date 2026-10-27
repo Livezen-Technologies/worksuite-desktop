@@ -3,7 +3,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnPrimary, btnSmall, Empty, input } from '../hr/parts';
+import { btnPrimary, btnSmall, Empty, input } from '../../components/PageKit';
 import { num, qty } from '../inventory/api';
 import { pick } from '../inventory/pickers';
 import { fetchOrderFull, OFFLINE_WRITE, refreshPurchase, usePurchaseCan, usePurchaseOffline } from './api';
@@ -12,6 +12,7 @@ import { fetchOrders, fetchReceipt, KB, orderAct, postReceipt, REJECT_REASONS, t
 import { Head } from './parts';
 import { PoChip } from './Purchasing';
 import { EMPTY, isOrderCode, lineDone, postLines, rcvReducer, receiveBody, totals, type RcvLine } from './scan';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Receiving by scan (S-06; the "Desktop receiving" design; SRS-PUR-001 G-21, G-07). One box takes every scan — the
@@ -164,7 +165,7 @@ export default function Receive({ org, orderId, onOrder, onReceipt, onOpenOrder 
         ) : null}
       </Head>
 
-      <div className="flex min-h-[64px] items-center gap-3.5 rounded-[10px] bg-[#0f1b3d] px-[18px] py-2 text-white">
+      <div className="flex min-h-[64px] items-center gap-3.5 rounded-[10px] bg-navy px-[18px] py-2 text-white">
         <input
           ref={scanRef}
           value={code}
@@ -177,20 +178,20 @@ export default function Receive({ org, orderId, onOrder, onReceipt, onOpenOrder 
           }}
           placeholder={s.order ? 'Scan an item or a serial' : 'Scan the purchase order'}
           aria-label={s.order ? 'Scan an item or a serial' : 'Scan the purchase order'}
-          className="h-9 w-[260px] rounded-[8px] border border-white/20 bg-white/10 px-3 text-[14px] text-white placeholder:text-[#c9d1ea] outline-none focus:border-[#748ffc]"
+          className="h-9 w-[260px] rounded-[8px] border border-white/20 bg-white/10 px-3 text-[14px] text-white placeholder:text-navy-ink outline-none focus:border-stage-primary-2"
           autoComplete="off"
           spellCheck={false}
         />
         <div className="flex min-w-0 flex-1 flex-col" role="status" aria-live="polite">
-          <span className={cx('truncate text-[15px] font-semibold', s.message && !s.message.ok && 'text-[#ffb4a2]')}>{s.message?.text ?? (s.order ? 'Ready — scan the first item.' : 'Ready for a scan.')}</span>
-          {s.order ? <span className="text-[12px] text-[#c9d1ea]">{`${t.accepted + t.rejected} of ${t.expected} counted${t.rejected ? ` · ${t.rejected} turned away` : ''}${t.held ? ` · ${t.held} on hold` : ''}`}</span> : null}
+          <span className={cx('truncate text-[15px] font-semibold', s.message && !s.message.ok && 'text-stage-danger')}>{s.message?.text ?? (s.order ? 'Ready — scan the first item.' : 'Ready for a scan.')}</span>
+          {s.order ? <span className="text-[12px] text-navy-ink">{`${t.accepted + t.rejected} of ${t.expected} counted${t.rejected ? ` · ${t.rejected} turned away` : ''}${t.held ? ` · ${t.held} on hold` : ''}`}</span> : null}
         </div>
-        <span className="hidden text-[13px] text-[#c9d1ea] md:inline">F2 mark damaged · F3 quality hold</span>
+        <span className="hidden text-[13px] text-navy-ink md:inline">F2 mark damaged · F3 quality hold</span>
       </div>
 
       {orderId && order.isLoading ? <Spinner /> : null}
       {orderId && order.error ? <ErrorNote error={order.error} onRetry={() => void order.refetch()} /> : null}
-      {d && chain.status === 'pending' ? <span className="rounded-[8px] bg-[#FFF4E0] px-3 py-2 text-[12.5px] font-semibold text-[#9A4A06]">{d.order.po_number} is still waiting on approval; it cannot be received yet.</span> : null}
+      {d && chain.status === 'pending' ? <span className="rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] font-semibold text-warning-ink">{d.order.po_number} is still waiting on approval; it cannot be received yet.</span> : null}
       {drafts.length ? (
         <span className="rounded-[8px] bg-subtle px-3 py-2 text-[12.5px] text-ink-2">
           {drafts.map((g) => g.grn_number).join(', ')} {drafts.length === 1 ? 'is a draft receipt' : 'are draft receipts'} on this order, not yet posted.{' '}
@@ -202,7 +203,7 @@ export default function Receive({ org, orderId, onOrder, onReceipt, onOpenOrder 
       ) : null}
       {offline ? <span className="text-[12.5px] text-ink-3">{OFFLINE_WRITE}</span> : null}
       {done ? (
-        <span className="rounded-[8px] bg-[#E4F4EA] px-3 py-2 text-[12.5px] font-semibold text-[#145C39]">
+        <span className="rounded-[8px] bg-success-bg px-3 py-2 text-[12.5px] font-semibold text-success-ink">
           {done.number ?? 'The receipt'} is posted.{' '}
           <button type="button" className="text-primary hover:underline" onClick={() => onReceipt(done.id)}>
             Open it
@@ -230,7 +231,7 @@ export default function Receive({ org, orderId, onOrder, onReceipt, onOpenOrder 
                     <span className="w-[64px] text-ink-3 tabular-nums">{x.at}</span>
                     <span className="w-[140px] truncate font-mono text-ink">{x.code}</span>
                     <span className="min-w-0 flex-1 truncate text-ink-2">{x.name ?? ''}</span>
-                    <span className={cx('shrink-0', x.outcome === 'refused' || x.outcome === 'rejected' ? 'text-danger' : x.outcome === 'held' ? 'text-[#9A4A06] dark:text-warning' : 'text-[#166534] dark:text-success')}>{x.outcome === 'refused' ? 'refused' : x.text}</span>
+                    <span className={cx('shrink-0', x.outcome === 'refused' || x.outcome === 'rejected' ? 'text-danger' : x.outcome === 'held' ? 'text-warning-ink dark:text-warning' : 'text-success-ink dark:text-success')}>{x.outcome === 'refused' ? 'refused' : x.text}</span>
                   </span>
                 ))}
               </div>
@@ -267,22 +268,22 @@ function LineCard({ l, active, onFocus, onSet }: { l: RcvLine; active: boolean; 
   const pct = l.expected ? Math.min(100, (counted / l.expected) * 100) : 100;
   const state = l.hold ? 'quality hold' : complete ? 'complete' : active ? 'scanning' : '';
   return (
-    <div data-line={l.lineId} onClick={onFocus} className={cx('flex flex-col gap-1 rounded-[10px] bg-surface p-3.5', active ? 'border-2 border-[#23349e]' : 'border border-line')}>
+    <div data-line={l.lineId} role="button" tabIndex={0} aria-pressed={active} onKeyDown={clickOnKey} onClick={onFocus} className={cx('flex flex-col gap-1 rounded-[10px] bg-surface p-3.5', active ? 'border-2 border-primary' : 'border border-line')}>
       <div className="flex items-center gap-2">
         <b className="min-w-0 flex-1 truncate text-ink">{l.name}</b>
-        <span className={cx('text-[12px]', l.hold ? 'text-[#9A4A06] dark:text-warning' : complete ? 'text-[#166534] dark:text-success' : 'text-[#23349e] dark:text-primary')}>{state}</span>
+        <span className={cx('text-[12px]', l.hold ? 'text-warning-ink dark:text-warning' : complete ? 'text-success-ink dark:text-success' : 'text-primary dark:text-primary')}>{state}</span>
       </div>
       <span className="truncate text-[12px] text-ink-3">{[l.code, l.bin ? `bin ${l.bin}` : null, l.tracking !== 'none' ? l.tracking : null].filter(Boolean).join(' · ')}</span>
       <span className="mt-1 text-[28px] font-semibold text-ink tabular-nums">
         {counted} <span className="text-[15px] text-ink-3">/ {qty(l.expected, l.unit)}</span>
       </span>
       <span className="h-2 rounded-full bg-subtle">
-        <span className={cx('block h-2 rounded-full', l.hold ? 'bg-[#D97706]' : 'bg-[#23349e]')} style={{ width: `${pct}%` }} />
+        <span className={cx('block h-2 rounded-full', l.hold ? 'bg-badge' : 'bg-stage-primary')} style={{ width: `${pct}%` }} />
       </span>
       {l.rejected ? <span className="text-[12px] text-danger">{l.rejected} rejected · {REJECT_REASONS.find((r) => r.value === l.reason)?.label.toLowerCase() ?? l.reason}</span> : null}
-      {l.hold ? <span className="text-[12px] text-[#9A4A06] dark:text-warning">Into QC hold until tested</span> : null}
+      {l.hold ? <span className="text-[12px] text-warning-ink dark:text-warning">Into QC hold until tested</span> : null}
       {active ? (
-        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-2" onClick={(e) => e.stopPropagation()}>
+        <div role="presentation" className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-2" onClick={(e) => e.stopPropagation()}>
           <label className="flex items-center gap-1">
             Kept
             <input className={input + ' !h-[26px] !w-[56px] text-right tabular-nums'} value={String(l.accepted)} onChange={(e) => onSet({ accepted: Number(e.target.value) || 0 })} aria-label={`Kept ${l.code ?? l.name}`} disabled={l.tracking === 'serial'} />

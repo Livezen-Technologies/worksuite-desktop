@@ -57,7 +57,7 @@ export function MonthCal({ year, month, marked, today, selected, onPick }: { yea
                 return (
                   <td key={j} className="p-0.5">
                     <button type="button" disabled={!onPick} onClick={() => onPick?.(key)} aria-label={`${d}${has ? ', meeting' : ''}`}
-                      className={cx('h-[26px] w-full rounded-[6px]', key === today ? 'bg-ink text-white' : key === selected ? 'ring-2 ring-primary' : has ? 'bg-[#EEF1FD] font-bold text-primary dark:bg-selection' : 'text-ink-2')}>
+                      className={cx('h-[26px] w-full rounded-[6px]', key === today ? 'bg-ink text-white' : key === selected ? 'ring-2 ring-primary' : has ? 'bg-selection font-bold text-primary dark:bg-selection' : 'text-ink-2')}>
                       {d}
                     </button>
                   </td>

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/core/app-state', () => ({ app: { get: () => ({}), subscribe: () => () => undefined }, organizationName: () => 'Livezen' }));
 import { addDays, hoursLabel, minutesLabel, monthGrid, rangeLabel, shiftMonth, weekDays, weekStart } from '../../../src/modules/hr/dates';
-import { humanise, toneOf } from '../../../src/modules/hr/parts';
+import { humanise, toneOf } from '../../../src/components/PageKit';
 import { hrSections, webPathFor } from '../../../src/modules/hr/Rail';
 
 describe('HR days', () => {
@@ -37,12 +37,12 @@ describe('HR days', () => {
 
 describe('HR status chips', () => {
   it('colours a status by what it means', () => {
-    expect(toneOf('Approved')).toContain('145C39');
-    expect(toneOf('Pending')).toContain('9A4A06');
-    expect(toneOf('Rejected')).toContain('8C2A14');
+    expect(toneOf('Approved')).toContain('success-ink');
+    expect(toneOf('Pending')).toContain('warning-ink');
+    expect(toneOf('Rejected')).toContain('danger-ink');
     expect(toneOf('Working')).toContain('primary');
-    expect(toneOf('On leave')).toContain('5B2FA0');
-    expect(toneOf('Permanent')).toContain('0B6770');
+    expect(toneOf('On leave')).toContain('violet-ink');
+    expect(toneOf('Permanent')).toContain('teal-ink');
     expect(toneOf('Something else')).toContain('subtle');
     expect(humanise('needs_resubmission')).toBe('Needs resubmission');
   });
@@ -104,7 +104,7 @@ describe('HR part 2 helpers', () => {
 
   it('keeps a non-working day neutral, not "working" blue', () => {
     expect(toneOf('Non-working day')).toContain('subtle');
-    expect(toneOf('Working · 31m late')).toContain('9A4A06');
+    expect(toneOf('Working · 31m late')).toContain('warning-ink');
     expect(toneOf('Working')).toContain('primary');
   });
 

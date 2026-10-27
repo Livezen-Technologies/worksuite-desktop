@@ -3,6 +3,7 @@ import { updatePrefs } from '../../core/app-state';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Button, NumberField, cx } from '../../components/ui';
+import { SettingRowFrame } from '../../components/SettingsKit';
 
 /** The longest custom lock timeout without an organization limit: a day. */
 export const MAX_LOCK_MINUTES = 1440;
@@ -67,7 +68,7 @@ export function CustomTimeoutRow({ minutes, max = MAX_LOCK_MINUTES }: { minutes:
   };
 
   return (
-    <div className="@container border-b border-line py-3.5">
+    <SettingRowFrame className="@container">
       <div className="flex flex-col items-start gap-2.5 @[480px]:flex-row @[480px]:items-center @[480px]:gap-6">
         <div className="min-w-0 flex-1">
           <div className="text-[14px] font-semibold text-ink">Custom timeout</div>
@@ -111,6 +112,6 @@ export function CustomTimeoutRow({ minutes, max = MAX_LOCK_MINUTES }: { minutes:
           </span>
         </form>
       </div>
-    </div>
+    </SettingRowFrame>
   );
 }

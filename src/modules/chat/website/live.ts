@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { apiPost } from '../../../core/api';
 import { call, on } from '../../../core/bridge';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { marksWith, openConversationData, updateOpenConversation, WEBSITE, type WebsiteConversation } from './api';
 
 /**

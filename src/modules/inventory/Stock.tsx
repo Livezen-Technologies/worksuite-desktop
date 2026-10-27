@@ -2,9 +2,9 @@ import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { Empty, input, PageHead } from '../hr/parts';
+import { Empty, input, PageHead } from '../../components/PageKit';
 import { fetchStock, K, num, PER_PAGE, qty, stampWords, whole, type StockFilters, type StockRow, type Warehouse } from './api';
-import { minWidth } from './parts';
+import { minWidth } from '../../components/ListKit';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
@@ -159,7 +159,7 @@ function Line({ r, w, seesCost, onOpen }: { r: StockRow; w: Record<'wh' | 'avail
         {where}
       </span>
       <span className="flex shrink-0 flex-col" style={{ width: w.avail }}>
-        <b className={cx('truncate tabular-nums', avail <= 0 ? 'text-danger' : r.low ? 'text-[#9A4A06] dark:text-warning' : 'text-ink')}>{qty(avail, r.unit)}</b>
+        <b className={cx('truncate tabular-nums', avail <= 0 ? 'text-danger' : r.low ? 'text-warning-ink dark:text-warning' : 'text-ink')}>{qty(avail, r.unit)}</b>
         <span className="truncate text-[11px] text-ink-3">
           {qty(r.on_hand)} on hand
           {reserved ? ` · ${qty(reserved)} held` : ''}

@@ -80,7 +80,7 @@ export function ActionCard({ action, onChange, elsewhere }: {
       </header>
 
       {a.tainted && open ? (
-        <p className="mb-2 flex items-start gap-1.5 rounded-[8px] bg-warning-bg px-2 py-1.5 text-[12px] text-[#7A4308] dark:text-warning">
+        <p className="mb-2 flex items-start gap-1.5 rounded-[8px] bg-warning-bg px-2 py-1.5 text-[12px] text-warning-strong dark:text-warning">
           <Icon name="warning" size={15} className="mt-0.5 shrink-0" />
           Suggested after reading outside content — an email, a file or a chat could have asked for this. Check it before you confirm.
         </p>
@@ -106,7 +106,7 @@ export function ActionCard({ action, onChange, elsewhere }: {
       {a.preview.warnings.length ? (
         <ul className="mt-2 space-y-0.5">
           {a.preview.warnings.map((w, i) => (
-            <li key={i} className="flex items-start gap-1 text-[12px] text-[#7A4308] dark:text-warning"><Icon name="warning" size={13} className="mt-0.5 shrink-0" />{w}</li>
+            <li key={i} className="flex items-start gap-1 text-[12px] text-warning-strong dark:text-warning"><Icon name="warning" size={13} className="mt-0.5 shrink-0" />{w}</li>
           ))}
         </ul>
       ) : null}

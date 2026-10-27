@@ -7,9 +7,9 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, row, THead } from '../hr/parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, row, THead } from '../../components/PageKit';
 import { can, K, refusal, shortDate } from './api';
-import { ConfirmSheet, LoadFailed, Notice } from './parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { existingRate, fetchRates, forbiddenWhy, fxRateProblem, KS, removeRate, saveRate, trimDecimals, type FxPayload, type FxRate } from './setup';
 
@@ -229,7 +229,7 @@ function AddRate({ d, base, onDone }: { d: FxPayload; base: string; onDone: () =
         </p>
       ) : null}
       {replaces ? (
-        <p className="m-0 text-[12px] text-[#9A4A06] dark:text-warning">
+        <p className="m-0 text-[12px] text-warning-ink dark:text-warning">
           There is already a {f.from} → {f.to} rate from {shortDate(f.on)} ({trimDecimals(replaces.rate, 2)}). Saving replaces it — one pair has one rate a day.
         </p>
       ) : null}

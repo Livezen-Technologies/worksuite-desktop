@@ -9,8 +9,8 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { ConfirmSheet, LoadFailed, Notice } from '../finance/parts';
-import { btn, btnGood, btnPrimary, btnSmall, Field, input, Kpi, PageHead, Panel, Sheet, SidePanel } from '../hr/parts';
+import { ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
+import { btn, btnGood, btnPrimary, btnSmall, Field, input, Kpi, PageHead, Panel, Sheet, SidePanel } from '../../components/PageKit';
 import { can, K, money } from './api';
 import {
   atLeast,
@@ -45,6 +45,7 @@ import {
 import { Note, StatusPill } from './parts';
 import type { ScreenProps } from './Rail';
 import { Checkbox } from '../../components/Checkbox';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Paying people back, and handing the figures to accounting.
@@ -139,9 +140,9 @@ function Runs({ orgId, orgs, onGo }: ScreenProps & { orgId: number }) {
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
       <PageHead title="Reimbursements" sub="Approved claims, grouped by person, paid in runs." />
-      <div className="grid max-w-[320px] grid-cols-1">
-        <Kpi label="Waiting to be paid" value={money(payable.data?.total, cur)} sub={`${plural(all.length, 'claim', 'claims')} across ${plural(people.length, 'person', 'people')}`} />
-      </div>
+      <StatGrid className="max-w-[320px]">
+        <Kpi icon="hourglass" tone="amber" label="Waiting to be paid" value={money(payable.data?.total, cur)} sub={`${plural(all.length, 'claim', 'claims')} across ${plural(people.length, 'person', 'people')}`} />
+      </StatGrid>
 
       <Panel
         title="Payable now"
@@ -181,7 +182,7 @@ function Runs({ orgId, orgs, onGo }: ScreenProps & { orgId: number }) {
                   <b className="text-[13px] text-ink tabular-nums">{money(p.total, cur)}</b>
                   {p.advance_outstanding ? (
                     // Not a refusal, a fact finance should see before transferring: they already hold company money.
-                    <span className="rounded-[6px] bg-[#FFF4E0] px-2 py-0.5 text-[11.5px] font-semibold text-[#9A4A06] dark:bg-warning-bg dark:text-warning">also holds {money(p.advance_outstanding, cur)} in unsettled advances</span>
+                    <span className="rounded-[6px] bg-warning-bg px-2 py-0.5 text-[11.5px] font-semibold text-warning-ink dark:bg-warning-bg dark:text-warning">also holds {money(p.advance_outstanding, cur)} in unsettled advances</span>
                   ) : null}
                 </div>
                 <div className="mt-1 flex flex-col">
@@ -599,7 +600,7 @@ function Postings({ orgId, orgs }: ScreenProps & { orgId: number }) {
               <span className="shrink-0" style={{ width: POST_COLS.status }}>
                 <StatusPill status={p.status} />
               </span>
-              <span className="flex shrink-0 items-center justify-end gap-2" style={{ width: POST_COLS.act }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+              <span role="presentation" className="flex shrink-0 items-center justify-end gap-2" style={{ width: POST_COLS.act }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                 {may && p.balanced && p.status !== 'void' ? (
                   <button
                     type="button"
@@ -625,7 +626,7 @@ function Postings({ orgId, orgs }: ScreenProps & { orgId: number }) {
               A batch takes every approved claim in a period that is not already in one.
             </div>
           ) : null}
-          {items.length >= LIST_CAP ? <div className="border-t border-line bg-ground px-3.5 py-2 text-[12px] font-semibold text-[#9A4A06] dark:text-warning">The newest {LIST_CAP} only — older batches are not listed.</div> : null}
+          {items.length >= LIST_CAP ? <div className="border-t border-line bg-ground px-3.5 py-2 text-[12px] font-semibold text-warning-ink dark:text-warning">The newest {LIST_CAP} only — older batches are not listed.</div> : null}
         </div>
       </div>
 

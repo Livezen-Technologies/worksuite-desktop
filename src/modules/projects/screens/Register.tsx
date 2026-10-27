@@ -8,6 +8,7 @@ import { openWeb } from '../parts';
 import { HEALTH_CHIP, PRIORITY, daysLeftText, fmtDay, pk, preads, projectPath, shortMoney, usedTone, type FullProject } from '../portfolio';
 import type { ProjectStatus } from '../api';
 import { Failed, HealthChip, Loading, Mono, Nothing, PageHead, Panel, Progress, ProjectStatusChip, TD, TH, needsConnection } from './kit';
+import { clickOnKey } from '../../../components/press';
 
 /**
  * W02 · All projects (PRJ-REG), natively (D01's density and tokens). The Templates view is TemplateLibrary.tsx.
@@ -190,7 +191,7 @@ export function AllProjects({ query, offline, mayCreate, onGo, onNew, onOffline 
                 </thead>
                 <tbody>
                   {rows.map((p) => (
-                    <tr key={p.id} onClick={() => open(p)} className="cursor-pointer border-t border-line/70 hover:bg-subtle">
+                    <tr tabIndex={0} onKeyDown={clickOnKey} key={p.id} onClick={() => open(p)} className="cursor-pointer border-t border-line/70 hover:bg-subtle">
                       <td className={TD}>
                         <button type="button" onClick={(e) => (e.stopPropagation(), open(p))} className="text-start font-semibold text-ink hover:text-primary hover:underline">
                           {p.name}

@@ -10,6 +10,7 @@ import { refreshMarketing, send } from './api';
 import { bounceGuarded, Confirm, csv, saveCsvFile, stamp, stampYear } from './email-kit';
 import { CAMPAIGN_PILL, Card, Empty, Kpi, Line, Meter, PageHeader, Pill, btn, btnBad, btnPrimary, n, pct } from './parts';
 import { refusal, type CampaignDetail, type Options, type Report, type Version } from './types';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * How a campaign went — or how it is going (DK09): delivered, human opens,
@@ -107,7 +108,7 @@ export function ReportView({ campaign, options, onBack, onOpen }: { campaign: Ca
       />
 
       {campaign.status_note ? (
-        <p role="status" className="m-0 mb-4 rounded-[10px] border border-[#F5D9A8] bg-[#FFF9EE] px-3.5 py-2.5 text-[12.5px] text-[#9A4A06] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
+        <p role="status" className="m-0 mb-4 rounded-[10px] border border-warning-line bg-rail px-3.5 py-2.5 text-[12.5px] text-warning-ink dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           {campaign.status_note}
         </p>
       ) : null}
@@ -170,12 +171,12 @@ function ReportBody({ campaign, options, r, mayChoose, busy, onChoose }: { campa
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Delivered" value={pct(rateOf(reached, sent))} sub={`${n(reached)} of ${n(sent)}`} tone="green" />
-        <Kpi label="Human open rate" value={pct(rateOf(human, reached))} sub={r.quality ? `${n(r.quality.machine_total)} machine opens excluded` : `${n(machineOnly)} opened only by machines, excluded`} />
-        <Kpi label="Click rate" value={pct(r.rates.clicked)} sub={`${n(c.clicked ?? 0)} unique clickers`} />
-        <Kpi label="Unsubscribes" value={n(c.unsubscribed ?? 0)} sub={r.rates.unsubscribed !== null ? `${pct(r.rates.unsubscribed)} of those reached` : undefined} tone={(c.unsubscribed ?? 0) > 0 ? 'amber' : undefined} />
-      </div>
+      <StatGrid>
+        <Kpi icon="mail-check" label="Delivered" value={pct(rateOf(reached, sent))} sub={`${n(reached)} of ${n(sent)}`} tone="green" />
+        <Kpi icon="mail-open" tone="violet" label="Human open rate" value={pct(rateOf(human, reached))} sub={r.quality ? `${n(r.quality.machine_total)} machine opens excluded` : `${n(machineOnly)} opened only by machines, excluded`} />
+        <Kpi icon="mouse-click" tone="cyan" label="Click rate" value={pct(r.rates.clicked)} sub={`${n(c.clicked ?? 0)} unique clickers`} />
+        <Kpi icon="user-minus" label="Unsubscribes" value={n(c.unsubscribed ?? 0)} sub={r.rates.unsubscribed !== null ? `${pct(r.rates.unsubscribed)} of those reached` : undefined} tone={(c.unsubscribed ?? 0) > 0 ? 'amber' : undefined} />
+      </StatGrid>
 
       {r.ab ? <AbPanel ab={r.ab} waiting={c.waiting ?? 0} mayChoose={mayChoose} busy={busy} onChoose={onChoose} /> : null}
 

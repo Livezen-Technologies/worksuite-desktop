@@ -1,9 +1,9 @@
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
-import { btnSmall, Field } from '../hr/parts';
+import { btnSmall, Field } from '../../components/PageKit';
 import { shortDate } from './api';
 import { fxState, methodWords, type CurrencyOption, type FxBlock } from './insight';
-import { Notice } from './parts';
+import { Notice } from '../../components/RecordKit';
 
 /**
  * Showing a report in another currency, and the sentence that has to go with
@@ -92,7 +92,7 @@ export function FxNotice({ fx, positionFx, onBase, over }: { fx: FxBlock | undef
       {fx.caveat ? (
         <>
           {' '}
-          <b className="font-semibold text-[#9A4A06] dark:text-warning">{fx.caveat}</b>
+          <b className="font-semibold text-warning-ink dark:text-warning">{fx.caveat}</b>
         </>
       ) : null}
     </p>

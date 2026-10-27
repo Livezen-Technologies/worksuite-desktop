@@ -275,7 +275,7 @@ export function ChecksScreen({ run }: ChecksScreenProps) {
           <button type="button" onClick={() => void copyDetails()} className="h-[38px] rounded-[8px] border border-white/25 bg-transparent text-[13px] font-semibold text-white hover:bg-white/10">
             Copy details
           </button>
-          <p className="m-0 text-[11px] text-[#9FB0FF]">No “proceed anyway” — only trusted-server configuration from your IT team can allow this.</p>
+          <p className="m-0 text-[11px] text-stage-accent">No “proceed anyway” — only trusted-server configuration from your IT team can allow this.</p>
         </section>
       ) : null}
     </ConnectFrame>

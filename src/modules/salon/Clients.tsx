@@ -8,6 +8,7 @@ import { addAllergy, amount, answered, attemptKey, dayMonth, fetchClient, fetchC
 import { NewClient } from './ClientPick';
 import { unreachable, useCopyClient, useCopyClients } from './offline';
 import { Choice, DeskDialog, Failed, Figure, firstName, Label, Note, Page, Panel, ReliabilityTag, severityLabel, TierTag, TouchButton, useDesk, useNow } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Clients at the counter (D08, CLI-05, CTR-02): find somebody by any part of
@@ -122,7 +123,7 @@ export function AllergyLine({ allergies, test, onUpdate }: { allergies: Array<Pi
   if (allergies.length === 0) return null;
   const sorted = [...allergies].sort((a, b) => ['mild', 'moderate', 'severe'].indexOf(b.severity) - ['mild', 'moderate', 'severe'].indexOf(a.severity));
   return (
-    <div role="alert" className="flex items-start gap-2.5 rounded-[10px] border border-[#FECDD3] bg-[#FFF1F2] px-3 py-2.5 text-[14px] text-[#9F1239] dark:border-danger/40 dark:bg-danger-bg dark:text-danger">
+    <div role="alert" className="flex items-start gap-2.5 rounded-[10px] border border-line bg-danger-bg px-3 py-2.5 text-[14px] text-rose-ink dark:border-danger/40 dark:bg-danger-bg dark:text-danger">
       <Icon name="warning" size={18} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
         {sorted.map((a, i) => (
@@ -156,11 +157,11 @@ function CopiedClient({ id }: { id: number }) {
     <Panel className="flex flex-col gap-3.5">
       <Header name={c.name} tier={c.tier} reliability={c.reliability} sub={[c.phone, c.email].filter(Boolean).join(' · ')} />
       {c.allergy ? <AllergyLine allergies={[{ severity: c.allergy.severity as Severity, substance: c.allergy.substance, reaction: 'The worst on file. Every allergy, patch tests and past visits show when WorkSuite answers' }]} /> : null}
-      <div className="grid grid-cols-3 gap-3">
-        <Figure label="Points" value={(c.points ?? 0).toLocaleString()} />
-        <Figure label="Store credit" value="—" />
-        <Figure label="Owes" value="—" />
-      </div>
+      <StatGrid min={150}>
+        <Figure icon="star" tone="amber" label="Points" value={(c.points ?? 0).toLocaleString()} />
+        <Figure icon="wallet" tone="violet" label="Store credit" value="—" />
+        <Figure icon="receipt" tone="red" label="Owes" value="—" />
+      </StatGrid>
       {desk.may('salon.visit.book') ? (
         <TouchButton variant="primary" icon="plus" onClick={() => desk.walkIn({ client_id: c.id }, true)}>
           Book them in
@@ -219,11 +220,11 @@ function ClientCardView({ id }: { id: number }) {
       <Header name={d.client.name} tier={d.profile.tier} reliability={d.profile.reliability} sub={sub} />
       <AllergyLine allergies={live} test={test} onUpdate={d.may.edit ? () => setRecording(true) : undefined} />
 
-      <div className="grid grid-cols-3 gap-3">
-        <Figure label="Points" value={(d.loyalty?.points ?? d.profile.points).toLocaleString()} />
-        <Figure label="Store credit" value={d.credit ? amount(d.credit.balance, d.credit.currency) : '—'} />
-        <Figure label="Owes" value={d.invoices === null ? '—' : owing.length === 0 ? 'Nothing' : owing.map((i) => amount(i.owed, i.currency)).join(' + ')} />
-      </div>
+      <StatGrid min={150}>
+        <Figure icon="star" tone="amber" label="Points" value={(d.loyalty?.points ?? d.profile.points).toLocaleString()} />
+        <Figure icon="wallet" tone="violet" label="Store credit" value={d.credit ? amount(d.credit.balance, d.credit.currency) : '—'} />
+        <Figure icon="receipt" tone="red" label="Owes" value={d.invoices === null ? '—' : owing.length === 0 ? 'Nothing' : owing.map((i) => amount(i.owed, i.currency)).join(' + ')} />
+      </StatGrid>
 
       <div>
         <Label className="tracking-[.06em]">Recent visits</Label>

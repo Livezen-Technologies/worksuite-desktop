@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Select } from '../../components/Select';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { input } from '../garage/parts';
+import { input } from '../../components/FormKit';
 import { codeOf, errorText, K, pGet, pPost, type Candidate } from './api';
 import { Refusal } from './parts';
 import { Checkbox } from '../../components/Checkbox';

@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
-import { btnPrimary, btnSmall, Empty, input, Panel } from '../hr/parts';
+import { btnPrimary, btnSmall, Empty, input, Panel } from '../../components/PageKit';
 import { K, money, type Budget as Data } from './api';
 import { amount, KE, overBy, saveBidBudget, varianceLine, type BidCostSummary } from './bidcost';
 import { addBudgetLine, budgetLineBody, COST_KINDS, fetchCosts, K2, labelOf, removeBudgetLine } from './work';
@@ -128,7 +128,7 @@ export default function Budget({
               </span>
               <span className="flex justify-between border-t border-line/70 pt-2">
                 <span className="text-ink-3">Profit</span>
-                <b className={cx('tabular-nums', budget.margin.profit.startsWith('-') ? 'text-danger' : 'text-[#145C39] dark:text-success')}>
+                <b className={cx('tabular-nums', budget.margin.profit.startsWith('-') ? 'text-danger' : 'text-success-ink dark:text-success')}>
                   {money(budget.margin.profit, cur)} · {budget.margin.percent}%
                 </b>
               </span>

@@ -9,6 +9,7 @@ import { CompanySelect, useProjectCompany } from '../company';
 import { exportReport, gk, gov, type ReportResponse } from './gov-api';
 import { ChartTable, Kpi, Mono, WAITS, WebButton, fmtDay, inputClass, num } from './gov-kit';
 import { ScheduleButton, ScheduledList } from './ReportSchedules';
+import { StatGrid } from '../../../components/StatCard';
 
 /**
  * W15 · Reports (SRS p47, PRJ-RPT): one address per report (`/projects/reports/<kind>`), each drawn the same way from
@@ -167,11 +168,11 @@ function Report({ r }: { r: ReportResponse }) {
   return (
     <div className="flex flex-col gap-3.5">
       {r.summary?.length ? (
-        <section aria-label="Summary" className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2.5">
+        <StatGrid min={200} label="Summary">
           {r.summary.map((s) => (
-            <Kpi key={s.label} label={s.label} value={s.value} sub={s.sub} />
+            <Kpi icon="chart" tone="blue" key={s.label} label={s.label} value={s.value} sub={s.sub} />
           ))}
-        </section>
+        </StatGrid>
       ) : null}
       <p className="text-[12px] text-ink-3">
         {r.company ? (

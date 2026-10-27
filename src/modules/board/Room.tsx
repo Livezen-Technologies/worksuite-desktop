@@ -132,14 +132,14 @@ export default function Room({ meetingId, onMinutes }: { meetingId: number; onMi
           <ol>
             {items.map((i) => (
               <li key={i.id}>
-                <button type="button" disabled={!runs || i.withheld} aria-current={cur?.id === i.id ? 'true' : undefined} onClick={() => act.mutate(() => present(meetingId, i.id))} className={cx('flex w-full gap-2 rounded-[7px] px-2 py-1.5 text-left text-[12.5px]', cur?.id === i.id ? 'bg-[#EEF1FD] font-bold text-primary dark:bg-selection' : 'text-ink-2 enabled:hover:bg-subtle')}>
+                <button type="button" disabled={!runs || i.withheld} aria-current={cur?.id === i.id ? 'true' : undefined} onClick={() => act.mutate(() => present(meetingId, i.id))} className={cx('flex w-full gap-2 rounded-[7px] px-2 py-1.5 text-left text-[12.5px]', cur?.id === i.id ? 'bg-selection font-bold text-primary dark:bg-selection' : 'text-ink-2 enabled:hover:bg-subtle')}>
                   <span className="w-[26px] shrink-0 font-bold">{i.number}</span><span className="min-w-0 flex-1">{i.title}</span>{i.duration_minutes ? <span className="text-ink-3">{i.duration_minutes}m</span> : null}
                 </button>
               </li>
             ))}
           </ol>
         </nav>
-        <section className="flex min-h-0 flex-col bg-[#475069]">
+        <section className="flex min-h-0 flex-col bg-sky">
           <div className="flex items-center gap-2 bg-surface px-3 py-1.5 text-[12.5px]">
             <Status tone="indigo">Presenting to {present_}</Status>
             <b className="min-w-0 flex-1 truncate">{cur ? `${cur.number} ${cur.title}` : 'Nothing presented yet'}</b>
@@ -190,7 +190,7 @@ function Paper({ path, name }: { path: string; name: string }) {
     <div className="relative min-h-0 overflow-hidden rounded bg-white">
       <FileViewer path={path} name={name} />
       {/* The server's file carries the viewer's watermark; this one only reminds the screen. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center text-[28px] font-bold text-[#c00]/10 -rotate-[30deg]">CONFIDENTIAL</div>
+      <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center text-[28px] font-bold text-danger/10 -rotate-[30deg]">CONFIDENTIAL</div>
     </div>
   );
 }

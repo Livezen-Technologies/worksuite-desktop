@@ -5,7 +5,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { dayLong } from './dates';
-import { btn, btnPrimary, Empty, Field, humanise, input, PageHead, Panel, Sheet, StatusChip } from './parts';
+import { btn, btnPrimary, Empty, Field, humanise, input, PageHead, Panel, Sheet, StatusChip } from '../../components/PageKit';
 import { Events, lastDay, Trail, type ResEvent, type ResignationShape, type Round } from './resignationParts';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
@@ -44,7 +44,7 @@ export default function MyResignation() {
     <div className="flex max-w-[1000px] flex-col gap-3.5">
       <PageHead title="My resignation" sub="Starting one only saves a draft — nothing is sent until you submit." />
       {!m.ready?.ok && (!r || r.editable) ? (
-        <div className="rounded-[12px] border border-[#F5D9A8] bg-warning-bg px-4 py-3 text-[12.5px] text-[#7A3E06] dark:border-warning/40 dark:text-warning">
+        <div className="rounded-[12px] border border-warning-line bg-warning-bg px-4 py-3 text-[12.5px] text-warning-strong dark:border-warning/40 dark:text-warning">
           <b>You cannot send a resignation from here yet.</b> {m.ready?.missing.join(' ')} HR can sort this out.
         </div>
       ) : null}
@@ -134,7 +134,7 @@ function Draft({ m, onSaved }: { m: Mine; onSaved: (d: Mine) => void }) {
   return (
     <Panel title={r ? (r.status === 'returned' ? 'Your resignation — returned for changes' : 'Your draft') : 'Start a resignation'} bodyClassName="flex flex-col gap-3 px-4 py-3.5">
       {returned ? (
-        <div className="rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#7A3E06] dark:text-warning">
+        <div className="rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-strong dark:text-warning">
           {returned.decided_by?.name ?? returned.name} returned it{returned.comment ? `: “${returned.comment}”` : '.'}
         </div>
       ) : null}

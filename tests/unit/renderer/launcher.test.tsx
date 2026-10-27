@@ -27,7 +27,7 @@ Object.defineProperty(window, 'matchMedia', {
 Element.prototype.scrollIntoView ??= () => undefined;
 
 const { app } = await import('../../../src/core/app-state');
-const { ui, openOverlay } = await import('../../../src/core/ui');
+const { ui, closeOverlay, openOverlay } = await import('../../../src/core/ui');
 const { resetTabs, tabsStore } = await import('../../../src/core/tabs');
 const { currentLauncherPrefs, resetLauncherPrefsForTests, updateLauncherPrefs } = await import('../../../src/core/launcher-prefs');
 const { Launcher } = await import('../../../src/app/overlays/Launcher');
@@ -50,7 +50,7 @@ beforeEach(() => {
   app.set({
     auth: { stage: 'ready', user: { id: '7' } } as never,
     session: { mode: 'account', signingIn: false, moveOffer: false },
-    apps: visibleApps({ apps: ['mail', 'chat', 'tasks', 'calendar', 'billing', 'projects', 'drive', 'notes'], permissions: ['billing.view'] }),
+    apps: visibleApps({ apps: ['mail', 'chat', 'tasks', 'calendar', 'billing', 'projects', 'drive', 'notes', 'telephony'], permissions: ['billing.view'] }),
     prefs: { pinnedApps: [] } as never,
     status: { unread: { mail: 5, chat: 0, tasks: 0, notifications: 0 } } as never,
     bootstrap: null,
@@ -58,6 +58,8 @@ beforeEach(() => {
   openInBrowser.mockClear();
   openWindow.mockClear();
   resetTabs();
+  // openOverlay toggles: start from none, so a test that left the launcher open does not close the next one's.
+  closeOverlay();
   openOverlay('launcher');
 });
 afterEach(() => cleanup());
@@ -76,13 +78,22 @@ describe('the launcher\'s size and shape', () => {
     expect(px(d.style.top) + px(d.style.height)).toBeLessThanOrEqual(800 - 24);
   });
 
-  it('sizes the grid to whole rows of tiles, names and all', () => {
+  it('sizes the grid to whole rows of tiles, names and all, when it has no headings', () => {
+    updateLauncherPrefs((p) => ({ ...p, groupBy: 'none' }));
     render(<Launcher />);
-    // 1280×800, compact: five rows of 84px tiles, 2px apart, in 8px + 12px of padding.
+    // 1280×800, compact: five rows of 88px tiles (48px icons), 2px apart, in 8px + 12px of padding; no chips.
     const area = dialog().querySelector<HTMLElement>('[data-grid-area]')!;
-    expect(area.style.height).toBe(`${8 + 5 * 84 + 4 * 2 + 12}px`);
-    expect(within(grid()).getAllByRole('option')[0]!.style.height).toBe('84px');
-    expect(dialog().style.height).toBe(`${149 + 448}px`);
+    expect(area.style.height).toBe(`${8 + 5 * 88 + 4 * 2 + 12}px`);
+    expect(within(grid()).getAllByRole('option')[0]!.style.height).toBe('88px');
+    expect(dialog().style.height).toBe(`${109 + 468}px`);
+  });
+
+  it('takes all of min(640px, 100vh − 96px) when the grid reads category by category, at one height for every category', () => {
+    render(<Launcher />);
+    expect(dialog().style.height).toBe('640px');
+    expect(dialog().querySelector<HTMLElement>('[data-grid-area]')!.style.height).toBe(`${640 - 149}px`);
+    fireEvent.click(screen.getByRole('tab', { name: /Work/ }));
+    expect(dialog().style.height).toBe('640px');
   });
 
   it('lays itself out again when the window is resized while it is open', () => {
@@ -95,8 +106,9 @@ describe('the launcher\'s size and shape', () => {
     const d = dialog();
     expect(d.style.left).toBe('72px');
     expect(d.style.top).toBe('84px');
-    expect(d.style.height).toBe(`${149 + 362}px`);
-    expect(dialog().querySelector<HTMLElement>('[data-grid-area]')!.style.height).toBe('362px');
+    // min(640, 700 − 96, 700 − 24 − 84) = 592.
+    expect(d.style.height).toBe('592px');
+    expect(dialog().querySelector<HTMLElement>('[data-grid-area]')!.style.height).toBe(`${592 - 149}px`);
     setSize(1440, 900);
     act(() => {
       window.dispatchEvent(new Event('resize'));
@@ -112,7 +124,7 @@ describe('the launcher\'s size and shape', () => {
     expect(scroller.contains(search())).toBe(false);
     expect(scroller.contains(screen.getByRole('tablist', { name: 'Categories' }))).toBe(false);
     expect(scroller.contains(screen.getByRole('button', { name: 'Open Mail' }))).toBe(false);
-    expect(scroller.contains(screen.getByRole('button', { name: 'Customise' }))).toBe(false);
+    expect(scroller.contains(screen.getByRole('button', { name: 'App launcher settings' }))).toBe(false);
     // Nothing else in the popover scrolls up and down.
     const others = Array.from(dialog().querySelectorAll<HTMLElement>('*')).filter((el) => el !== scroller && /overflow-(y-)?auto/.test(el.className) && !/overflow-x-auto/.test(el.className));
     expect(others).toEqual([]);
@@ -351,11 +363,13 @@ describe('the grid\'s scrolling', () => {
     const into = vi.spyOn(Element.prototype, 'scrollIntoView');
     render(<Launcher />);
     into.mockClear();
-    // 880px wide: nine 88px columns, so down goes from the first tile to the tenth.
+    // Under All, category by category: down goes from Communication's first tile to Work's, the fourth tile.
     fireEvent.keyDown(search(), { key: 'ArrowDown' });
     expect(into).toHaveBeenCalledWith({ block: 'nearest' });
-    expect((into.mock.contexts.at(-1) as HTMLElement).dataset.index).toBe('9');
+    expect((into.mock.contexts.at(-1) as HTMLElement).dataset.index).toBe('3');
     expect(grid().style.scrollPaddingBottom).toBe('32px');
+    // Clear of the sticky heading at the top, too.
+    expect(grid().style.scrollPaddingTop).toBe('32px');
     into.mockRestore();
   });
 });
@@ -383,7 +397,7 @@ describe('opening and closing', () => {
     expect(ui.get().overlay).toBeNull();
   });
 
-  it('opens Settings › App launcher from the settings button by the search', () => {
+  it('opens Settings › App launcher from the settings button in the footer', () => {
     render(<Launcher />);
     fireEvent.click(screen.getByRole('button', { name: 'App launcher settings' }));
     expect(ui.get().overlay).toBeNull();
@@ -426,7 +440,11 @@ describe('finding an app', () => {
     expect(comms.textContent).toBe('Communication3');
     fireEvent.click(comms);
     expect(names()).toEqual(['Mail', 'Chat', 'Phone']);
-    fireEvent.click(screen.getByRole('tab', { name: /All apps/ }));
+    // "All" in the popover's pills, with every app's count.
+    const all = screen.getByRole('tab', { name: /^All/ });
+    expect(all.textContent).toBe('All13');
+    fireEvent.click(all);
+    expect(all.className).toContain('bg-primary');
     expect(names()).toHaveLength(13);
   });
 
@@ -482,7 +500,7 @@ describe('the keyboard', () => {
 
 describe('tiles', () => {
   // Projects became a desktop app (WS-PROJECT-SRS-001 G-13): Social stands for the apps that still open on the web.
-  const withSocial = () => app.set({ apps: visibleApps({ apps: ['mail', 'chat', 'tasks', 'calendar', 'billing', 'projects', 'social', 'drive', 'notes'], permissions: ['billing.view'] }) });
+  const withSocial = () => app.set({ apps: visibleApps({ apps: ['mail', 'chat', 'tasks', 'calendar', 'billing', 'projects', 'social', 'drive', 'notes', 'telephony'], permissions: ['billing.view'] }) });
 
   it('shows unread badges and the browser mark, each of which can be switched off', () => {
     withSocial();
@@ -560,10 +578,12 @@ describe('tiles', () => {
     expect(currentLauncherPrefs().sort).toBe('mine');
   });
 
-  it('has a footer with the count, the keys and Customise', () => {
+  it('has a footer with the count and the keys, how to pin and reorder, and the launcher\'s settings', () => {
     render(<Launcher />);
-    expect(dialog().textContent).toContain('13 apps · ↑↓←→ move · ↵ open · ⌘↵ new window · Esc close');
-    fireEvent.click(screen.getByRole('button', { name: 'Customise' }));
+    const footer = dialog().querySelector<HTMLElement>('[data-footer]')!;
+    expect(footer.querySelector('[data-hints]')!.textContent).toBe('13 apps · ↑↓←→ move · ↵ open · Tab category · Esc close');
+    expect(footer.querySelector('[data-pin-hint]')!.textContent).toBe('pins an app · drag to reorder');
+    fireEvent.click(within(footer).getByRole('button', { name: 'App launcher settings' }));
     expect(ui.get().overlay).toBeNull();
     expect(tabsStore.get().tabs.some((t) => t.route === '/settings/launcher')).toBe(true);
   });

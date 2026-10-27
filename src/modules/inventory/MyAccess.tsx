@@ -4,7 +4,7 @@ import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { PageHead, Panel, Seg } from '../hr/parts';
+import { PageHead, Panel, Seg } from '../../components/PageKit';
 import { fetchExplain, fetchModuleAccess, KS } from './admin';
 
 /**
@@ -60,11 +60,11 @@ export default function MyAccess() {
                   {w.count > w.names.length ? <span className="px-1 py-1 text-[12px] text-ink-3">and {(w.count - w.names.length).toLocaleString()} more</span> : null}
                 </span>
               ) : null}
-              <span className="rounded-[10px] border border-[#F5D48A] bg-[#FFF8E6] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">{w.open_note}</span>
+              <span className="rounded-[10px] border border-warning-line bg-warning-bg px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">{w.open_note}</span>
             </Panel>
             <Panel title="Cost, valuation and margin" bodyClassName="flex flex-col gap-1.5 px-4 py-3">
               <span className="flex items-center gap-2">
-                <span className={cx('rounded-[6px] px-2 py-0.5 text-[11.5px] font-bold', scope.data.cost.held ? 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success' : 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning')}>
+                <span className={cx('rounded-[6px] px-2 py-0.5 text-[11.5px] font-bold', scope.data.cost.held ? 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success' : 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning')}>
                   {scope.data.cost.held ? 'Visible to you' : 'Hidden from you'}
                 </span>
               </span>
@@ -83,7 +83,7 @@ export default function MyAccess() {
             const yes = p.held || has(perms, p.slug);
             return (
               <div key={p.slug} data-permission={p.slug} className="flex items-center gap-3 border-b border-line/60 px-4 py-2.5 text-[13px] last:border-b-0">
-                <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full', yes ? 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-3')}>
+                <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full', yes ? 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-3')}>
                   <Icon name={yes ? 'check' : 'minus'} size={13} />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">

@@ -8,10 +8,10 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../../components/PageKit';
 import { can, num, signed, stampWords, whole, type Warehouse } from './api';
 import { adjustmentAct, adjustmentActions, adjustmentBody, deleteAdjustment, docStatus, fetchAdjustment, fetchAdjustments, KC, lineWorth, newLine, PER, reasonLabel, REASONS, saveAdjustment, type DraftLine, type Pickable } from './control';
-import { minWidth, Pill, Signed } from './parts';
+import { minWidth, Pill, Signed } from '../../components/ListKit';
 import { pick, ProductPick, WarehousePick } from './pickers';
 
 /**
@@ -115,7 +115,7 @@ export default function Adjustments({
                   type="button"
                   data-adjustment={a.id}
                   onClick={() => onOpen(a.id)}
-                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === a.id && 'bg-[#F4F6FE] dark:bg-selection/40')}
+                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === a.id && 'bg-info-soft dark:bg-selection/40')}
                 >
                   <b className="min-w-0 flex-1 truncate text-ink">
                     {a.reference}

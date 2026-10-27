@@ -347,10 +347,10 @@ function SystemLine({ m, files, pictures, onOpenAttachment }: { m: Message; file
 }
 
 const CARD_TONE: Record<Speaker | 'note', string> = {
-  note: 'border-[#F6D7B0] bg-[#FFF8EC] dark:border-[#5A3B14] dark:bg-[#2A1E0C]',
+  note: 'border-warning-line bg-warning-bg',
   requester: 'border-line bg-surface',
-  staff: 'border-line bg-[#F7F8FC] dark:bg-[#151E3A]',
-  assistant: 'border-[#DDD6FE] bg-[#F7F5FF] dark:border-[#3B2F66] dark:bg-[#1A1530]',
+  staff: 'border-line bg-info-soft dark:bg-rail',
+  assistant: 'border-violet-line bg-info-soft dark:bg-rail',
   system: 'border-line bg-surface',
 };
 
@@ -464,7 +464,7 @@ export function Thread({
                   {who === 'assistant' ? (
                     <span
                       aria-hidden
-                      className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#EDE9FE] text-[#6D28D9] dark:bg-[#2A1F4A] dark:text-[#C4B5FD]"
+                      className="inline-flex shrink-0 items-center justify-center rounded-full bg-violet-bg text-violet dark:text-violet-ink"
                       style={{ width: compact ? 20 : 24, height: compact ? 20 : 24 }}
                     >
                       <Icon name="sparkles" size={compact ? 12 : 14} />
@@ -479,7 +479,7 @@ export function Thread({
                       {text('Internal note')}
                     </span>
                   ) : who === 'assistant' ? (
-                    <span data-channel="assistant" className="inline-flex shrink-0 items-center gap-1 rounded-[5px] bg-[#EDE9FE] px-1.5 text-[11px] font-semibold text-[#6D28D9] dark:bg-[#2A1F4A] dark:text-[#C4B5FD]">
+                    <span data-channel="assistant" className="inline-flex shrink-0 items-center gap-1 rounded-[5px] bg-violet-bg px-1.5 text-[11px] font-semibold text-violet dark:text-violet-ink">
                       <Icon name="sparkles" size={11} />
                       {text('Assistant')}
                     </span>

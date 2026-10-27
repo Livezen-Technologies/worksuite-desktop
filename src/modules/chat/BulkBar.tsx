@@ -28,7 +28,7 @@ export function BulkBar({ count, children, note, onClear, label = 'Bulk actions'
       {children}
       <span className="flex-1" />
       {note ? <span className="text-[12px] text-navy-ink">{note}</span> : null}
-      <button type="button" onClick={onClear} className="h-[30px] rounded-[8px] px-3 text-[12.5px] font-bold text-[#b3c0ff] hover:bg-navy-2">
+      <button type="button" onClick={onClear} className="h-[30px] rounded-[8px] px-3 text-[12.5px] font-bold text-stage-accent hover:bg-navy-2">
         {text('Clear')}
       </button>
     </div>

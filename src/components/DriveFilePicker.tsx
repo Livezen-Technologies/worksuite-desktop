@@ -61,7 +61,7 @@ export function DriveFilePicker({ title, confirmLabel, busy, onChoose, onClose }
           {data && !data.locked && !data.folders.length && !data.files.length ? <p className="px-3 py-6 text-center text-[12.5px] text-ink-3">This folder is empty.</p> : null}
           {(data?.folders ?? []).map((f) => (
             <button key={`d${f.id}`} type="button" onClick={() => setFolder(String(f.id))} className="flex w-full items-center gap-2.5 border-b border-line/60 px-3 py-2 text-left text-[13px] text-ink hover:bg-subtle">
-              <Icon name="folder" size={17} className="text-[#B45309]" />
+              <Icon name="folder" size={17} className="text-warning" />
               <span className="min-w-0 flex-1 truncate">{f.name}</span>
               <Icon name="chevron-right" size={14} className="text-ink-3" />
             </button>

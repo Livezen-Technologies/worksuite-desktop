@@ -4,6 +4,47 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.45.2 — 2026-10-27
+
+- Sinhala and Tamil drafts for the shell, Settings, My account and the ten most-used modules (D-G10).
+
+## 1.45.1 — 2026-10-27
+
+**Changed**
+
+- Settings is one file per section (src/modules/settings/sections; audit D-G13), and its shared parts come from src/components (D-G08). Nothing a person sees changes.
+
+## 1.45.0 — 2026-10-27
+
+**Added**
+
+- the colour families and stage tokens in styles.css, and the colors/no-raw-hex lint rule (D-G23)
+
+**Changed**
+
+- the Settings kit moved to src/components/SettingsKit.tsx (kit.tsx re-exports it) and gained SettingRowFrame, SettingsNavItem, SettingsNavGroup, list and label groups, row icons and a level-1 header; Accounts & Servers, Admin Center, Ringing, Connection health, the custom timeout, the launcher, License, Links, the ring check, the sidebar and Updates use it (D-G09)
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+
+## 1.44.1 — 2026-10-26
+
+**Changed**
+
+- the figure cards (KPI, stat and summary tiles) are the shared StatCard — compact, a tinted icon chip and the label above a calm figure, a muted line under it, zero shown muted; cards that open a list are buttons with a focus ring and a soft lift; the same figures and actions as before — Settings › Updates' four cards drawn as the Settings kit's cards
+
+## 1.44.0 — 2026-10-26
+
+**Added**
+
+- Desktop settings — features, apps and the startup screen, with the organisation's policy over them (shared/desktop-settings.ts, electron/services/desktop-settings.ts). Enterprise: a managed policy entry decides and is locked, a default one is only a default; personal: everything on and the person's to change. Synced across the person's computers through api/desktop/settings, kept here with when it was last read for offline; a server without it (404) leaves this computer's choices alone.
+- Settings › Features & apps — features and every app on or off, what the organisation manages locked with its badge, its defaults marked, Reset to default, and whether it is synced or offline as of when.
+- Settings › Desktop & startup — Open at startup (Home by default, where I left off, an app or a page), applied when WorkSuite starts; the start and close switches moved here from Preferences.
+- An app turned off (by its server `applications` slug) is gone from the launcher, the sidebar, links, deep links, shortcuts, the command palette and the tray; a feature turned off (launcher search, the global shortcuts, item links, WorkSuite Office editing, Drive sync, offline files) is off everywhere. The server's `prefs.*` (theme, language, launch at login, tray, notifications, spell check, hardware acceleration) map onto this computer's preferences, the new `spellcheck` among them.
+- The first sync uploads this computer's own preferences where the organisation does not manage them and no other computer chose.
+
+**Changed**
+
+- Every settings screen in one look (kit.tsx): a left section list with search across settings, grouped cards, the same row everywhere (label, description, control), radio cards, 'Managed by your organization' lock badges with why as the tooltip, Reset to default; light and dark from the same tokens.
+
 ## 1.43.0 — 2026-10-24
 
 **Added**

@@ -6,6 +6,7 @@ import { toast } from '../../core/toasts';
 import { amount, answered, clockAt, dayMonth, K, longDay, todayAt } from './api';
 import { countLines, countTotal, fetchRegister, METHOD_LABEL, MK, moneyTyped, moveCash, openRegister, tenderMap, type RegisterState } from './money';
 import { CountSheet, DeskDialog, Failed, Figure, greetingFor, Note, Page, Panel, TouchButton, useDesk, useNow } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The register this desk takes money into (D13, POS-01, POS-02, POS-07).
@@ -161,12 +162,12 @@ function OpenSession({ state }: { state: RegisterState }) {
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Figure label="Opening float" value={amount(s.opening_float)} />
-        <Figure label="Sales" value={String(s.sales.count)} sub={`${amount(s.sales.total)} in all`} />
-        <Figure label="Cash in" value={amount(s.sales.cash_in)} sub={`change given ${amount(s.sales.cash_change)}`} />
-        <Figure label="Drawer should hold" value={s.expected === null ? 'Hidden' : amount(s.expected)} sub={s.expected === null ? 'blind close: shown once counted' : 'float, cash sales and movements'} />
-      </div>
+      <StatGrid min={180}>
+        <Figure icon="banknote" tone="blue" label="Opening float" value={amount(s.opening_float)} />
+        <Figure icon="receipt" tone="green" label="Sales" value={String(s.sales.count)} sub={`${amount(s.sales.total)} in all`} />
+        <Figure icon="arrow-down-line" tone="cyan" label="Cash in" value={amount(s.sales.cash_in)} sub={`change given ${amount(s.sales.cash_change)}`} />
+        <Figure icon="vault" tone="violet" label="Drawer should hold" value={s.expected === null ? 'Hidden' : amount(s.expected)} sub={s.expected === null ? 'blind close: shown once counted' : 'float, cash sales and movements'} />
+      </StatGrid>
 
       <Panel title="Taken by tender">
         {Object.keys(tenders).length === 0 ? (

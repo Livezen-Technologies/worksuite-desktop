@@ -111,7 +111,7 @@ describe('completed task card labels', () => {
     wrap(<ModuleCard r={{ kind: 'task', id: 1 }} />);
     const priority = await screen.findByText('High');
     const due = screen.getByText(/Due /);
-    expect(priority.className.includes('text-[#B42318]')).toBe(status === 'open');
-    expect(due.className.includes('text-[#9A4A06]')).toBe(status === 'open');
+    expect(priority.className.split(' ').includes('text-danger')).toBe(status === 'open');
+    expect(due.className.split(' ').includes('text-warning-ink')).toBe(status === 'open');
   });
 });

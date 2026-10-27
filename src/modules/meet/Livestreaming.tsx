@@ -10,7 +10,7 @@ import { toast } from '../../core/toasts';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
 import { app } from '../../core/app-state';
 import { meet } from './session';
-import { VideoView } from '../calls/parts';
+import { VideoView } from '../../components/CallKit';
 const field = 'w-full rounded border border-line bg-surface px-3 py-2 text-ink';
 const initial = { label: '', platform: 'youtube' as StreamPlatform, server_url: 'rtmps://a.rtmps.youtube.com/live2', stream_key: '', orientation: 'landscape' as StreamOrientation, layout: 'grid' as StreamLayout, title: 'WorkSuite meeting', description: '', visibility: 'private' as StreamDestination['visibility'] };
 /** Uses tracks only: the preview and broadcast never capture this app's windows, panels or controls. */
@@ -20,8 +20,8 @@ export function StreamPreview({ layout, orientation }: { layout: StreamLayout; o
   const participants = meet.room ? [meet.room.localParticipant, ...meet.present].sort((a, b) => a.identity.localeCompare(b.identity)) : [];
   const speaker = participants.find(p => p.identity === meet.lastSpeaker) ?? participants[0];
   const tiles = layout === 'screen' ? participants.filter(p => p.isScreenShareEnabled).slice(0, 1) : layout === 'speaker' ? speaker ? [speaker] : [] : participants;
-  return <div aria-label={`${orientation} ${layout} broadcast preview`} className={cx('relative mx-auto grid w-full max-w-[420px] gap-1 overflow-hidden rounded bg-[#0B1530] text-white', orientation === 'portrait' ? 'aspect-[9/16] max-w-[158px]' : 'aspect-video')} style={{ gridTemplateColumns: `repeat(${layout === 'grid' ? Math.max(1, Math.ceil(Math.sqrt(tiles.length))) : 1}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${layout === 'grid' ? Math.max(1, Math.ceil(tiles.length / Math.max(1, Math.ceil(Math.sqrt(tiles.length))))) : 1}, minmax(0, 1fr))` }}>
-    {tiles.length ? tiles.map(p => { const pub = p.getTrackPublication(layout === 'screen' ? Track.Source.ScreenShare : Track.Source.Camera); const track = pub && !pub.isMuted ? pub.track : null; return <div key={p.identity} className="relative min-h-0 overflow-hidden bg-[#152346]">{track ? <VideoView track={track} className="h-full w-full object-contain" /> : <div className="flex h-full items-center justify-center text-sm">{p.name || 'Participant'}</div>}</div>; }) : <span className="absolute inset-0 flex items-center justify-center p-3 text-center text-sm">{layout === 'screen' ? 'Waiting for a shared screen' : 'Meeting media preview appears when connected'}</span>}
+  return <div aria-label={`${orientation} ${layout} broadcast preview`} className={cx('relative mx-auto grid w-full max-w-[420px] gap-1 overflow-hidden rounded bg-stage text-white', orientation === 'portrait' ? 'aspect-[9/16] max-w-[158px]' : 'aspect-video')} style={{ gridTemplateColumns: `repeat(${layout === 'grid' ? Math.max(1, Math.ceil(Math.sqrt(tiles.length))) : 1}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${layout === 'grid' ? Math.max(1, Math.ceil(tiles.length / Math.max(1, Math.ceil(Math.sqrt(tiles.length))))) : 1}, minmax(0, 1fr))` }}>
+    {tiles.length ? tiles.map(p => { const pub = p.getTrackPublication(layout === 'screen' ? Track.Source.ScreenShare : Track.Source.Camera); const track = pub && !pub.isMuted ? pub.track : null; return <div key={p.identity} className="relative min-h-0 overflow-hidden bg-navy-2">{track ? <VideoView track={track} className="h-full w-full object-contain" /> : <div className="flex h-full items-center justify-center text-sm">{p.name || 'Participant'}</div>}</div>; }) : <span className="absolute inset-0 flex items-center justify-center p-3 text-center text-sm">{layout === 'screen' ? 'Waiting for a shared screen' : 'Meeting media preview appears when connected'}</span>}
   </div>;
 }
 export function LivestreamDestinations() {
@@ -78,7 +78,7 @@ export function LivestreamControls({ close }: { close: () => void }) {
 }
 export function LivestreamBadge({ status }: { status: Pick<LivestreamStatus, 'active' | 'live' | 'count'> | null }) {
   if (!status?.active) return null;
-  return <span role="status" className="rounded-full bg-[#8F1E20] px-2 py-0.5 text-[11.5px] font-bold text-white">{status.live ? 'LIVE' : 'Livestream connecting'} · {status.count} {status.count === 1 ? 'destination' : 'destinations'}</span>;
+  return <span role="status" className="rounded-full bg-danger px-2 py-0.5 text-[11.5px] font-bold text-white">{status.live ? 'LIVE' : 'Livestream connecting'} · {status.count} {status.count === 1 ? 'destination' : 'destinations'}</span>;
 }
 /** Announce a newly joined participant too; compare state, not every poll response. */
 export function useLivestreamNotice(status: Pick<LivestreamStatus, 'active' | 'live'> | null) {

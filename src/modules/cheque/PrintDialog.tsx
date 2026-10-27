@@ -136,7 +136,7 @@ export function PrintDialog({ item, profile, onClose, onDone }: { item: QueueIte
             <Note tone="info">Take the cheque out and check it: date, payee, words, figures and crossing inside their boxes, nothing on the MICR line.</Note>
             <div className="flex gap-3" role="radiogroup" aria-label="How did it print?">
               {(['printed', 'wrong'] as const).map((k) => (
-                <button key={k} type="button" role="radio" aria-checked={answer === k} onClick={() => setAnswer(k)} className={`flex flex-1 items-start gap-2 rounded-[10px] border p-3 text-left ${answer === k ? 'border-primary bg-[#EEF1FD] dark:bg-selection' : 'border-line bg-surface'}`}>
+                <button key={k} type="button" role="radio" aria-checked={answer === k} onClick={() => setAnswer(k)} className={`flex flex-1 items-start gap-2 rounded-[10px] border p-3 text-left ${answer === k ? 'border-primary bg-selection dark:bg-selection' : 'border-line bg-surface'}`}>
                   <span aria-hidden className={`mt-0.5 size-3.5 shrink-0 rounded-full border-2 ${answer === k ? 'border-primary bg-primary' : 'border-ink-3'}`} />
                   <span>
                     <b className="text-[13px]">{k === 'printed' ? 'Printed correctly' : 'Something went wrong'}</b>

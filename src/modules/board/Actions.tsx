@@ -37,7 +37,7 @@ export default function Actions({ onWeb }: { onWeb: (path: string) => void }) {
               <ul>
                 {g[k].map((a) => (
                   <li key={a.id}>
-                    <button type="button" onClick={() => setSelId(a.id)} className={cx('flex w-full items-center gap-2.5 rounded-[8px] border border-line p-2.5 text-left mb-1.5', sel?.id === a.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'bg-surface')}>
+                    <button type="button" onClick={() => setSelId(a.id)} className={cx('flex w-full items-center gap-2.5 rounded-[8px] border border-line p-2.5 text-left mb-1.5', sel?.id === a.id ? 'bg-selection dark:bg-selection' : 'bg-surface')}>
                       <CheckboxMark checked={a.status === 'COMPLETED'} />
                       <div className="min-w-0 flex-1"><div className="text-[13px] font-bold">{a.title}</div><div className="text-[11.5px] text-ink-3">{[a.meeting_number, a.decision_extract?.resolution_number, titleCase(a.status)].filter(Boolean).join(' · ')}</div></div>
                       {k === 'verify' ? <Status tone="indigo">Secretary to verify</Status> : <Status tone={k === 'overdue' ? 'danger' : k === 'week' ? 'warning' : 'muted'}>{a.due_on ? fmtDate(a.due_on) : 'No date'}</Status>}

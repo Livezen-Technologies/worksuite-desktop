@@ -6,8 +6,9 @@ import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
 import type { LogsResponse, Sheet as TimeSheet } from './api';
 import { dayShort, minutesLabel, rangeLabel } from './dates';
-import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Sheet, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Sheet, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Timesheet approvals (HrAdminSheet; the web's TimesheetApprovals): weeks
@@ -136,11 +137,11 @@ export function SheetDetail({ sheet, onClose }: { sheet: TimeSheet; onClose: () 
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {d ? (
         <>
-          <div className="grid grid-cols-3 gap-2.5">
-            <Kpi label="Logged" value={minutesLabel(d.totals.minutes)} />
-            <Kpi label="Billable" value={minutesLabel(d.totals.billable_minutes)} />
-            <Kpi label="Entries" value={d.totals.entries} />
-          </div>
+          <StatGrid min={180}>
+            <Kpi icon="clock" tone="blue" label="Logged" value={minutesLabel(d.totals.minutes)} />
+            <Kpi icon="banknote" tone="green" label="Billable" value={minutesLabel(d.totals.billable_minutes)} />
+            <Kpi icon="list" tone="violet" label="Entries" value={d.totals.entries} />
+          </StatGrid>
           {sheet.decision_note ? <div className="rounded-[8px] bg-ground px-3 py-2 text-[12.5px] text-ink-2">“{sheet.decision_note}”{sheet.decided_by ? ` — ${sheet.decided_by}` : ''}</div> : null}
           <Panel title="Work logged">
             <THead cols={[['Date', 90], ['Work', null], ['Project', 130], ['Time', 70]]} />

@@ -94,7 +94,7 @@ export function Directory({ onNewGroup, onNew }: { onNewGroup: () => void; onNew
                   <Icon name="check" size={12} /> Saved
                 </span>
               ) : !u.is_me ? (
-                <button type="button" aria-label={`Add ${u.name} to contacts`} disabled={adding === u.id} onClick={() => void add(u)} className="flex h-[30px] shrink-0 items-center gap-1 rounded-[8px] border border-[#C9D2F2] bg-selection px-2.5 text-[12px] font-bold text-primary hover:brightness-95 disabled:opacity-50 dark:border-line">
+                <button type="button" aria-label={`Add ${u.name} to contacts`} disabled={adding === u.id} onClick={() => void add(u)} className="flex h-[30px] shrink-0 items-center gap-1 rounded-[8px] border border-info-line bg-selection px-2.5 text-[12px] font-bold text-primary hover:brightness-95 disabled:opacity-50 dark:border-line">
                   <Icon name="plus" size={13} /> Add
                 </button>
               ) : null}

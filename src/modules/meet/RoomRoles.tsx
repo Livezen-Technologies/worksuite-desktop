@@ -20,8 +20,8 @@ import { meet } from './session';
 
 const BADGE: Record<MeetRole, string> = {
   host: 'bg-primary/15 text-primary',
-  cohost: 'bg-[#E6F4EF] text-[#127A5B] dark:bg-[#123A2E] dark:text-[#7FD8B6]',
-  presenter: 'bg-[#FFF4E0] text-[#9A5B00] dark:bg-[#3A2A10] dark:text-[#F6C77A]',
+  cohost: 'bg-success-bg text-success dark:text-success-ink',
+  presenter: 'bg-warning-bg text-warning-ink dark:text-warning-strong',
   participant: 'bg-subtle text-ink-3',
 };
 

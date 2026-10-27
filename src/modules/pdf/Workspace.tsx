@@ -547,6 +547,8 @@ export function Workspace({ source }: { source: PdfSource }) {
                   goTo,
                   ribbon: (t) => setTab(t),
                   showComments: () => setRight('comments'),
+                  showPro: () => setRight('pro'),
+                  openTool: (t) => setProTool(t),
                 }}
               />
             ) : (

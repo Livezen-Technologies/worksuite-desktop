@@ -8,8 +8,8 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, PageHead } from '../hr/parts';
-import { HeadLink, Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, PageHead } from '../../components/PageKit';
+import { HeadLink, Pill } from '../../components/ListKit';
 import { can, fetchPeriods, K, longDate, money, refusal, shortDate, type FiscalYear } from './api';
 import {
   approveRefusal,
@@ -32,7 +32,7 @@ import {
   type CloseVersion,
   type YearEndData,
 } from './close';
-import { Caps, ConfirmSheet, GoRow, LoadFailed, Notice, ReasonSheet } from './parts';
+import { Caps, ConfirmSheet, GoRow, LoadFailed, Notice, ReasonSheet } from '../../components/RecordKit';
 import type { FinanceView, ScreenProps } from './Rail';
 import { Checkbox } from '../../components/Checkbox';
 

@@ -1,7 +1,7 @@
 import { useRef, useState, useSyncExternalStore } from 'react';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
-import { CallAvatar, VideoView } from '../parts';
+import { CallAvatar, VideoView } from '../../../components/CallKit';
 import { nearestCorner, pipRect } from './layout';
 import type { CallPerson } from './people';
 import { callUi } from './state';
@@ -24,7 +24,7 @@ export function CallVideoPip({ person, self, stage, inset }: { person: CallPerso
 
   if (!ui.pipEnabled) {
     return (
-      <button type="button" onClick={() => callUi.set({ pipEnabled: true })} className="no-drag absolute top-3 right-3 z-[20] flex h-8 items-center gap-1.5 rounded-full bg-[rgba(11,18,38,.8)] px-3 text-[12px] font-semibold text-[#E6ECFA] hover:bg-[rgba(11,18,38,.95)]">
+      <button type="button" onClick={() => callUi.set({ pipEnabled: true })} className="no-drag absolute top-3 right-3 z-[20] flex h-8 items-center gap-1.5 rounded-full bg-[rgba(11,18,38,.8)] px-3 text-[12px] font-semibold text-stage-ink hover:bg-[rgba(11,18,38,.95)]">
         <Icon name="pip" size={14} />
         Show {person.self ? 'your video' : person.name}
       </button>
@@ -41,7 +41,7 @@ export function CallVideoPip({ person, self, stage, inset }: { person: CallPerso
     <div
       role="group"
       aria-label={`${person.name}'s video — drag to move`}
-      className={cx('no-drag group absolute z-[20] touch-none overflow-hidden rounded-[12px] border border-white/15 bg-[#24365F] shadow-[0_10px_30px_rgba(0,0,0,.45)]', drag ? 'cursor-grabbing' : 'cursor-grab transition-[left,top] duration-200', person.speaking && 'ring-2 ring-[#3DD68C]')}
+      className={cx('no-drag group absolute z-[20] touch-none overflow-hidden rounded-[12px] border border-white/15 bg-navy-3 shadow-[0_10px_30px_rgba(0,0,0,.45)]', drag ? 'cursor-grabbing' : 'cursor-grab transition-[left,top] duration-200', person.speaking && 'ring-2 ring-stage-green-bright')}
       style={{ left: x, top: y, width: rect.width, height: rect.height }}
       onPointerDown={(e) => {
         if ((e.target as HTMLElement).closest('button')) return;

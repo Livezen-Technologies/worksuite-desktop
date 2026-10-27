@@ -7,7 +7,7 @@ import { text } from '../../../core/i18n';
 import { toast } from '../../../core/toasts';
 import { cx } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { playOnce, playTone } from '../../calls/tones';
 import { FollowUpCard, JoinedCard, OutcomeCard, ParticipantCard, RingCard, RingStack, SilencedCard, WindowStrip, followUpStatus, useFit } from './RingCard';
 
@@ -304,19 +304,19 @@ function CallCard({ s, c, rest, more, now }: { s: WebchatRingState; c: WebchatCa
   const contact = s.hidden ? null : [c.phone, c.email].filter(Boolean).join(' · ') || null;
   const status = s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : more ? `${more} more waiting` : null;
   return (
-    <section aria-label="Incoming voice call" className="flex h-full flex-col overflow-hidden border border-[#2F9E67] bg-[#111B3B] text-[13px] text-[#F1F4FB]">
+    <section aria-label="Incoming voice call" className="flex h-full flex-col overflow-hidden border border-stage-green bg-stage-2 text-[13px] text-stage-ink">
       <div className="sr-only" role="alert" aria-live="assertive">
         {s.hidden ? 'A website visitor is calling.' : `Voice call: ${c.visitor}${c.site ? ` on ${c.site}` : ''} is calling.`}
       </div>
       <WindowStrip title="WorkSuite · Website voice call" />
       <div className="drag flex items-center gap-4 px-[18px] pt-[18px] pb-2">
-        <span aria-hidden className="flex h-[82px] w-[82px] shrink-0 items-center justify-center rounded-full border-2 border-[#65B385]/45 motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
-          <span className="flex h-[62px] w-[62px] items-center justify-center rounded-full bg-[#2F9E67] text-white">
+        <span aria-hidden className="flex h-[82px] w-[82px] shrink-0 items-center justify-center rounded-full border-2 border-green/45 motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
+          <span className="flex h-[62px] w-[62px] items-center justify-center rounded-full bg-green text-white">
             <Icon name="phone" size={26} />
           </span>
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-          <span className="text-[11px] font-bold tracking-[1px] text-[#A7E3C3] uppercase">
+          <span className="text-[11px] font-bold tracking-[1px] text-stage-success uppercase">
             <span>Incoming voice call</span>
             {c.requestedAt ? (
               <>
@@ -326,14 +326,14 @@ function CallCard({ s, c, rest, more, now }: { s: WebchatRingState; c: WebchatCa
             ) : null}
           </span>
           <b className="truncate text-[19px] font-bold text-white">{s.hidden ? 'A website visitor' : c.visitor}</b>
-          <span className="truncate text-[13px] text-[#AAB2C9]">{s.hidden ? 'Unlock WorkSuite to see who.' : callWhere(c)}</span>
-          {!s.hidden && c.page ? <span className="truncate text-[12px] text-[#C9D5F5]">Reading {c.page}</span> : null}
+          <span className="truncate text-[13px] text-stage-ink-3">{s.hidden ? 'Unlock WorkSuite to see who.' : callWhere(c)}</span>
+          {!s.hidden && c.page ? <span className="truncate text-[12px] text-navy-ink">Reading {c.page}</span> : null}
           {/* The details the visitor gave before calling (UX-WGT-10): who to ring back if the line drops. */}
-          {contact ? <span className="truncate text-[12px] text-[#C9D5F5]">{contact}</span> : null}
+          {contact ? <span className="truncate text-[12px] text-navy-ink">{contact}</span> : null}
         </span>
       </div>
       {!s.hidden && c.preview ? (
-        <p className="mx-[18px] mt-1.5 line-clamp-2 rounded-[10px] border border-[#24306A] bg-[#1A2550] px-3 py-2.5 text-[13px] break-words">
+        <p className="mx-[18px] mt-1.5 line-clamp-2 rounded-[10px] border border-navy-3 bg-navy-2 px-3 py-2.5 text-[13px] break-words">
           Last message: <span>“{c.preview}”</span>
         </p>
       ) : null}
@@ -343,33 +343,33 @@ function CallCard({ s, c, rest, more, now }: { s: WebchatRingState; c: WebchatCa
           disabled={s.hidden || noMic}
           title={noMic ? 'No microphone on this computer' : undefined}
           onClick={() => answerCall(c.id, true)}
-          className="flex h-[46px] flex-1 items-center justify-center gap-2 rounded-full bg-[#2F9E67] text-[15px] font-bold text-white hover:brightness-110 disabled:opacity-50"
+          className="flex h-[46px] flex-1 items-center justify-center gap-2 rounded-full bg-green text-[15px] font-bold text-white hover:brightness-110 disabled:opacity-50"
         >
           Answer
         </button>
-        <button type="button" onClick={() => answerCall(c.id, false)} className="h-[46px] w-[124px] shrink-0 rounded-full bg-[#D9483B] text-[14px] font-bold text-white hover:brightness-110">
+        <button type="button" onClick={() => answerCall(c.id, false)} className="h-[46px] w-[124px] shrink-0 rounded-full bg-red text-[14px] font-bold text-white hover:brightness-110">
           Decline
         </button>
       </div>
       {rest.length ? (
-        <ul className="flex flex-col border-t border-[#22305C]" aria-label="Other calls">
+        <ul className="flex flex-col border-t border-primary" aria-label="Other calls">
           {rest.slice(0, 3).map((x) => (
-            <li key={`c${x.id}`} className="flex h-[46px] items-center gap-2 border-b border-[#22305C] px-[18px]">
-              <Icon name="phone" size={13} className="shrink-0 text-[#A7E3C3]" />
+            <li key={`c${x.id}`} className="flex h-[46px] items-center gap-2 border-b border-primary px-[18px]">
+              <Icon name="phone" size={13} className="shrink-0 text-stage-success" />
               <span className="min-w-0 flex-1 truncate">
                 <b className="text-white">{s.hidden ? 'A visitor' : x.visitor}</b>
-                <span className="text-[#AFC0E8]"> · Voice call{x.site && !s.hidden ? ` · ${x.site}` : ''}</span>
+                <span className="text-stage-accent"> · Voice call{x.site && !s.hidden ? ` · ${x.site}` : ''}</span>
               </span>
-              <button type="button" disabled={s.hidden || noMic} onClick={() => answerCall(x.id, true)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
+              <button type="button" disabled={s.hidden || noMic} onClick={() => answerCall(x.id, true)} className="h-8 rounded-[7px] bg-navy-3 px-2.5 text-[12px] font-bold text-white hover:bg-stage-4 disabled:opacity-50">
                 Answer
               </button>
             </li>
           ))}
         </ul>
       ) : null}
-      {status ? <p className="px-[18px] pt-2 text-[11.5px] text-[#B3C0FF]" role="status">{status}</p> : null}
-      <div className="drag mt-auto flex items-center justify-between gap-3 px-[18px] pt-2 pb-3 text-[12px] text-[#8B93AD]">
-        <span className={cx('flex min-w-0 items-center gap-1.5 truncate', noMic && 'text-[#F2A79E]')}>
+      {status ? <p className="px-[18px] pt-2 text-[11.5px] text-stage-accent" role="status">{status}</p> : null}
+      <div className="drag mt-auto flex items-center justify-between gap-3 px-[18px] pt-2 pb-3 text-[12px] text-ink-4">
+        <span className={cx('flex min-w-0 items-center gap-1.5 truncate', noMic && 'text-stage-danger')}>
           {noMic ? <Icon name="mic-off" size={13} className="shrink-0" /> : null}
           {deviceLine(s.mic)}
         </span>
@@ -393,36 +393,36 @@ export function HandoffCard({ s, h, rest, now }: { s: WebchatRingState; h: Webch
   const invite = h.kind === 'invite';
   const detail = s.hidden ? null : handoffDetail(h);
   return (
-    <div className="flex h-full flex-col bg-[#111B3B] text-[13px] text-[#F1F4FB]">
+    <div className="flex h-full flex-col bg-stage-2 text-[13px] text-stage-ink">
       <div className="sr-only" role="alert" aria-live="assertive">
         {s.hidden ? 'A colleague is asking you into a website chat.' : `${handoffTitle(h)}: ${handoffHeadline(h)}.`}
       </div>
       <section aria-label={invite ? 'Invitation' : 'Transfer request'} className="flex flex-col gap-2.5 px-[18px] pt-4">
         <div className="drag flex items-center gap-2">
-          <span className={cx('rounded-[6px] px-2 py-[3px] text-[11px] font-bold tracking-[1.2px] text-white uppercase', invite ? 'bg-[#1F7A6E]' : 'bg-[#4A63E8]')}>{handoffTitle(h)}</span>
+          <span className={cx('rounded-[6px] px-2 py-[3px] text-[11px] font-bold tracking-[1.2px] text-white uppercase', invite ? 'bg-teal' : 'bg-blue')}>{handoffTitle(h)}</span>
           <span className="flex-1" />
           {left !== null ? (
             // "1:40 left" on an invitation, "0:48" on a transfer, as designed.
-            <span role="timer" aria-label={`Rings for ${clock(left)} more`} className="font-mono text-[13px] text-[#C9CFE3] tabular-nums">{invite ? `${clock(left)} left` : clock(left)}</span>
+            <span role="timer" aria-label={`Rings for ${clock(left)} more`} className="font-mono text-[13px] text-navy-ink tabular-nums">{invite ? `${clock(left)} left` : clock(left)}</span>
           ) : null}
         </div>
         <b className="text-[16px] leading-snug font-bold text-white">{handoffHeadline(h, s.hidden)}</b>
-        {!s.hidden && (h.site || h.page) ? <span className="-mt-1.5 truncate text-[12px] text-[#AFC0E8]">{[h.site, h.page ? `Reading ${h.page}` : null].filter(Boolean).join(' · ')}</span> : null}
+        {!s.hidden && (h.site || h.page) ? <span className="-mt-1.5 truncate text-[12px] text-stage-accent">{[h.site, h.page ? `Reading ${h.page}` : null].filter(Boolean).join(' · ')}</span> : null}
         {!s.hidden && h.note ? (
-          <p className="rounded-[10px] bg-[#1A2550] px-3 py-2.5 text-[13px] break-words text-[#DFE3F0]" title="Only staff see this note">{invite ? `“${h.note}”` : h.note}</p>
+          <p className="rounded-[10px] bg-navy-2 px-3 py-2.5 text-[13px] break-words text-stage-ink" title="Only staff see this note">{invite ? `“${h.note}”` : h.note}</p>
         ) : null}
-        {detail ? <span className="text-[12px] text-[#B3C0FF]">{detail}</span> : null}
+        {detail ? <span className="text-[12px] text-stage-accent">{detail}</span> : null}
         <div className="flex gap-2.5">
-          <button type="button" disabled={s.hidden} onClick={() => answer(h.id, true)} className="h-11 flex-1 rounded-full bg-[#2F9E67] text-[15px] font-bold text-white hover:brightness-110 disabled:opacity-50">
+          <button type="button" disabled={s.hidden} onClick={() => answer(h.id, true)} className="h-11 flex-1 rounded-full bg-green text-[15px] font-bold text-white hover:brightness-110 disabled:opacity-50">
             {invite ? 'Join chat' : 'Accept'}
           </button>
-          <button type="button" onClick={() => answer(h.id, false)} className="h-11 w-[116px] shrink-0 rounded-full border border-[#3A4468] font-semibold text-[#F1F4FB] hover:bg-white/5">
+          <button type="button" onClick={() => answer(h.id, false)} className="h-11 w-[116px] shrink-0 rounded-full border border-stage-4 font-semibold text-stage-ink hover:bg-white/5">
             Decline
           </button>
         </div>
       </section>
       {rest.length ? <HandoffRows s={s} list={rest.slice(0, 3)} more={rest.length - 3} now={now} first /> : null}
-      <p className="drag mt-auto px-[18px] pt-2.5 pb-3 text-[11px] text-[#8FA6E0]">{s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : 'A colleague is asking you into a website chat'}</p>
+      <p className="drag mt-auto px-[18px] pt-2.5 pb-3 text-[11px] text-indigo-bright">{s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : 'A colleague is asking you into a website chat'}</p>
     </div>
   );
 }
@@ -430,24 +430,24 @@ export function HandoffCard({ s, h, rest, now }: { s: WebchatRingState; h: Webch
 /** Other invitations and transfers, under the card, each with Join and Decline. */
 function HandoffRows({ s, list, more, first, now }: { s: WebchatRingState; list: WebchatHandoff[]; more: number; first: boolean; now?: number }) {
   return (
-    <ul className={cx('flex flex-col', first ? 'mt-3 border-t border-[#22305C]' : '')} aria-label="Invitations and transfers">
+    <ul className={cx('flex flex-col', first ? 'mt-3 border-t border-primary' : '')} aria-label="Invitations and transfers">
       {list.map((h) => (
-        <li key={`h${h.id}`} className="flex h-[46px] items-center gap-2 border-b border-[#22305C] px-4">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#8FA6E0]" />
+        <li key={`h${h.id}`} className="flex h-[46px] items-center gap-2 border-b border-primary px-4">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted" />
           <span className="min-w-0 flex-1 truncate">
             <b className="text-white">{s.hidden ? 'A visitor' : h.visitor}</b>
-            <span className="text-[#AFC0E8]"> · {handoffTitle(h)}{h.from && !s.hidden ? ` from ${h.from}` : ''}</span>
+            <span className="text-stage-accent"> · {handoffTitle(h)}{h.from && !s.hidden ? ` from ${h.from}` : ''}</span>
           </span>
-          {now !== undefined && handoffLeft(h, now) !== null ? <span className="shrink-0 font-mono text-[12px] text-[#C9CFE3] tabular-nums">{clock(handoffLeft(h, now)!)}</span> : null}
-          <button type="button" disabled={s.hidden} onClick={() => answer(h.id, true)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
+          {now !== undefined && handoffLeft(h, now) !== null ? <span className="shrink-0 font-mono text-[12px] text-navy-ink tabular-nums">{clock(handoffLeft(h, now)!)}</span> : null}
+          <button type="button" disabled={s.hidden} onClick={() => answer(h.id, true)} className="h-8 rounded-[7px] bg-navy-3 px-2.5 text-[12px] font-bold text-white hover:bg-stage-4 disabled:opacity-50">
             {h.kind === 'invite' ? 'Join' : 'Accept'}
           </button>
-          <button type="button" aria-label={`Decline ${handoffTitle(h).toLowerCase()} for ${s.hidden ? 'a visitor' : h.visitor}`} onClick={() => answer(h.id, false)} className="h-8 rounded-[7px] px-2 text-[12px] font-semibold text-[#C9D5F5] hover:bg-white/5">
+          <button type="button" aria-label={`Decline ${handoffTitle(h).toLowerCase()} for ${s.hidden ? 'a visitor' : h.visitor}`} onClick={() => answer(h.id, false)} className="h-8 rounded-[7px] px-2 text-[12px] font-semibold text-navy-ink hover:bg-white/5">
             Decline
           </button>
         </li>
       ))}
-      {more > 0 ? <li className="px-4 py-1 text-[11.5px] text-[#AFC0E8]">+{more} more asking</li> : null}
+      {more > 0 ? <li className="px-4 py-1 text-[11.5px] text-stage-accent">+{more} more asking</li> : null}
     </ul>
   );
 }
@@ -470,7 +470,7 @@ export function RingingBar({ tone }: { tone: boolean }) {
   if (c) {
     // A visitor calling (VOICE-10): before everything else.
     return (
-      <div role="status" aria-label="Voice call ringing" className="flex h-9 shrink-0 items-center gap-2.5 border-b border-[#A9DDBF] bg-success-bg px-3.5 text-[12.5px] text-[#0F5132] dark:text-success">
+      <div role="status" aria-label="Voice call ringing" className="flex h-9 shrink-0 items-center gap-2.5 border-b border-success-line bg-success-bg px-3.5 text-[12.5px] text-success-ink dark:text-success">
         <Icon name="phone" size={15} className="shrink-0 motion-safe:animate-pulse" />
         <b className="shrink-0">Incoming voice call</b>
         <span className="min-w-0 flex-1 truncate">
@@ -480,7 +480,7 @@ export function RingingBar({ tone }: { tone: boolean }) {
         </span>
         {/* Without a microphone there is nothing to answer with (V-04, VOICE-11): the bar says so instead. */}
         {s.mic?.ready === false ? <span className="shrink-0 text-[12px]">No microphone</span> : null}
-        <button type="button" disabled={s.mic?.ready === false} onClick={() => answerCall(c.id, true)} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110 disabled:opacity-50">
+        <button type="button" disabled={s.mic?.ready === false} onClick={() => answerCall(c.id, true)} className="h-7 rounded-[7px] bg-success px-3 font-bold text-white hover:brightness-110 disabled:opacity-50">
           Answer
         </button>
         <button type="button" onClick={() => answerCall(c.id, false)} className="h-7 rounded-[7px] border border-current/30 px-2.5 font-semibold hover:bg-black/5">
@@ -492,12 +492,12 @@ export function RingingBar({ tone }: { tone: boolean }) {
   if (!top && h) {
     // A colleague asking me in, with nothing else ringing (TEAM-23).
     return (
-      <div role="status" aria-label="Website chat invitation" className="flex h-9 shrink-0 items-center gap-2.5 border-b border-[#C9D3F2] bg-selection px-3.5 text-[12.5px] text-ink">
+      <div role="status" aria-label="Website chat invitation" className="flex h-9 shrink-0 items-center gap-2.5 border-b border-info-line bg-selection px-3.5 text-[12.5px] text-ink">
         <Icon name="users" size={15} className="shrink-0 text-primary" />
         <b className="shrink-0">{handoffTitle(h)}</b>
         <span className="min-w-0 flex-1 truncate">{s.hidden ? '' : `${handoffAsk(h)} · ${h.visitor}`}{(s.handoffs?.length ?? 0) > 1 ? ` · +${(s.handoffs?.length ?? 0) - 1} more` : ''}</span>
         {handoffLeft(h, now) !== null ? <span className="shrink-0 font-mono text-[12px] text-ink-2 tabular-nums" aria-label={`Rings for ${clock(handoffLeft(h, now)!)} more`}>{clock(handoffLeft(h, now)!)}</span> : null}
-        <button type="button" onClick={() => answer(h.id, true)} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110">
+        <button type="button" onClick={() => answer(h.id, true)} className="h-7 rounded-[7px] bg-success px-3 font-bold text-white hover:brightness-110">
           {h.kind === 'invite' ? 'Join chat' : 'Accept'}
         </button>
         <button type="button" onClick={() => answer(h.id, false)} className="h-7 rounded-[7px] border border-current/30 px-2.5 font-semibold hover:bg-black/5">
@@ -511,7 +511,7 @@ export function RingingBar({ tone }: { tone: boolean }) {
     const said = [...f.recent].reverse().find((m) => m.from === 'visitor')?.body;
     const more = (s.followUps?.length ?? 1) - 1;
     return (
-      <div role="status" aria-label="Visitor waiting for your reply" className="flex h-9 shrink-0 items-center gap-2.5 border-b border-[#F2D39B] bg-warning-bg px-3.5 text-[12.5px] text-[#7A4308] dark:text-warning">
+      <div role="status" aria-label="Visitor waiting for your reply" className="flex h-9 shrink-0 items-center gap-2.5 border-b border-warning-line bg-warning-bg px-3.5 text-[12.5px] text-warning-strong dark:text-warning">
         <Icon name="chat" size={15} className="shrink-0" />
         <b className="shrink-0">{followUpStatus(f)}</b>
         <span className="min-w-0 flex-1 truncate">
@@ -519,7 +519,7 @@ export function RingingBar({ tone }: { tone: boolean }) {
           {more > 0 ? ` · +${more} more` : ''}
         </span>
         {!f.mine && f.stage === 'team' ? (
-          <button type="button" onClick={() => void call('ring:followUp', { id: f.id, action: 'takeOver' }).catch((e) => toast('error', errorMessage(e)))} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110">
+          <button type="button" onClick={() => void call('ring:followUp', { id: f.id, action: 'takeOver' }).catch((e) => toast('error', errorMessage(e)))} className="h-7 rounded-[7px] bg-success px-3 font-bold text-white hover:brightness-110">
             Take over
           </button>
         ) : null}
@@ -539,7 +539,7 @@ export function RingingBar({ tone }: { tone: boolean }) {
     <div
       role="status"
       aria-label="Website chat ringing"
-      className={cx('flex h-9 shrink-0 items-center gap-2.5 border-b px-3.5 text-[12.5px]', all ? 'border-[#F2D39B] bg-warning-bg text-[#7A4308] dark:text-warning' : 'border-[#F6C4B8] bg-danger-bg text-[#8C2A14] dark:text-danger')}
+      className={cx('flex h-9 shrink-0 items-center gap-2.5 border-b px-3.5 text-[12.5px]', all ? 'border-warning-line bg-warning-bg text-warning-strong dark:text-warning' : 'border-danger-line bg-danger-bg text-danger-ink dark:text-danger')}
     >
       <Icon name={all ? 'bell-off' : 'bell'} size={15} className={cx('shrink-0', !all && 'motion-safe:animate-pulse')} />
       <b className="shrink-0">{all ? `${s.chats.length === 1 ? 'A chat' : `${s.chats.length} chats`} waiting · silenced for you` : 'Website chat ringing'}</b>
@@ -547,7 +547,7 @@ export function RingingBar({ tone }: { tone: boolean }) {
         {s.hidden ? '' : `${top.visitor}${top.site ? ` · ${top.site}` : ''} · ${stageLabel(top)}`} · {waited(top.since, now)}
         {more > 0 ? ` · +${more} waiting` : ''}
       </span>
-      <button type="button" onClick={() => join(top.id)} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110">
+      <button type="button" onClick={() => join(top.id)} className="h-7 rounded-[7px] bg-success px-3 font-bold text-white hover:brightness-110">
         Join
       </button>
       <button type="button" onClick={() => silence(top.id, !top.silenced)} className="h-7 rounded-[7px] border border-current/30 px-2.5 font-semibold hover:bg-black/5">
@@ -581,12 +581,12 @@ export function RingAlertPill() {
       title={text('Open Website Chats')}
       className={cx(
         'no-drag flex h-8 shrink-0 items-center gap-2 rounded-full px-3 text-[12px] whitespace-nowrap',
-        silenced ? 'border border-[#B7822F] bg-[#3B2C17] font-semibold text-[#F3C77E] hover:bg-[#4A3820]' : 'bg-[#C2392D] font-bold text-white hover:bg-[#D2453A]',
+        silenced ? 'border border-stage-amber bg-stage-gray-2 font-semibold text-stage-danger hover:bg-stage-gray-2' : 'bg-badge font-bold text-white hover:bg-badge',
       )}
     >
       <Icon name={silenced ? 'bell-off' : 'bell'} size={14} className={cx('shrink-0', !silenced && 'motion-safe:animate-pulse')} />
       {label}
-      <span role="timer" className={cx('font-mono text-[11px] tabular-nums', !silenced && 'rounded-full bg-[#8C2219] px-[7px] py-0.5')}>{time}</span>
+      <span role="timer" className={cx('font-mono text-[11px] tabular-nums', !silenced && 'rounded-full bg-danger px-[7px] py-0.5')}>{time}</span>
     </button>
   );
 }

@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Kpi, Panel, Seg, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Kpi, Panel, Seg, Sheet, SidePanel } from '../../components/PageKit';
 import {
   addChannel,
   cancelSync,
@@ -31,6 +31,7 @@ import {
 } from './manage';
 import { Checkbox } from '../../components/Checkbox';
 import { SyncButton } from '../../components/SyncButton';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Sales channels (OmsChannelSheet): where orders come from. Every kind the
@@ -148,7 +149,7 @@ function AddChannel({ k, orgs, onClose, onAdded }: { k: ChannelKind; orgs: Array
       </Field>
       <Field
         label="Points at"
-        hint={k.needs_ref && !k.available.length ? <span className="text-[#9A4A06] dark:text-warning">Nothing is set up yet. Set one up {k.made_in ?? 'in Billing'} first, then it appears here.</span> : undefined}
+        hint={k.needs_ref && !k.available.length ? <span className="text-warning-ink dark:text-warning">Nothing is set up yet. Set one up {k.made_in ?? 'in Billing'} first, then it appears here.</span> : undefined}
       >
         <Select<string>
           aria-label="Points at"
@@ -274,7 +275,7 @@ function ChannelPanel({ id, org, can, onClose }: { id: number; org: string; can:
               ...(can.view_logs !== false ? [{ id: 'logs' as const, label: 'Logs' }] : []),
             ]}
           />
-          {c.last_error ? <p className="m-0 rounded-[10px] border border-[#F1B8A8] bg-danger-bg px-3 py-2 text-[12.5px] text-danger">Last failure: {c.last_error}</p> : null}
+          {c.last_error ? <p className="m-0 rounded-[10px] border border-danger-line bg-danger-bg px-3 py-2 text-[12.5px] text-danger">Last failure: {c.last_error}</p> : null}
           {tab === 'connection' ? (
             <div className="flex flex-col gap-2.5 text-[12.5px]">
               <p className="m-0 rounded-[10px] bg-subtle px-3 py-2 leading-relaxed text-ink-2">{d.describe.note}</p>
@@ -337,11 +338,11 @@ function ChannelPanel({ id, org, can, onClose }: { id: number; org: string; can:
                 <SyncPanel id={id} name={c.name} canSync={!!can.sync} sync={sync} />
               ) : (
                 <>
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <Kpi label="Imported" value={c.imported.toLocaleString()} />
-                    <Kpi label="Failed" value={c.failed.toLocaleString()} tone={c.failed ? 'red' : undefined} />
-                    <Kpi label="Last delivery" value={c.last_sync_at ? relative(c.last_sync_at) : 'Never'} />
-                  </div>
+                  <StatGrid min={150}>
+                    <Kpi icon="download" tone="blue" label="Imported" value={c.imported.toLocaleString()} />
+                    <Kpi icon="x-circle" label="Failed" value={c.failed.toLocaleString()} tone={c.failed ? 'red' : undefined} />
+                    <Kpi icon="clock" label="Last delivery" value={c.last_sync_at ? relative(c.last_sync_at) : 'Never'} />
+                  </StatGrid>
                   <span className="text-[11.5px] text-ink-3">From the last delivery, not a lifetime total — so a count that starts failing shows.</span>
                 </>
               )}
@@ -506,12 +507,12 @@ function SyncPanel({ id, name, canSync, sync }: { id: number; name: string; canS
             <b className="flex-1 text-ink">Last sync</b>
             <span className="text-[11.5px] text-ink-3">{d.last_done_at ? `Last successful sync ${relative(d.last_done_at)}` : 'No successful sync yet'}</span>
           </div>
-          <div className="grid grid-cols-4 gap-2">
-            <Kpi label="Orders" value={last.created.toLocaleString()} sub={`new · ${last.duplicate} already here`} />
-            <Kpi label="Customers" value={last.customers_new.toLocaleString()} sub={`new · ${last.customers_matched} known`} />
-            <Kpi label="Order lines" value={last.lines.toLocaleString()} sub="with the new orders" />
-            <Kpi label="Needs a look" value={last.refused.toLocaleString()} sub={`refused · ${last.skipped} carts skipped`} tone={last.refused ? 'red' : undefined} />
-          </div>
+          <StatGrid min={150}>
+            <Kpi icon="cart" tone="blue" label="Orders" value={last.created.toLocaleString()} sub={`new · ${last.duplicate} already here`} />
+            <Kpi icon="users" tone="violet" label="Customers" value={last.customers_new.toLocaleString()} sub={`new · ${last.customers_matched} known`} />
+            <Kpi icon="list" tone="cyan" label="Order lines" value={last.lines.toLocaleString()} sub="with the new orders" />
+            <Kpi icon="warning" label="Needs a look" value={last.refused.toLocaleString()} sub={`refused · ${last.skipped} carts skipped`} tone={last.refused ? 'red' : undefined} />
+          </StatGrid>
           <div className={cx('flex items-center gap-2 rounded-[10px] px-3 py-2 text-[12.5px]', last.status === 'done' ? TONE_CHIP.ok : last.status === 'cancelled' ? TONE_CHIP.idle : TONE_CHIP.bad)}>
             <span className="min-w-0 flex-1">
               {last.status === 'done'
@@ -586,14 +587,14 @@ function Running({ run, name, driving, canSync, onCancel, onResume }: { run: Syn
         ) : null}
       </div>
       {run.interrupted && !driving ? (
-        <p className="m-0 rounded-[8px] bg-warning-bg px-2.5 py-1.5 text-[12px] text-[#9A4A06] dark:text-warning">
+        <p className="m-0 rounded-[8px] bg-warning-bg px-2.5 py-1.5 text-[12px] text-warning-ink dark:text-warning">
           This sync stopped at page {run.page}
           {run.pages ? ` of ${run.pages}` : ''} when the screen driving it closed. Carry on picks it up from there; nothing is brought in twice.
         </p>
       ) : null}
       {steps.map((s) => (
         <span key={s.label} className={cx('flex items-start gap-2.5 rounded-[8px] px-1.5 py-1 text-[12.5px]', s.state === 'active' && 'bg-selection/50')}>
-          <span className={cx('mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold', s.state === 'done' ? 'bg-[#1F7A4D] text-white' : s.state === 'active' ? 'border-2 border-primary' : 'border-[1.5px] border-line')}>
+          <span className={cx('mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold', s.state === 'done' ? 'bg-success text-white' : s.state === 'active' ? 'border-2 border-primary' : 'border-[1.5px] border-line')}>
             {s.state === 'done' ? <Icon name="check" size={11} /> : null}
           </span>
           <span className="flex min-w-0 flex-1 flex-col">

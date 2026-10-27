@@ -6,10 +6,10 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, PageHead, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, Field, input, PageHead, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { archiveAccount, BEHAVIOURS, can, COSTABLE, createAccount, fetchAccounts, flattenAccounts, K, refusal, setBehaviour, TYPES, type Account, type Company } from './api';
-import { ConfirmSheet, LoadFailed } from './parts';
+import { ConfirmSheet, LoadFailed } from '../../components/RecordKit';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
@@ -121,7 +121,7 @@ export default function Accounts({ company }: { company: Company }) {
                       value={a.cost_behaviour ?? 'unclassified'}
                       disabled={busy === a.id}
                       onChange={(e) => void behaviour(a, e.target.value)}
-                      className={cx('h-7 w-full rounded-[7px] border px-2 text-[12px]', a.cost_behaviour === 'unclassified' ? 'border-[#F5D48A] bg-[#FFF8E6] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning' : 'border-line bg-surface text-ink-2')}
+                      className={cx('h-7 w-full rounded-[7px] border px-2 text-[12px]', a.cost_behaviour === 'unclassified' ? 'border-warning-line bg-warning-bg text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning' : 'border-line bg-surface text-ink-2')}
                     >
                       {BEHAVIOURS.map(([v, l]) => (
                         <option key={v} value={v}>

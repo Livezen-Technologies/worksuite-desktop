@@ -72,7 +72,7 @@ export function CallSidePanel({ tabs, active, rect, docked, width }: { tabs: Pan
             className={cx('relative h-[42px] shrink-0 px-2.5 text-[12.5px] whitespace-nowrap', t.id === shown.id ? 'font-bold text-primary shadow-[inset_0_-2px_0_var(--color-primary)]' : 'font-medium text-ink-2 hover:text-ink')}
           >
             {t.label}
-            {t.badge ? <span className="ml-1 rounded-full bg-[#E0522F] px-1.5 text-[10.5px] font-bold text-white">{t.badge}</span> : null}
+            {t.badge ? <span className="ml-1 rounded-full bg-red px-1.5 text-[10.5px] font-bold text-white">{t.badge}</span> : null}
           </button>
         ))}
         </div>

@@ -11,7 +11,7 @@ export const TONE_CLASS: Record<Tone, string> = {
   warning: 'bg-warning-bg text-warning',
   danger: 'bg-danger-bg text-danger',
   muted: 'bg-subtle text-ink-2',
-  violet: 'bg-[#F3E8FF] text-[#6B21A8] dark:bg-[#2E1D4A] dark:text-[#D2B4FE]',
+  violet: 'bg-violet-bg text-violet-ink',
   teal: 'bg-teal/10 text-teal',
 };
 
@@ -22,7 +22,7 @@ export const TONE_SOLID: Record<Tone, string> = {
   warning: 'bg-warning',
   danger: 'bg-danger',
   muted: 'bg-ink-3',
-  violet: 'bg-[#7C3AED]',
+  violet: 'bg-violet',
   teal: 'bg-teal',
 };
 

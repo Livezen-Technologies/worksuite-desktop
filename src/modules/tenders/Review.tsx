@@ -208,7 +208,7 @@ export function ReviewScreen({
                 {line.reviewed_at ? ` ${relative(line.reviewed_at)}` : ''}.
               </p>
             ) : null}
-            {older ? <p className="m-0 text-[12px] text-[#9A4A06] dark:text-warning">This is an earlier version. A decision applies to the current one.</p> : null}
+            {older ? <p className="m-0 text-[12px] text-warning-ink dark:text-warning">This is an earlier version. A decision applies to the current one.</p> : null}
             {canApprove && reviewable(line) ? (
               <div className="flex flex-col gap-2 border-t border-line pt-3">
                 <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-2">
@@ -241,11 +241,11 @@ export function ReviewScreen({
                 {error ? <p className="m-0 text-[12.5px] text-danger">{error}</p> : null}
                 <div className="flex gap-2">
                   {line.status !== 'approved' ? (
-                    <button type="button" disabled={busy !== null} onClick={() => void decide('approved')} className={cx(btn, 'flex-1 bg-[#1F7A4D] text-white hover:brightness-110')}>
+                    <button type="button" disabled={busy !== null} onClick={() => void decide('approved')} className={cx(btn, 'flex-1 bg-success text-white hover:brightness-110')}>
                       {busy === 'approve' ? 'Approving…' : 'Approve'}
                     </button>
                   ) : null}
-                  <button type="button" disabled={busy !== null} onClick={() => void decide('rejected')} className={cx(btn, 'flex-1 border border-[#F1B8A8] text-danger hover:bg-danger-bg')}>
+                  <button type="button" disabled={busy !== null} onClick={() => void decide('rejected')} className={cx(btn, 'flex-1 border border-danger-line text-danger hover:bg-danger-bg')}>
                     {busy === 'send' ? 'Sending back…' : uploader ? `Send back to ${uploader.split(' ')[0]}` : 'Send back'}
                   </button>
                 </div>

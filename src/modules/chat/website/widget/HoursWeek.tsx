@@ -1,6 +1,6 @@
 import { text } from '../../../../core/i18n';
 import { Switch, cx } from '../../../../components/ui';
-import { useNow } from '../../../calls/parts';
+import { useNow } from '../../../../components/CallKit';
 import { DAYS, type HoursDay } from './design';
 import { openLine, openState, weekBars, type DayBar } from './hours';
 

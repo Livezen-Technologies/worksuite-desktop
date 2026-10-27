@@ -20,8 +20,10 @@ import {
   type PdfSearchHit,
   type PdfSearchOptions,
   type PdfSecurityReport,
+  type PdfStamp,
+  stampText,
 } from '@shared/pdf';
-import { EngineError, ENGINE_MESSAGES, type CancelToken, type EngineEditOp, type EngineFile, type EngineOpened, type PDFEngine, type RenderedPixels, type RenderRequest, type SearchProgress, type TextSpan } from './engine';
+import { EngineError, ENGINE_MESSAGES, type CancelToken, type EngineCompose, type EngineEditOp, type EngineFile, type EngineOpened, type PDFEngine, type RenderedPixels, type RenderRequest, type SearchProgress, type TextSpan } from './engine';
 import { openReader, type BlockReader } from './file-reader';
 
 /**
@@ -956,6 +958,28 @@ export class PdfiumProvider implements PDFEngine {
         case 'page.insertFile':
           this.insertFile(op);
           break;
+        case 'page.duplicate': {
+          const pages = op.pages;
+          for (const p of pages) this.pageSize(p);
+          if (op.at > this.sizes.length) throw new EngineError('page', ENGINE_MESSAGES.page);
+          this.dropPages();
+          const idx = this.malloc(pages.length * 4);
+          try {
+            pages.forEach((p, k) => this.P.setValue(idx + k * 4, p, 'i32'));
+            if (!this.m.FPDF_ImportPagesByIndex(this.doc, this.doc, idx, pages.length, op.at)) throw new EngineError('unknown', 'Those pages could not be copied.');
+          } finally {
+            this.free(idx);
+          }
+          break;
+        }
+        case 'page.stamp': {
+          const pages = [...new Set(op.pages)];
+          pages.forEach((p, n) => this.stamp(p, op.stamp, stampText(op.stamp, p, this.sizes.length, n)));
+          break;
+        }
+        case 'page.redact':
+          this.redact(op.page, op.rects);
+          break;
       }
     } finally {
       this.dropPages();
@@ -1075,6 +1099,74 @@ export class PdfiumProvider implements PDFEngine {
     }
   }
 
+  /** One page's words (Helvetica, WinAnsi), placed on the page as it is shown: upright whatever its /Rotate. */
+  private stamp(i: number, st: PdfStamp, words: string): void {
+    const size = this.pageSize(i);
+    const { page } = this.loadPage(i);
+    const obj = this.m.FPDFPageObj_NewTextObj(this.doc, 'Helvetica', st.size);
+    if (!obj) throw new EngineError('memory', ENGINE_MESSAGES.memory);
+    const scratch = this.malloc(64);
+    const bytes = (words.length + 1) * 2;
+    const w16 = this.malloc(bytes);
+    let inserted = false;
+    try {
+      this.P.stringToUTF16(words, w16, bytes);
+      if (!this.m.FPDFText_SetText(obj, w16)) throw new EngineError('unsupported', 'Those words could not be stamped.');
+      this.m.FPDFPageObj_SetFillColor(obj, st.color[0], st.color[1], st.color[2], Math.round(st.opacity * 255));
+      let w = st.size * words.length * 0.5;
+      if (this.m.FPDFPageObj_GetBounds(obj, scratch, scratch + 4, scratch + 8, scratch + 12)) w = Math.max(1, this.P.getValue(scratch + 8, 'float') - this.P.getValue(scratch, 'float'));
+      const h = st.size;
+      const margin = st.margin ?? 28;
+      const [W, H] = size;
+      const place = st.diagonal ? 'center' : st.place;
+      const cx = place.endsWith('left') ? margin + w / 2 : place.endsWith('right') ? W - margin - w / 2 : W / 2;
+      const cy = place.startsWith('top') ? margin + h / 2 : place.startsWith('bottom') ? H - margin - h / 2 : H / 2;
+      // The centre of the words on the shown page, in page space; then the words turned to read upright there.
+      const [px, py] = this.toPage(page, size, cx, cy, scratch + 16);
+      const rot = (this.m.FPDFPage_GetRotation(page) * 90 + (st.diagonal ? 45 : 0)) * (Math.PI / 180);
+      const c = Math.cos(rot);
+      const sn = Math.sin(rot);
+      // Baseline-left from the centre: half the width back along the text, a third of the height down.
+      const ox = px - (c * (w / 2) - sn * (h / 3));
+      const oy = py - (sn * (w / 2) + c * (h / 3));
+      this.m.FPDFPageObj_Transform(obj, c, sn, -sn, c, ox, oy);
+      this.m.FPDFPage_InsertObject(page, obj);
+      inserted = true;
+      if (!this.m.FPDFPage_GenerateContent(page)) throw new EngineError('unknown', 'The page could not be written.');
+    } finally {
+      this.free(w16);
+      this.free(scratch);
+      if (!inserted) this.m.FPDFPageObj_Destroy(obj);
+    }
+  }
+
+  /**
+   * True redaction: under each area the text is removed from the page's content (PDFium's redaction, not a cover)
+   * and a black box drawn; pictures and drawings wholly inside an area are removed too.
+   */
+  private redact(i: number, rects: PdfRect[]): void {
+    const size = this.pageSize(i);
+    const { page } = this.loadPage(i);
+    const scratch = this.malloc(64);
+    try {
+      const areas = rects.map((r) => this.pageRect(page, size, r, scratch));
+      for (let k = this.m.FPDFPage_CountObjects(page) - 1; k >= 0; k--) {
+        const obj = this.m.FPDFPage_GetObject(page, k);
+        const type = obj ? this.m.FPDFPageObj_GetType(obj) : 0;
+        // 2 path, 3 image, 4 shading.
+        if (![2, 3, 4].includes(type) || !this.m.FPDFPageObj_GetBounds(obj, scratch, scratch + 4, scratch + 8, scratch + 12)) continue;
+        const [l, b, r, t] = [0, 4, 8, 12].map((o) => this.P.getValue(scratch + o, 'float')) as [number, number, number, number];
+        if (areas.some(([al, ab, ar, at]) => l >= al - 0.5 && b >= ab - 0.5 && r <= ar + 0.5 && t <= at + 0.5) && this.m.FPDFPage_RemoveObject(page, obj)) this.m.FPDFPageObj_Destroy(obj);
+      }
+      for (const a of areas) {
+        if (!this.m.EPDFText_RedactInRect(page, this.writeRect(scratch + 32, a), false, true)) throw new EngineError('unsupported', 'That area could not be redacted.');
+      }
+      if (!this.m.FPDFPage_GenerateContent(page)) throw new EngineError('unknown', 'The page could not be written.');
+    } finally {
+      this.free(scratch);
+    }
+  }
+
   private insertFile(op: Extract<EngineEditOp, { op: 'page.insertFile' }>): void {
     if (op.at > this.sizes.length) throw new EngineError('page', ENGINE_MESSAGES.page);
     let reader: BlockReader;
@@ -1144,6 +1236,167 @@ export class PdfiumProvider implements PDFEngine {
     } finally {
       this.free(idx);
       this.m.FPDF_CloseDocument(out);
+    }
+  }
+
+  // ── tools on this computer (D-G12) ─────────────────────────────────────
+
+  /** The document as a complete file with its security removed (it was opened with its password). */
+  private plainCopy(): Uint8Array {
+    if (!this.doc) throw new EngineError('unsupported', ENGINE_MESSAGES.unsupported);
+    this.dropPages();
+    const w = this.m.PDFiumExt_OpenFileWriter();
+    if (!w) throw new EngineError('memory', ENGINE_MESSAGES.memory);
+    let out = 0;
+    try {
+      // FPDF_REMOVE_SECURITY: the copy is written without the document's encryption.
+      if (!this.m.FPDF_SaveAsCopy(this.doc, w, 3)) throw new EngineError('unknown', 'The PDF could not be written.');
+      const size = this.m.PDFiumExt_GetFileWriterSize(w);
+      out = this.malloc(size);
+      this.m.PDFiumExt_GetFileWriterData(w, out, size);
+      return this.P.HEAPU8.slice(out, out + size);
+    } finally {
+      this.free(out);
+      this.m.PDFiumExt_CloseFileWriter(w);
+    }
+  }
+
+  /** A second document from bytes, for as long as `run` needs it. */
+  private withBytes<T>(bytes: Uint8Array, run: (doc: number) => T): T {
+    const mem = this.malloc(bytes.length);
+    let doc = 0;
+    try {
+      this.P.HEAPU8.set(bytes, mem);
+      doc = this.m.FPDF_LoadMemDocument(mem, bytes.length, '');
+      if (!doc) throw new EngineError('format', ENGINE_MESSAGES.format);
+      return run(doc);
+    } finally {
+      if (doc) this.m.FPDF_CloseDocument(doc);
+      this.free(mem);
+    }
+  }
+
+  async protect(userPassword: string, ownerPassword: string, permissions: number): Promise<Uint8Array> {
+    if (!ownerPassword) throw new EngineError('unsupported', 'A permissions password is needed.');
+    const bytes = this.withBytes(this.plainCopy(), (doc) => {
+      // AES-256 (revision 6).
+      if (!this.m.EPDF_SetEncryption(doc, userPassword, ownerPassword, permissions)) throw new EngineError('unsupported', 'This PDF could not be protected.');
+      return this.writeOut(doc);
+    });
+    this.checkMemory();
+    return bytes;
+  }
+
+  async unprotect(): Promise<Uint8Array> {
+    const bytes = this.plainCopy();
+    this.checkMemory();
+    return bytes;
+  }
+
+  async pageText(pages: number[]): Promise<string[]> {
+    const out: string[] = [];
+    for (const i of pages) {
+      const { text: tp } = this.loadPage(i, true);
+      out.push(this.text(tp, 0, this.m.FPDFText_CountChars(tp)).replace(/\r\n/g, '\n'));
+      if (out.length % 8 === 0) await tick();
+    }
+    return out;
+  }
+
+  async compose(req: EngineCompose): Promise<Uint8Array> {
+    if (this.doc) throw new EngineError('unsupported', 'A document is already open in this engine.');
+    const doc = this.m.FPDF_CreateNewDocument();
+    if (!doc) throw new EngineError('memory', ENGINE_MESSAGES.memory);
+    const u16 = (s: string) => {
+      const p = this.malloc((s.length + 1) * 2);
+      this.P.stringToUTF16(s, p, (s.length + 1) * 2);
+      return p;
+    };
+    try {
+      for (const part of req.parts ?? []) {
+        const at = this.m.FPDF_GetPageCount(doc);
+        let reader: BlockReader;
+        try {
+          reader = openReader(part.source);
+        } catch {
+          throw new EngineError('file', ENGINE_MESSAGES.file);
+        }
+        this.importReader = reader;
+        const fa = this.access(reader, 1);
+        let src = 0;
+        let idx = 0;
+        try {
+          src = this.m.FPDF_LoadCustomDocument(fa, '');
+          if (!src) throw new EngineError(this.m.FPDF_GetLastError() === FPDF_ERR.PASSWORD ? 'password' : 'format', 'One of the PDFs could not be read, or it is protected with a password.');
+          const count = this.m.FPDF_GetPageCount(src);
+          const pages = part.pages?.length ? part.pages : Array.from({ length: count }, (_, k) => k);
+          if (pages.some((p) => p < 0 || p >= count)) throw new EngineError('page', 'A page range goes past the end of its PDF.');
+          idx = this.malloc(pages.length * 4);
+          pages.forEach((p, k) => this.P.setValue(idx + k * 4, p, 'i32'));
+          if (!this.m.FPDF_ImportPagesByIndex(doc, src, idx, pages.length, at)) throw new EngineError('format', 'Those pages could not be combined.');
+        } finally {
+          this.free(idx);
+          if (src) this.m.FPDF_CloseDocument(src);
+          this.free(fa);
+          reader.close();
+          this.importReader = null;
+        }
+        if (req.bookmarks && part.title) {
+          // A bookmark per file, to its first page.
+          const title = u16(part.title);
+          try {
+            const mark = this.m.EPDFBookmark_Create(doc, title);
+            const first = this.m.FPDF_LoadPage(doc, at);
+            if (mark && first) {
+              const dest = this.m.EPDFDest_CreateXYZ(first, false, 0, false, 0, false, 0);
+              if (dest) this.m.EPDFBookmark_SetDest(doc, mark, dest);
+            }
+            if (first) this.m.FPDF_ClosePage(first);
+          } finally {
+            this.free(title);
+          }
+        }
+        this.checkMemory();
+      }
+      for (const img of req.images ?? []) {
+        // The picture's own size at 96 dpi, or fitted, centred, on the paper.
+        const [pw, ph] = img.page ?? [img.width * 0.75, img.height * 0.75];
+        const scale = img.page ? Math.min(pw / img.width, ph / img.height) : 0.75;
+        const dw = img.width * scale;
+        const dh = img.height * scale;
+        const page = this.m.FPDFPage_New(doc, this.m.FPDF_GetPageCount(doc), pw, ph);
+        if (!page) throw new EngineError('memory', ENGINE_MESSAGES.memory);
+        const bmp = this.m.FPDFBitmap_Create(img.width, img.height, 1);
+        const pages = this.malloc(4);
+        try {
+          if (!bmp) throw new EngineError('memory', ENGINE_MESSAGES.memory);
+          const buf = this.m.FPDFBitmap_GetBuffer(bmp);
+          const stride = this.m.FPDFBitmap_GetStride(bmp);
+          for (let row = 0; row < img.height; row++) this.P.HEAPU8.set(img.bgra.subarray(row * img.width * 4, (row + 1) * img.width * 4), buf + row * stride);
+          const obj = this.m.FPDFPageObj_NewImageObj(doc);
+          this.P.setValue(pages, page, 'i32');
+          if (!obj || !this.m.FPDFImageObj_SetBitmap(pages, 1, obj, bmp)) throw new EngineError('unsupported', 'That picture could not be added.');
+          this.m.FPDFImageObj_SetMatrix(obj, dw, 0, 0, dh, (pw - dw) / 2, (ph - dh) / 2);
+          this.m.FPDFPage_InsertObject(page, obj);
+          this.m.FPDFPage_GenerateContent(page);
+        } finally {
+          this.free(pages);
+          if (bmp) this.m.FPDFBitmap_Destroy(bmp);
+          this.m.FPDF_ClosePage(page);
+        }
+        this.checkMemory();
+      }
+      if (req.blank) {
+        for (let k = 0; k < req.blank.count; k++) {
+          const page = this.m.FPDFPage_New(doc, this.m.FPDF_GetPageCount(doc), req.blank.size[0], req.blank.size[1]);
+          if (!page) throw new EngineError('memory', ENGINE_MESSAGES.memory);
+          this.m.FPDF_ClosePage(page);
+        }
+      }
+      if (this.m.FPDF_GetPageCount(doc) < 1) throw new EngineError('unsupported', 'There is nothing to put in the PDF.');
+      return this.writeOut(doc);
+    } finally {
+      this.m.FPDF_CloseDocument(doc);
     }
   }
 

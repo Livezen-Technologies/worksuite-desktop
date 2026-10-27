@@ -6,11 +6,11 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { useMe } from '../../components/UserPicture';
-import { btn, btnPrimary } from '../hr/parts';
+import { btn, btnPrimary } from '../../components/PageKit';
 import { abilities, K, usePictures, useRefreshMe, type Pictures } from './api';
 import { avatarPng, avatarSvg, BACKGROUNDS, LOOKS, normalise, svgUrl, TONES, type AvatarBorder, type AvatarStyle } from './avatarArt';
 import { MAX_ZOOM, clamp, draw, exportType, initial, minScale, rotate, transform, type Crop } from './crop';
-import { Note } from './parts';
+import { Note } from '../../components/CardKit';
 import { VisibilitySelect } from './visibility';
 import { Checkbox } from '../../components/Checkbox';
 
@@ -135,7 +135,7 @@ function ReviewNote({ pics }: { pics: Pictures | undefined }) {
 
 function Footer({ left, busy, onClose, onSave, saveLabel, canSave }: { left: string; busy: boolean; onClose: () => void; onSave: () => void; saveLabel: string; canSave: boolean }) {
   return (
-    <div className="flex items-center gap-2 border-t border-line bg-[#FAFBFD] px-6 py-3.5 dark:bg-well">
+    <div className="flex items-center gap-2 border-t border-line bg-rail px-6 py-3.5 dark:bg-well">
       <span className="min-w-0 flex-1 text-[12px] text-ink-3">{left}</span>
       <button type="button" className={btn} disabled={busy} onClick={onClose}>
         Cancel
@@ -301,12 +301,12 @@ function PhotoTab({ pics, busy, setBusy, onClose, onPick }: { pics: Pictures | u
                 onWheel={wheel}
                 onKeyDown={key}
                 style={{ width: STAGE + 80, height: STAGE + 40, touchAction: 'none' }}
-                className="relative cursor-grab overflow-hidden rounded-[14px] bg-[#0F1830] outline-none focus-visible:ring-2 focus-visible:ring-primary active:cursor-grabbing"
+                className="relative cursor-grab overflow-hidden rounded-[14px] bg-stage-2 outline-none focus-visible:ring-2 focus-visible:ring-primary active:cursor-grabbing"
               >
                 <div className="absolute overflow-visible" style={{ width: STAGE, height: STAGE, left: 40, top: 20 }}>
                   {view(1)}
                 </div>
-                {!crop ? <span aria-hidden className="absolute inset-0 animate-pulse bg-[#1a2440]" /> : null}
+                {!crop ? <span aria-hidden className="absolute inset-0 animate-pulse bg-stage-line-soft" /> : null}
                 <span aria-hidden className="pointer-events-none absolute rounded-full ring-2 ring-white/85" style={{ width: STAGE, height: STAGE, left: 40, top: 20, boxShadow: '0 0 0 9999px rgba(15,24,48,.62)' }} />
                 <span aria-hidden className="pointer-events-none absolute right-0 bottom-2 left-0 text-center text-[11.5px] font-semibold text-white/80">
                   Drag to move · scroll to zoom
@@ -339,7 +339,7 @@ function PhotoTab({ pics, busy, setBusy, onClose, onPick }: { pics: Pictures | u
                 </span>
               ))}
             </div>
-            <div className="flex items-start gap-2.5 rounded-[12px] bg-[#F3F1EC] p-3 dark:bg-well">
+            <div className="flex items-start gap-2.5 rounded-[12px] bg-subtle p-3 dark:bg-well">
               <span className="relative block shrink-0 overflow-hidden rounded-full bg-subtle" style={{ width: 32, height: 32 }}>
                 {view(32 / STAGE)}
               </span>
@@ -375,7 +375,7 @@ const BORDERS: Array<{ id: AvatarBorder; label: string }> = [
 
 function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: Array<{ id: T; label: string }>; onChange: (v: T) => void }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex w-fit gap-1 rounded-[11px] bg-[#F1F3F8] p-1 dark:bg-subtle">
+    <div role="radiogroup" aria-label={label} className="flex w-fit gap-1 rounded-[11px] bg-slate-bg p-1 dark:bg-subtle">
       {options.map((o) => (
         <button key={o.id} type="button" role="radio" aria-checked={o.id === value} onClick={() => onChange(o.id)} className={cx('h-[34px] rounded-[9px] px-3.5 text-[13px] font-bold whitespace-nowrap', o.id === value ? 'bg-surface text-primary shadow-[0_1px_3px_rgb(var(--ws-shadow-rgb)/.12)]' : 'text-ink-2 hover:text-ink')}>
           {o.label}

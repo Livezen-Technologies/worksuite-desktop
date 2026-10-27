@@ -285,7 +285,7 @@ export const STATUS_TONE: Record<string, string> = {
   backlog: 'bg-subtle text-ink-2',
   todo: 'bg-subtle text-ink-2',
   in_progress: 'bg-selection text-primary',
-  in_review: 'bg-[#EDE9FE] text-[#5B21B6] dark:bg-[#5B21B6]/25 dark:text-[#C4B5FD]',
+  in_review: 'bg-violet-bg text-violet-ink dark:bg-violet/25',
   testing: 'bg-warning-bg text-warning-ink',
   blocked: 'bg-danger-bg text-danger',
   completed: 'bg-success-bg text-success',

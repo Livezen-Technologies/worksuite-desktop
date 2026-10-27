@@ -8,7 +8,7 @@ import { Checkbox } from '../../../components/Checkbox';
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
 import { Avatar, Button, Chip, Modal, cx, initials } from '../../../components/ui';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { PRESENCE } from '../Details';
 import { usePresence } from '../presence';
 import { ROLE_LABEL, team, useAgents, type Colleague, type WebsiteConversation, type WebsitePending, type WebsitePerson, type WebsiteTeam } from './api';
@@ -143,7 +143,7 @@ export function InThisChat({ data, me, fetchedAt, onInvite, onDone }: { data: We
               <span aria-hidden className={cx(ROW_AVATAR, 'border-[1.5px] border-dashed border-line text-ink-3')}>{initials(h.to)}</span>
               <span className="flex min-w-0 flex-1 flex-col">
                 <b className="truncate text-[13px] text-ink">{h.to}</b>
-                <span className="truncate text-[11.5px] font-semibold text-[#9A5B10] dark:text-warning">{left === null ? `${what} · waiting` : `${what} · ${countdown(left)}`}</span>
+                <span className="truncate text-[11.5px] font-semibold text-warning-ink dark:text-warning">{left === null ? `${what} · waiting` : `${what} · ${countdown(left)}`}</span>
               </span>
               {(h.from === me || t.my_role === 'owner' || t.can.take_over) && !closed ? (
                 <button type="button" disabled={busy} aria-label={`Cancel ${h.kind === 'invite' ? 'the invitation to' : 'the transfer to'} ${h.to}`} onClick={() => void run(() => team.cancel(h.id), 'Cancelled.')} className="h-6 shrink-0 rounded-[6px] border border-line bg-surface px-2 text-[11px] font-semibold text-danger hover:bg-danger-bg">
@@ -156,7 +156,7 @@ export function InThisChat({ data, me, fetchedAt, onInvite, onDone }: { data: We
       </ul>
       {t.can.invite && !closed ? (
         // At the limit nobody more can come in (TEAM-03): said here rather than refused after picking.
-        <button type="button" onClick={onInvite} disabled={full} title={full ? text('This chat has {max} staff in it, the most one chat can have.', { max: t.max }) : undefined} className="flex h-[30px] items-center justify-center gap-1.5 rounded-[8px] border border-dashed border-[#C3CCF6] bg-selection/50 text-[12px] font-bold text-primary hover:bg-selection disabled:cursor-not-allowed disabled:opacity-55 dark:border-primary/40">
+        <button type="button" onClick={onInvite} disabled={full} title={full ? text('This chat has {max} staff in it, the most one chat can have.', { max: t.max }) : undefined} className="flex h-[30px] items-center justify-center gap-1.5 rounded-[8px] border border-dashed border-primary-soft bg-selection/50 text-[12px] font-bold text-primary hover:bg-selection disabled:cursor-not-allowed disabled:opacity-55 dark:border-primary/40">
           <Icon name="plus" size={12} /> Invite someone
         </button>
       ) : null}
@@ -191,7 +191,7 @@ export function LeaveChat({ data, onTransfer, onClose, onDone }: { data: Website
   return (
     <>
       {owner ? (
-        <div role="note" className="rounded-[12px] border border-[#F0D08F] bg-warning-bg px-3 py-2.5 text-[12px] text-[#6B4A10] dark:border-warning/40 dark:text-warning">
+        <div role="note" className="rounded-[12px] border border-warning-line bg-warning-bg px-3 py-2.5 text-[12px] text-warning-strong dark:border-warning/40 dark:text-warning">
           You own this chat — transfer it before you leave.
         </div>
       ) : null}
@@ -235,7 +235,7 @@ export function MessageTypeTabs({ value, onChange }: { value: 'reply' | 'note'; 
           onClick={() => onChange(k)}
           className={cx(
             'h-7 rounded-[8px] px-3 text-[12px]',
-            value === k ? (k === 'note' ? 'bg-warning-bg font-bold text-[#9A6A12] dark:text-warning' : 'bg-selection font-bold text-primary') : k === 'note' ? 'font-semibold text-[#9A6A12] hover:bg-subtle dark:text-warning' : 'font-semibold text-ink-3 hover:bg-subtle hover:text-ink',
+            value === k ? (k === 'note' ? 'bg-warning-bg font-bold text-warning dark:text-warning' : 'bg-selection font-bold text-primary') : k === 'note' ? 'font-semibold text-warning hover:bg-subtle dark:text-warning' : 'font-semibold text-ink-3 hover:bg-subtle hover:text-ink',
           )}
         >
           {label}
@@ -248,7 +248,7 @@ export function MessageTypeTabs({ value, onChange }: { value: 'reply' | 'note'; 
 /** How each availability reads in the pickers (C-09): Available in green, Busy in amber, the rest quiet. */
 const STATUS_TONE: Record<NonNullable<Colleague['status']>, string> = {
   available: 'text-success',
-  busy: 'text-[#9A5B10] dark:text-warning',
+  busy: 'text-warning-ink dark:text-warning',
   away: 'text-ink-3',
   offline: 'text-ink-3',
 };
@@ -537,7 +537,7 @@ export function useDeclined(conversationId: number, me: number | null, t: Websit
  */
 export function DeclinedNotice({ d, onRetry }: { d: Declined & { dismiss: () => void }; onRetry: (() => void) | null }) {
   return (
-    <div role="status" className="mx-3.5 mt-2 flex items-start gap-2 rounded-[14px] border border-[#F0D08F] bg-warning-bg px-3.5 py-3 text-[13px] text-[#6B4A10] dark:border-warning/40 dark:text-warning">
+    <div role="status" className="mx-3.5 mt-2 flex items-start gap-2 rounded-[14px] border border-warning-line bg-warning-bg px-3.5 py-3 text-[13px] text-warning-strong dark:border-warning/40 dark:text-warning">
       <span className="min-w-0 flex-1">
         {d.who} — {d.visitor ? <b>{d.visitor}</b> : null}{d.rest}
         {onRetry ? <> <button type="button" onClick={() => (d.dismiss(), onRetry())} className="font-semibold text-primary underline-offset-2 hover:underline">Try someone else</button></> : null}

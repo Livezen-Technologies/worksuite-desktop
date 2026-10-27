@@ -180,7 +180,7 @@ function Legend() {
       {item(<span aria-hidden className="h-2 w-4 rounded-[3px] bg-danger" />, 'Critical path')}
       {item(<span aria-hidden className="h-2 w-4 rounded-[3px] bg-primary" />, 'Has slack')}
       {item(<span aria-hidden className="h-2 w-4 rounded-[3px] bg-primary/30" />, 'Slack')}
-      {item(<span aria-hidden className="h-2.5 w-2.5 rotate-45 bg-[#7C3AED]" />, 'Milestone')}
+      {item(<span aria-hidden className="h-2.5 w-2.5 rotate-45 bg-violet" />, 'Milestone')}
       {item(<span aria-hidden className="h-3 w-0.5 bg-warning" />, 'Today')}
       {item(<span aria-hidden className="h-3 w-0 border-l-2 border-dashed border-ink-2" />, 'Planned end')}
       {item(<span aria-hidden className="h-3 w-0 border-l-2 border-dotted border-ink-3" />, 'Baseline')}
@@ -285,22 +285,22 @@ function Chart({ s, zoom, showBaseline, skip, onOpenTask }: { s: Schedule; zoom:
                     <div role="row" key={r.key} className="flex h-10 border-b border-line/60">
                       <div className={LEFT}>
                         <span role="cell" className="flex min-w-0 flex-1 items-center gap-2 px-3.5">
-                          <span aria-hidden className="text-[#7C3AED]">
+                          <span aria-hidden className="text-violet">
                             ◆
                           </span>
-                          <span className="truncate font-bold text-[#6D28D9] dark:text-[#C4B5FD]">{r.m.name}</span>
+                          <span className="truncate font-bold text-violet dark:text-violet-ink">{r.m.name}</span>
                           <span className="sr-only">Milestone due {fmtDay(r.m.due_date)}</span>
                         </span>
                         <span role="cell" className="w-12 px-1 text-right font-mono text-ink-3">
                           —
                         </span>
-                        <span role="cell" className="w-[4.5rem] px-2 text-right text-[11.5px] text-[#6D28D9] dark:text-[#C4B5FD]">
+                        <span role="cell" className="w-[4.5rem] px-2 text-right text-[11.5px] text-violet dark:text-violet-ink">
                           Milestone
                         </span>
                       </div>
                       <div role="cell" className="relative shrink-0" style={{ width }}>
                         {lines}
-                        {c !== null ? <span role="img" aria-label={`${r.m.name}: due ${fmtDay(r.m.due_date)}`} className="absolute top-[13px] h-[13px] w-[13px] rotate-45 bg-[#7C3AED]" style={{ left: c * px - 6 }} /> : null}
+                        {c !== null ? <span role="img" aria-label={`${r.m.name}: due ${fmtDay(r.m.due_date)}`} className="absolute top-[13px] h-[13px] w-[13px] rotate-45 bg-violet" style={{ left: c * px - 6 }} /> : null}
                       </div>
                     </div>
                   );
@@ -337,7 +337,7 @@ function Chart({ s, zoom, showBaseline, skip, onOpenTask }: { s: Schedule; zoom:
                             className={cx('absolute top-3 h-4 overflow-hidden rounded-[5px]', t.critical ? 'bg-danger' : 'bg-primary')}
                             style={{ left: from * px, width: Math.max(px * 0.6, (to - from) * px) }}
                           >
-                            <span className="block h-full bg-[#0F172A]/30" style={{ width: `${Math.max(0, Math.min(100, t.progress))}%` }} />
+                            <span className="block h-full bg-stage/30" style={{ width: `${Math.max(0, Math.min(100, t.progress))}%` }} />
                           </div>
                         </>
                       ) : (

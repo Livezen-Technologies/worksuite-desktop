@@ -1,14 +1,14 @@
 {
   "si": {
-    "total": 11743,
-    "translated": 256,
-    "missing": 11487,
+    "total": 21127,
+    "translated": 5139,
+    "missing": 15988,
     "fluentSpeakerReview": "pending"
   },
   "ta": {
-    "total": 11743,
-    "translated": 256,
-    "missing": 11487,
+    "total": 21127,
+    "translated": 5139,
+    "missing": 15988,
     "fluentSpeakerReview": "pending"
   }
 }

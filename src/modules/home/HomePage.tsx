@@ -56,6 +56,7 @@ import {
   type Layout,
   type Zone,
 } from './today';
+import { StatCard, StatGrid } from '../../components/StatCard';
 
 /**
  * Home — the desktop shell's dashboard (UI-04, §4.13; modernised in #104; optimized layout). Every card comes from a
@@ -536,19 +537,10 @@ export default function HomePage(_props: ModuleProps) {
         {/* A Personal account's WorkSuite Cloud storage (Connection & Startup screen 10); nothing for any other. */}
         <StorageCard onManage={() => navigate('/account/storage')} />
 
-        {/*
-          One bordered row; the hairlines between tiles are the gaps. Four across where four fit, else two by two, else
-          one under another; an odd one out at two columns takes the row.
-        */}
-        <div
-          data-home-tiles
-          className={cx(
-            'grid grid-cols-1 gap-px overflow-hidden rounded-[14px] border border-line bg-line @min-[520px]:grid-cols-2 @min-[520px]:[&>:last-child:nth-child(odd)]:col-span-2',
-            tiles.length >= 4 ? '@min-[1000px]:grid-cols-4 @min-[1000px]:[&>:last-child:nth-child(odd)]:col-span-1' : tiles.length === 3 ? '@min-[1000px]:grid-cols-3 @min-[1000px]:[&>:last-child:nth-child(odd)]:col-span-1' : '',
-          )}
-        >
+        {/* The four numbers: as many across as fit, each its own card. */}
+        <StatGrid data-home-tiles="">
           {tiles}
-        </div>
+        </StatGrid>
 
         {/* Three columns: the main cards take three parts, the side column one, never under 320px. */}
         <div data-home-grid className={cx('grid grid-cols-1 items-start gap-5', main.length && rail.length ? '@min-[1400px]:grid-cols-[minmax(0,3fr)_minmax(320px,1fr)]' : '')}>
@@ -644,9 +636,9 @@ function Customize({ layout, available, onChange, onClose }: { layout: Layout; a
   );
 }
 
-const TILE_TONES = { indigo: 'bg-selection text-primary', green: 'bg-success-bg text-success', amber: 'bg-warning-bg text-warning', red: 'bg-danger-bg text-danger' };
+const TILE_TONES = { indigo: 'blue', green: 'green', amber: 'amber', red: 'red' } as const;
 
-/** One of the four numbers at the top: what it counts (exact on hover), a word on it, and the list it opens. */
+/** One of the four numbers at the top, as the shared StatCard: what it counts (exact on hover), a word on it, and the list it opens. */
 export function StatTile({
   label,
   n,
@@ -669,20 +661,17 @@ export function StatTile({
   loading?: boolean;
 }) {
   return (
-    <button type="button" onClick={onClick} aria-label={`${label}: ${n}`} className="flex min-w-0 items-center gap-3.5 bg-surface px-5 py-4 text-left hover:bg-well">
-      <span aria-hidden="true" className={cx('flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px]', TILE_TONES[tone])}>
-        <Icon name={icon} size={18} />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-[13px] text-ink-2">{label}</span>
-        <span className="flex min-w-0 items-baseline gap-2">
-          <span data-stat-number="" className="stat-number text-[24px] leading-tight font-semibold tracking-[-0.02em] text-ink" title={n.toLocaleString()}>
-            {loading ? '–' : (display ?? compactCount(n))}
-          </span>
-          {note && !loading ? <span className={cx('truncate text-[12px] font-medium', noteTone === 'danger' ? 'text-danger' : 'text-ink-3')}>{note}</span> : null}
-        </span>
-      </span>
-    </button>
+    <StatCard
+      label={label}
+      value={<span title={n.toLocaleString()}>{display ?? compactCount(n)}</span>}
+      empty={n === 0}
+      sub={note ? <span className={cx(noteTone === 'danger' ? 'font-medium text-danger' : undefined)}>{note}</span> : undefined}
+      icon={icon}
+      tone={TILE_TONES[tone]}
+      loading={loading}
+      onClick={onClick}
+      ariaLabel={`${label}: ${n}`}
+    />
   );
 }
 

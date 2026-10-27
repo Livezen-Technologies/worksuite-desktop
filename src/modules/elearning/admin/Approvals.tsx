@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button, ErrorNote, Spinner } from '../../../components/ui';
 import { toast } from '../../../core/toasts';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { eGet, ePost, K, when, type Enrollment } from '../api';
 import { Ask, useEl } from '../parts';
 

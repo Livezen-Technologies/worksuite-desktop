@@ -7,7 +7,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { UserAvatar } from '../../components/UserAvatar';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
-import { useNow } from '../calls/parts';
+import { useNow } from '../../components/CallKit';
 import { openChatWindow } from '../chat/window';
 import { INVITE_TONE, inviteActions, inviteLabel, inviteStateOf, nextRead, type InviteAction, type Ring } from './invites';
 import { meet } from './session';

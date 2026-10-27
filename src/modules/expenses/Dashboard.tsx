@@ -3,10 +3,10 @@ import { useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
 import { shortDate } from '../finance/api';
-import { Notice } from '../finance/parts';
+import { Notice } from '../../components/RecordKit';
 import { ReadFailed } from '../finance/ReportBar';
-import { Empty, Kpi, PageHead, Panel } from '../hr/parts';
-import { HeadLink } from '../inventory/parts';
+import { Empty, Kpi, PageHead, Panel } from '../../components/PageKit';
+import { HeadLink } from '../../components/ListKit';
 import { fetchDashboard, K, money } from './api';
 import {
   andList,
@@ -28,6 +28,7 @@ import {
   type TrendMonth,
 } from './insight';
 import type { ExpenseView, ScreenProps } from './Rail';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The dashboard.
@@ -89,7 +90,7 @@ export default function Dashboard({ org, onGo }: ScreenProps) {
             {d.mixed ? (
               <>
                 {' '}
-                · <span className="text-[#9A4A06] dark:text-warning">mixed currencies, so there is no single total</span>
+                · <span className="text-warning-ink dark:text-warning">mixed currencies, so there is no single total</span>
               </>
             ) : null}
           </>
@@ -104,9 +105,10 @@ export default function Dashboard({ org, onGo }: ScreenProps) {
       {d.mixed && d.note ? <Notice tone="amber">{d.note}</Notice> : null}
 
       {/* No "File an expense" here: the rail carries it on every screen, and a second copy is the same control twice in one view. */}
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <StatGrid>
         <MonthKpi d={d} />
         <Kpi
+          icon="inbox"
           label="Waiting for me"
           value={String(d.awaitingMe)}
           sub={d.awaitingMe === 0 ? 'nothing to decide' : 'claims and advances to decide'}
@@ -114,19 +116,22 @@ export default function Dashboard({ org, onGo }: ScreenProps) {
           onClick={() => onGo('approvals')}
         />
         <Kpi
+          icon="hand-coins"
+          tone="green"
           label="Owed to you"
           value={d.mixed ? plural(d.myUnpaid.count, 'claim', 'claims') : money(d.myUnpaid.total, cur)}
           sub={d.mixed ? 'approved, not yet reimbursed · in several currencies' : `${d.myUnpaid.count} approved, not yet reimbursed`}
           onClick={() => onGo('mine')}
         />
         <Kpi
+          icon="wallet"
           label="Advances you hold"
           value={d.mixed ? plural(d.advances.count, 'advance', 'advances') : money(d.advances.total, cur)}
           sub={d.advances.count === 0 ? 'nothing outstanding' : d.mixed ? 'still to settle · in several currencies' : `${d.advances.count} still to settle`}
           tone={d.advances.count > 0 ? 'amber' : undefined}
           onClick={() => onGo('advances')}
         />
-      </div>
+      </StatGrid>
 
       <Problems d={d} cur={cur} currencyOf={currencyOf} onGo={onGo} />
 
@@ -148,7 +153,7 @@ export default function Dashboard({ org, onGo }: ScreenProps) {
       {d.funds.length ? (
         <Panel title="Petty cash" action={<HeadLink onClick={() => onGo('petty')}>Open</HeadLink>} bodyClassName="flex flex-wrap gap-2 px-3.5 py-3">
           {d.funds.map((f) => (
-            <span key={f.id ?? f.name} className={cx('rounded-[8px] px-2.5 py-1.5 text-[12.5px]', f.needsRefill ? 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2')}>
+            <span key={f.id ?? f.name} className={cx('rounded-[8px] px-2.5 py-1.5 text-[12.5px]', f.needsRefill ? 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2')}>
               {f.name}: <b className="tabular-nums">{money(f.balance, f.currency)}</b>
               {f.needsRefill ? ' · below its minimum' : ''}
             </span>
@@ -169,6 +174,8 @@ function MonthKpi({ d }: { d: Dash }) {
   if (d.mixed) {
     return (
       <Kpi
+        icon="calendar"
+        tone="violet"
         label={d.month.label}
         value={
           <span className="flex flex-col text-[15px] leading-snug">
@@ -184,6 +191,7 @@ function MonthKpi({ d }: { d: Dash }) {
   const pct = d.month.changePct;
   return (
     <Kpi
+      icon="calendar"
       label={d.month.label}
       value={money(d.month.total, cur)}
       sub={pct === null ? 'nothing spent last month to compare with' : `${pct > 0 ? '+' : ''}${pct}% against ${money(d.month.lastMonth, cur)} last month`}
@@ -203,8 +211,8 @@ interface Problem {
 }
 
 const PROBLEM_TONE = {
-  red: 'border-[#F1B8A8] bg-[#FDF1EE] text-[#8C2A14] dark:border-danger/40 dark:bg-danger-bg dark:text-danger',
-  amber: 'border-[#F5D48A] bg-[#FFF8E6] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning',
+  red: 'border-danger-line bg-danger-bg text-danger-ink dark:border-danger/40 dark:bg-danger-bg dark:text-danger',
+  amber: 'border-warning-line bg-warning-bg text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning',
 };
 
 /**
@@ -353,7 +361,7 @@ function Renewals({ d, onGo }: { d: Dash; onGo: (v: ExpenseView, extra?: string)
       {d.renewals.map((r) => (
         <button key={r.id ?? r.name} type="button" disabled={r.id === null} onClick={() => r.id !== null && onGo('subs', `&sub=${r.id}`)} className="flex items-center gap-3 border-b border-line/60 px-3.5 py-2.5 text-left last:border-b-0 enabled:hover:bg-subtle">
           {/* Days, not a date, as the leading figure: "in 3 days" is what is being decided on. */}
-          <span className={cx('flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[10px] text-center', r.daysUntil <= 3 ? 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2')}>
+          <span className={cx('flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[10px] text-center', r.daysUntil <= 3 ? 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2')}>
             <b className="text-[14px] leading-none tabular-nums">{r.daysUntil}</b>
             <span className="mt-0.5 text-[9px] tracking-wide uppercase">{r.daysUntil === 1 ? 'day' : 'days'}</span>
           </span>
@@ -367,7 +375,7 @@ function Renewals({ d, onGo }: { d: Dash; onGo: (v: ExpenseView, extra?: string)
           <span className="flex shrink-0 flex-col items-end">
             <b className="text-[13px] text-ink tabular-nums">{money(r.amount, r.currency)}</b>
             {/* The one that needs a person, said in words rather than by a colour. */}
-            <span className={cx('text-[11px]', r.autoRenew ? 'text-ink-3' : 'text-[#9A4A06] dark:text-warning')}>{r.autoRenew ? 'renews automatically' : 'will not auto-renew'}</span>
+            <span className={cx('text-[11px]', r.autoRenew ? 'text-ink-3' : 'text-warning-ink dark:text-warning')}>{r.autoRenew ? 'renews automatically' : 'will not auto-renew'}</span>
           </span>
         </button>
       ))}

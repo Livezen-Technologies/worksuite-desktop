@@ -247,22 +247,22 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
   const job = o?.jobs.find((j) => j.state === 'running' || j.state === 'queued');
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Play ${f.name}`} className="no-drag fixed inset-0 z-50 flex flex-col bg-[#0D1424] text-[13px] text-[#E6ECFA]">
-      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[#1E2C57] bg-[#0F1B3D] pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
+    <div role="dialog" aria-modal="true" aria-label={`Play ${f.name}`} className="no-drag fixed inset-0 z-50 flex flex-col bg-stage text-[13px] text-stage-ink">
+      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-stage-3 bg-navy pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
         <button type="button" aria-label="Back to folder" onClick={onClose} className="flex h-[34px] w-[34px] items-center justify-center rounded-[8px] hover:bg-white/10"><Icon name="chevron-left" size={18} /></button>
         <span className="rounded-[6px] bg-white/10 px-2 py-0.5 text-[10.5px] font-bold">{tagOf(f.name, f.extension)}</span>
         <div className="flex min-w-0 flex-col">
           <b className="truncate text-[14px]">{f.name}</b>
-          <span className="text-[12px] text-[#AFC0E8]">{f.folder_name || 'My Drive'} · {i + 1} of {files.length}</span>
+          <span className="text-[12px] text-stage-accent">{f.folder_name || 'My Drive'} · {i + 1} of {files.length}</span>
         </div>
         <span className="flex-1" />
-        <button type="button" aria-label="Previous file" disabled={i === 0} onClick={() => go(i - 1)} className="h-[34px] w-[34px] rounded-[8px] border border-[#2A3A66] text-[18px] hover:bg-white/10 disabled:opacity-30">‹</button>
-        <button type="button" aria-label="Next file" disabled={i >= files.length - 1} onClick={() => go(i + 1)} className="h-[34px] w-[34px] rounded-[8px] border border-[#2A3A66] text-[18px] hover:bg-white/10 disabled:opacity-30">›</button>
-        {can(f.access, 'share') ? <button type="button" onClick={() => d.share({ type: 'file', f })} className="h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10">Share…</button> : null}
+        <button type="button" aria-label="Previous file" disabled={i === 0} onClick={() => go(i - 1)} className="h-[34px] w-[34px] rounded-[8px] border border-stage-4 text-[18px] hover:bg-white/10 disabled:opacity-30">‹</button>
+        <button type="button" aria-label="Next file" disabled={i >= files.length - 1} onClick={() => go(i + 1)} className="h-[34px] w-[34px] rounded-[8px] border border-stage-4 text-[18px] hover:bg-white/10 disabled:opacity-30">›</button>
+        {can(f.access, 'share') ? <button type="button" onClick={() => d.share({ type: 'file', f })} className="h-[34px] rounded-[8px] border border-stage-4 px-3 font-semibold hover:bg-white/10">Share…</button> : null}
         {can(f.access, 'download') ? (
           <>
-            <button type="button" onClick={() => d.download([f], true)} className="h-[34px] rounded-[8px] border border-[#2A3A66] px-3 font-semibold hover:bg-white/10">Open locally</button>
-            <button type="button" onClick={() => d.download([f])} className="h-[34px] rounded-[8px] bg-[#3B5BDB] px-3.5 font-bold text-white hover:brightness-110">Download Original</button>
+            <button type="button" onClick={() => d.download([f], true)} className="h-[34px] rounded-[8px] border border-stage-4 px-3 font-semibold hover:bg-white/10">Open locally</button>
+            <button type="button" onClick={() => d.download([f])} className="h-[34px] rounded-[8px] bg-brand px-3.5 font-bold text-white hover:brightness-110">Download Original</button>
           </>
         ) : null}
         <button type="button" aria-label="Close viewer" onClick={onClose} className="ml-1 flex h-[34px] w-[34px] items-center justify-center rounded-[8px] text-[18px] hover:bg-white/10">×</button>
@@ -271,16 +271,16 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="relative flex min-h-0 flex-1 items-center justify-center p-6">
             {q.isLoading ? <Spinner /> : null}
-            {o && playable && processing !== 'Ready' ? <div role="status" className="absolute top-2 z-10 rounded bg-[#16254F] p-3">{processing}{activeJob && Number(activeJob.progress) > 0 ? ` · ${activeJob.progress}%` : ''} {processing === 'Failed' ? <Button onClick={() => void prepare()}>Retry preparation</Button> : null}</div> : null}
-            {q.error ? <div role="alert" className="text-[#FFB4A3]">{errorMessage(q.error)} <Button onClick={() => void q.refetch()}>Retry</Button></div> : null}
-            {playbackError && playbackError === src ? <div role="alert" className="absolute top-2 z-10 rounded bg-[#16254F] p-3">Playback failed. Check your connection and try again. <Button onClick={() => { setPlaybackError(null); media.current?.load(); void q.refetch(); }}>Retry playback</Button> {o?.ffmpeg ? <Button onClick={() => void prepare()}>Make a playable copy</Button> : null}</div> : null}
+            {o && playable && processing !== 'Ready' ? <div role="status" className="absolute top-2 z-10 rounded bg-navy-2 p-3">{processing}{activeJob && Number(activeJob.progress) > 0 ? ` · ${activeJob.progress}%` : ''} {processing === 'Failed' ? <Button onClick={() => void prepare()}>Retry preparation</Button> : null}</div> : null}
+            {q.error ? <div role="alert" className="text-stage-danger">{errorMessage(q.error)} <Button onClick={() => void q.refetch()}>Retry</Button></div> : null}
+            {playbackError && playbackError === src ? <div role="alert" className="absolute top-2 z-10 rounded bg-navy-2 p-3">Playback failed. Check your connection and try again. <Button onClick={() => { setPlaybackError(null); media.current?.load(); void q.refetch(); }}>Retry playback</Button> {o?.ffmpeg ? <Button onClick={() => void prepare()}>Make a playable copy</Button> : null}</div> : null}
             {o && !playable && !(fallback.isLoading && fallback.fetchStatus !== 'idle') ? (
               <div className="flex max-w-[420px] flex-col items-center gap-3 text-center">
                 <FileIcon f={f} size={72} />
                 <b className="text-[15px]">{o.state === 'probing' || o.state === 'converting' || o.state === 'failed' ? processing : o.state === 'unavailable' ? 'This server can’t play media files' : 'This file can’t be played here'}</b>
-                {job ? <span className="text-[#AFC0E8]">{job.kind} · {job.state}{Number(job.progress) > 0 ? ` · ${job.progress}%` : ''}</span> : null}
-                {failedJob?.error ? <span role="alert" className="text-[#FFB4A3]">{failedJob.error}</span> : null}
-                {o.reason || o.message ? <span className="text-[#AFC0E8]">{o.reason ?? o.message}</span> : null}
+                {job ? <span className="text-stage-accent">{job.kind} · {job.state}{Number(job.progress) > 0 ? ` · ${job.progress}%` : ''}</span> : null}
+                {failedJob?.error ? <span role="alert" className="text-stage-danger">{failedJob.error}</span> : null}
+                {o.reason || o.message ? <span className="text-stage-accent">{o.reason ?? o.message}</span> : null}
                 {o.ffmpeg && (!job || job.stalled || o.state === 'failed') ? <Button variant="primary" onClick={() => void prepare()}>{processing === 'Failed' ? 'Retry preparation' : 'Make a playable copy'}</Button> : null}
                 {can(f.access, 'download') && o.state !== 'probing' ? <Button onClick={() => d.download([f], true)}>Open locally</Button> : null}
               </div>
@@ -312,17 +312,17 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
                   <div className="flex flex-col items-center gap-4">
                     {o.urls?.art ? <img src={mediaUrl(o.urls.art) ?? undefined} alt="" className="h-52 w-52 rounded-[18px] object-cover shadow-2xl" /> : <span className="flex h-52 w-52 items-center justify-center rounded-[24px] bg-white/10"><Icon name="music" size={64} /></span>}
                     <b className="text-[16px]">{o.media?.title ?? f.name}</b>
-                    {o.media?.artist ? <span className="text-[#AFC0E8]">{o.media.artist}</span> : null}
+                    {o.media?.artist ? <span className="text-stage-accent">{o.media.artist}</span> : null}
                     <audio ref={media} key={src} src={src ?? undefined} muted={muted} onLoadedMetadata={() => { setPlaybackError(null); loaded(); }}
                     onError={() => setPlaybackError(src ?? hlsUrl)} onTimeUpdate={(e) => setAt(e.currentTarget.currentTime * 1000)} onPlay={() => setPlaying(true)} onPause={() => (setPlaying(false), saveProgress())} onEnded={() => (setPlaying(false), saveProgress())} />
                   </div>
                 )}
-                <div className="flex flex-col gap-2 rounded-[10px] bg-[#111A31] px-3.5 py-2.5">
+                <div className="flex flex-col gap-2 rounded-[10px] bg-stage-2 px-3.5 py-2.5">
                   <div className="relative h-4">
-                    <input type="range" aria-label="Position" min={0} max={Math.max(1, length)} step={250} value={Math.min(at, length)} onChange={(e) => seek(Number(e.target.value))} className="absolute inset-0 w-full accent-[#7FA2FF]" />
+                    <input type="range" aria-label="Position" min={0} max={Math.max(1, length)} step={250} value={Math.min(at, length)} onChange={(e) => seek(Number(e.target.value))} className="absolute inset-0 w-full accent-stage-ink-3" />
                     {length
                       ? markers.map((m) => (
-                          <button key={m.id} type="button" title={`${clock(m.at_ms)} · ${m.title ?? ''}`} aria-label={`Go to ${clock(m.at_ms)}`} onClick={() => seek(m.at_ms)} className="absolute top-[-4px] h-2.5 w-2.5 -translate-x-1/2 rounded-full border-2 border-[#111A31] bg-[#FDE68A]" style={{ left: `${(m.at_ms / length) * 100}%` }} />
+                          <button key={m.id} type="button" title={`${clock(m.at_ms)} · ${m.title ?? ''}`} aria-label={`Go to ${clock(m.at_ms)}`} onClick={() => seek(m.at_ms)} className="absolute top-[-4px] h-2.5 w-2.5 -translate-x-1/2 rounded-full border-2 border-primary bg-warning-soft" style={{ left: `${(m.at_ms / length) * 100}%` }} />
                         ))
                       : null}
                   </div>
@@ -334,21 +334,21 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
                     <button type="button" aria-label={muted ? 'Unmute (M)' : 'Mute (M)'} onClick={() => setMuted(!muted)} className="flex h-8 w-8 items-center justify-center rounded-[7px] hover:bg-white/10">
                       <Icon name={muted ? 'mic-off' : 'music'} size={15} />
                     </button>
-                    <input type="range" aria-label="Volume" min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(e) => media.current && ((media.current.volume = Number(e.target.value)), setMuted(false))} className="w-24 accent-[#7FA2FF]" />
+                    <input type="range" aria-label="Volume" min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(e) => media.current && ((media.current.volume = Number(e.target.value)), setMuted(false))} className="w-24 accent-stage-ink-3" />
                     <span className="flex-1" />
                     {isVideo && (o.tracks ?? []).length ? (
-                      <Select aria-label="Subtitles" value={subs} onChange={(e) => setSubs(e.target.value)} className="h-8 rounded-[7px] border border-[#2A3A66] bg-[#16254F] px-2 text-white">
+                      <Select aria-label="Subtitles" value={subs} onChange={(e) => setSubs(e.target.value)} className="h-8 rounded-[7px] border border-stage-4 bg-navy-2 px-2 text-white">
                         <option value="off">Subtitles: off</option>
                         {(o.tracks ?? []).map((t) => <option key={t.id} value={t.id}>Subtitles: {t.label}</option>)}
                       </Select>
                     ) : null}
-                    <Select aria-label="Speed" value={speed} onChange={(e) => (setSpeed(Number(e.target.value)), media.current && (media.current.playbackRate = Number(e.target.value)))} className="h-8 rounded-[7px] border border-[#2A3A66] bg-[#16254F] px-2 text-white">
+                    <Select aria-label="Speed" value={speed} onChange={(e) => (setSpeed(Number(e.target.value)), media.current && (media.current.playbackRate = Number(e.target.value)))} className="h-8 rounded-[7px] border border-stage-4 bg-navy-2 px-2 text-white">
                       {SPEEDS.map((s) => <option key={s} value={s}>Speed: {s === 1 ? 'Normal' : `${s}×`}</option>)}
                     </Select>
                     {isVideo ? (
                       <>
-                        <button type="button" onClick={() => void (media.current as HTMLVideoElement | null)?.requestPictureInPicture?.().catch(() => undefined)} className="h-8 rounded-[7px] border border-[#2A3A66] px-2.5 hover:bg-white/10">Picture in picture</button>
-                        <button type="button" aria-label="Full screen (F)" onClick={() => void media.current?.requestFullscreen?.().catch(() => undefined)} className="h-8 rounded-[7px] border border-[#2A3A66] px-2.5 hover:bg-white/10">Full screen</button>
+                        <button type="button" onClick={() => void (media.current as HTMLVideoElement | null)?.requestPictureInPicture?.().catch(() => undefined)} className="h-8 rounded-[7px] border border-stage-4 px-2.5 hover:bg-white/10">Picture in picture</button>
+                        <button type="button" aria-label="Full screen (F)" onClick={() => void media.current?.requestFullscreen?.().catch(() => undefined)} className="h-8 rounded-[7px] border border-stage-4 px-2.5 hover:bg-white/10">Full screen</button>
                       </>
                     ) : null}
                   </div>
@@ -357,56 +357,56 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
             ) : null}
           </div>
           {files.length > 1 ? (
-            <div role="list" aria-label="Files here" className="flex h-[82px] shrink-0 items-center gap-2.5 overflow-x-auto border-t border-[#1E2C57] px-4 scroll-thin">
+            <div role="list" aria-label="Files here" className="flex h-[82px] shrink-0 items-center gap-2.5 overflow-x-auto border-t border-stage-3 px-4 scroll-thin">
               {files.map((x, n) => (
-                <button key={x.id} type="button" role="listitem" aria-current={n === i ? 'true' : undefined} title={x.name} onClick={() => go(n)} className={cx('flex h-[58px] w-[96px] shrink-0 items-center justify-center rounded-[8px] bg-[#E6ECFA]/10', n === i ? 'outline-3 outline-offset-2 outline-[#7FA2FF]' : 'opacity-55 hover:opacity-90')}>
+                <button key={x.id} type="button" role="listitem" aria-current={n === i ? 'true' : undefined} title={x.name} onClick={() => go(n)} className={cx('flex h-[58px] w-[96px] shrink-0 items-center justify-center rounded-[8px] bg-info-bg/10', n === i ? 'outline-3 outline-offset-2 outline-indigo-bright' : 'opacity-55 hover:opacity-90')}>
                   <FileIcon f={x} size={44} />
                 </button>
               ))}
             </div>
           ) : null}
         </div>
-        <aside aria-label="Details" className="flex w-[320px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-[#1E2C57] bg-[#0F1B3D] p-4 text-[12.5px] scroll-thin">
+        <aside aria-label="Details" className="flex w-[320px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-stage-3 bg-navy p-4 text-[12.5px] scroll-thin">
           <h2 className="text-[13px] font-bold">Details</h2>
           {facts.map(([k, v]) => (
             <div key={k} className="flex gap-2.5">
-              <span className="w-[76px] shrink-0 text-[#AFC0E8]">{k}</span>
+              <span className="w-[76px] shrink-0 text-stage-accent">{k}</span>
               <span className="min-w-0 break-words">{v}</span>
             </div>
           ))}
-          {o?.state === 'ready' ? <span className="text-[#9EE6C3]">{o.source === 'proxy' ? 'Plays a converted copy · the original is unchanged' : 'Plays directly · no conversion needed'}</span> : direct ? <span className="text-[#FFD28A]">Playing the original: this server can’t prepare media, so seeking may be slow and some formats won’t play.</span> : null}
-          <label className="mt-1 flex flex-col gap-1 text-[#AFC0E8]">
+          {o?.state === 'ready' ? <span className="text-stage-success">{o.source === 'proxy' ? 'Plays a converted copy · the original is unchanged' : 'Plays directly · no conversion needed'}</span> : direct ? <span className="text-stage-warning">Playing the original: this server can’t prepare media, so seeking may be slow and some formats won’t play.</span> : null}
+          <label className="mt-1 flex flex-col gap-1 text-stage-accent">
             Description
-            <textarea value={description} disabled={!editable} maxLength={1000} onChange={(e) => (setDesc(e.target.value), setSavedAt(null))} onBlur={() => desc !== null && desc !== (o?.file.description ?? '') && void saveMeta({ description: desc })} aria-label="Description" placeholder={editable ? 'What is in it?' : 'No description'} className="h-16 resize-none rounded-[8px] border border-[#2A3A66] bg-[#16254F] p-2 text-white outline-none focus:border-[#7FA2FF] disabled:opacity-60" />
+            <textarea value={description} disabled={!editable} maxLength={1000} onChange={(e) => (setDesc(e.target.value), setSavedAt(null))} onBlur={() => desc !== null && desc !== (o?.file.description ?? '') && void saveMeta({ description: desc })} aria-label="Description" placeholder={editable ? 'What is in it?' : 'No description'} className="h-16 resize-none rounded-[8px] border border-stage-4 bg-navy-2 p-2 text-white outline-none focus:border-stage-ink-3 disabled:opacity-60" />
           </label>
           <div className="flex flex-col gap-1.5">
-            <span className="text-[#AFC0E8]">Tags</span>
+            <span className="text-stage-accent">Tags</span>
             <span className="flex flex-wrap gap-1.5">
               {(o?.file.tags ?? []).map((t) => (
-                <span key={t} className="flex items-center gap-1 rounded-[10px] bg-[#16254F] px-2 py-0.5 font-semibold">
+                <span key={t} className="flex items-center gap-1 rounded-[10px] bg-navy-2 px-2 py-0.5 font-semibold">
                   {t}
-                  {editable ? <button type="button" aria-label={`Remove tag ${t}`} onClick={() => void saveMeta({ tags: (o?.file.tags ?? []).filter((x) => x !== t) })} className="text-[#AFC0E8] hover:text-white">×</button> : null}
+                  {editable ? <button type="button" aria-label={`Remove tag ${t}`} onClick={() => void saveMeta({ tags: (o?.file.tags ?? []).filter((x) => x !== t) })} className="text-stage-accent hover:text-white">×</button> : null}
                 </span>
               ))}
               {editable ? (
-                <input value={tag} maxLength={80} onChange={(e) => setTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && tag.trim() && (void saveMeta({ tags: [...(o?.file.tags ?? []), tag.trim()] }), setTag(''))} aria-label="Add a tag" placeholder="+ tag" className="h-6 w-20 rounded-[10px] border border-dashed border-[#2A3A66] bg-transparent px-2 text-white outline-none focus:border-[#7FA2FF]" />
+                <input value={tag} maxLength={80} onChange={(e) => setTag(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && tag.trim() && (void saveMeta({ tags: [...(o?.file.tags ?? []), tag.trim()] }), setTag(''))} aria-label="Add a tag" placeholder="+ tag" className="h-6 w-20 rounded-[10px] border border-dashed border-stage-4 bg-transparent px-2 text-white outline-none focus:border-stage-ink-3" />
               ) : null}
             </span>
           </div>
-          {savedAt ? <span className="text-[#9EE6C3]">{savedAt}</span> : null}
-          <div className="mt-1 flex flex-col gap-2 border-t border-[#1E2C57] pt-3">
+          {savedAt ? <span className="text-stage-success">{savedAt}</span> : null}
+          <div className="mt-1 flex flex-col gap-2 border-t border-stage-3 pt-3">
             <b>Comments · {markers.length}</b>
             {markers.map((m) => (
               <div key={m.id} className="flex items-start gap-2">
-                <button type="button" onClick={() => seek(m.at_ms)} className="shrink-0 rounded-[6px] bg-[#16254F] px-1.5 font-mono text-[11.5px] text-[#AFC6FF] hover:bg-[#1E2F63]">{clock(m.at_ms)}</button>
+                <button type="button" onClick={() => seek(m.at_ms)} className="shrink-0 rounded-[6px] bg-navy-2 px-1.5 font-mono text-[11.5px] text-stage-accent hover:bg-navy-3">{clock(m.at_ms)}</button>
                 <span className="min-w-0 flex-1 break-words"><b>{m.user_id === me ? 'You' : (m.user_name ?? 'Someone')}</b> — {m.title}</span>
                 {m.user_id === me ? (
-                  <button type="button" aria-label="Delete comment" onClick={() => void apiDelete<{ markers: Marker[] }>(`/api/drive/media/${f.id}/markers/${m.id}`).then((r) => setMarks(r.markers), (e) => toast('error', errorMessage(e)))} className="text-[#AFC0E8] hover:text-[#FFB4A3]">×</button>
+                  <button type="button" aria-label="Delete comment" onClick={() => void apiDelete<{ markers: Marker[] }>(`/api/drive/media/${f.id}/markers/${m.id}`).then((r) => setMarks(r.markers), (e) => toast('error', errorMessage(e)))} className="text-stage-accent hover:text-stage-danger">×</button>
                 ) : null}
               </div>
             ))}
             {playable ? (
-              <input value={note} maxLength={255} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addNote()} aria-label="Comment at current time" placeholder={`Comment at ${clock(at)}…`} className="h-8 rounded-[8px] border border-[#2A3A66] bg-[#16254F] px-2.5 text-white outline-none focus:border-[#7FA2FF]" />
+              <input value={note} maxLength={255} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addNote()} aria-label="Comment at current time" placeholder={`Comment at ${clock(at)}…`} className="h-8 rounded-[8px] border border-stage-4 bg-navy-2 px-2.5 text-white outline-none focus:border-stage-ink-3" />
             ) : null}
           </div>
         </aside>

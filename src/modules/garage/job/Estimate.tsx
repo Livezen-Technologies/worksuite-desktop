@@ -6,7 +6,7 @@ import { toast } from '../../../core/toasts';
 import { AVAILABILITY_LABEL, codeOf, errorText, gDelete, gGet, gPost, K, money, newKey, nice, span, when, type Decision, type EstimateLine, type EstimatesView, type EstimateVersion, type PartHit } from '../api';
 import { PartPicker } from '../MyWork';
 import { Ask, DocActions, Field, input, LightPill, Section, SignaturePad, ToneNote, useGarage } from '../parts';
-import { Pill } from '../../inventory/parts';
+import { Pill } from '../../../components/ListKit';
 import { Checkbox } from '../../../components/Checkbox';
 
 const DECISION_WORD: Record<string, string> = { PROPOSED: '', APPROVED: 'Approved', REJECTED: 'Rejected', DEFERRED: 'Later' };

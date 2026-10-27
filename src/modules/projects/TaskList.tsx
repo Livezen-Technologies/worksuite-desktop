@@ -624,7 +624,7 @@ export function TaskList({
                 run: () => void bulk(null, 'deleted'),
               })
             }
-            className="rounded-[6px] px-2 py-1 font-semibold text-[#FCA5A5] hover:bg-white/10 disabled:opacity-50"
+            className="rounded-[6px] px-2 py-1 font-semibold text-stage-danger hover:bg-white/10 disabled:opacity-50"
           >
             Delete
           </button>

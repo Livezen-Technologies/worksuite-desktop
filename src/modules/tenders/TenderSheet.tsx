@@ -4,7 +4,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { Spinner } from '../../components/ui';
-import { btn, btnPrimary, Field, input, Seg, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Seg, Sheet } from '../../components/PageKit';
 import { createBody, createTender, draftOf, editChanges, fetchTender, importCsv, K, PRIORITIES, updateTender, useOwners, type Company, type Draft, type ImportResult } from './api';
 
 /**
@@ -170,7 +170,7 @@ function NewForm({ org, companies, onClose, onSaved }: { org: string; companies:
                 {preview.imported.length} {preview.dry_run ? 'would be imported' : 'imported'} · {preview.duplicates.length} already here · {preview.rejected.length} could not be read
               </span>
               {[...preview.duplicates, ...preview.rejected].slice(0, 4).map((x, i) => (
-                <span key={i} className="text-[12px] text-[#9A4A06] dark:text-warning">
+                <span key={i} className="text-[12px] text-warning-ink dark:text-warning">
                   Row {x.row}: {x.why}
                 </span>
               ))}

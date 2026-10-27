@@ -5,6 +5,7 @@ import { useStore } from '../../core/store';
 import { cx } from '../../components/ui';
 import { money } from '../finance/api';
 import { station } from './api';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /** The station's shared pieces: panels, tiles, badges, notes and check lines as the D01–D06 boards draw them. */
 
@@ -45,31 +46,17 @@ export function Panel({ title, action, children, className }: { title?: ReactNod
   );
 }
 
-const TILE: Record<string, string> = { violet: 'border-t-[#7C3AED]', amber: 'border-t-[#D97706]', red: 'border-t-[#DC2626]', green: 'border-t-[#16A34A]', slate: 'border-t-[#64748B]' };
+const TILE: Record<string, StatTone> = { violet: 'violet', amber: 'amber', red: 'red', green: 'green', slate: 'neutral' };
 
-export function Tile({ label, value, sub, tone = 'slate', onClick }: { label: string; value: ReactNode; sub?: ReactNode; tone?: keyof typeof TILE; onClick?: () => void }) {
-  const body = (
-    <>
-      <div className="text-[11.5px] font-semibold text-ink-2">{label}</div>
-      <div className="mt-1 text-[22px] font-extrabold text-ink tabular-nums">{value}</div>
-      {sub ? <div className="mt-0.5 truncate text-[11.5px] text-ink-3">{sub}</div> : null}
-    </>
-  );
-  const cls = cx('rounded-[10px] border border-t-[3px] border-line bg-surface px-3.5 py-3 text-left', TILE[tone]);
-  return onClick ? (
-    <button type="button" className={cx(cls, 'hover:bg-subtle')} onClick={onClick}>
-      {body}
-    </button>
-  ) : (
-    <div className={cls}>{body}</div>
-  );
+export function Tile({ label, value, sub, tone = 'slate', onClick, icon }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'violet' | 'amber' | 'red' | 'green' | 'slate'; onClick?: () => void; icon?: string }) {
+  return <StatCard label={label} value={value} sub={sub} tone={TILE[tone] ?? 'neutral'} onClick={onClick} icon={icon} />;
 }
 
 const BADGE: Record<string, string> = {
-  ok: 'bg-[#DCFCE7] text-[#166534] dark:bg-success/15 dark:text-success',
-  bad: 'bg-[#FEE2E2] text-[#991B1B] dark:bg-danger/15 dark:text-danger',
-  warn: 'bg-[#FEF3C7] text-[#92400E] dark:bg-warning/15 dark:text-warning',
-  info: 'bg-[#EDE9FE] text-[#5B21B6] dark:bg-primary/15 dark:text-primary',
+  ok: 'bg-success-bg text-success-ink dark:bg-success/15 dark:text-success',
+  bad: 'bg-rose-bg text-danger-ink dark:bg-danger/15 dark:text-danger',
+  warn: 'bg-yellow-bg text-orange-ink dark:bg-warning/15 dark:text-warning',
+  info: 'bg-violet-bg text-violet-ink dark:bg-primary/15 dark:text-primary',
   muted: 'bg-subtle text-ink-2',
 };
 
@@ -78,9 +65,9 @@ export function Badge({ tone = 'muted', children }: { tone?: keyof typeof BADGE;
 }
 
 const NOTE: Record<string, string> = {
-  info: 'border-[#BFDBFE] bg-[#EFF6FF] text-[#1E3A8A] dark:border-primary/30 dark:bg-primary/10 dark:text-ink',
-  warn: 'border-[#F5D48A] bg-[#FFF8E6] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning',
-  err: 'border-[#FECACA] bg-[#FEF2F2] text-[#991B1B] dark:border-danger/40 dark:bg-danger/10 dark:text-danger',
+  info: 'border-info-line bg-info-soft text-primary dark:border-primary/30 dark:bg-primary/10 dark:text-ink',
+  warn: 'border-warning-line bg-warning-bg text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning',
+  err: 'border-danger-line bg-ground text-danger-ink dark:border-danger/40 dark:bg-danger/10 dark:text-danger',
   plain: 'border-line bg-subtle text-ink-2',
 };
 
@@ -90,7 +77,7 @@ export function Note({ tone = 'plain', children }: { tone?: keyof typeof NOTE; c
 
 export function Check({ tone, children }: { tone: 'ok' | 'bad' | 'warn'; children: ReactNode }) {
   const mark = tone === 'ok' ? '✓' : tone === 'bad' ? '✕' : '↻';
-  const c = tone === 'ok' ? 'bg-[#DCFCE7] text-[#166534]' : tone === 'bad' ? 'bg-[#FEE2E2] text-[#991B1B]' : 'bg-[#FEF3C7] text-[#92400E]';
+  const c = tone === 'ok' ? 'bg-success-bg text-success-ink' : tone === 'bad' ? 'bg-rose-bg text-danger-ink' : 'bg-yellow-bg text-orange-ink';
   return (
     <div className="flex items-start gap-2 py-0.5 text-[12.5px] text-ink">
       <span aria-hidden className={cx('mt-px inline-grid size-[18px] shrink-0 place-items-center rounded-full text-[11px] font-bold', c)}>{mark}</span>
@@ -101,7 +88,7 @@ export function Check({ tone, children }: { tone: 'ok' | 'bad' | 'warn'; childre
 
 export const btn = 'inline-flex h-8 items-center gap-1.5 rounded-[7px] border border-line bg-surface px-3 text-[12.5px] font-semibold text-ink hover:bg-subtle disabled:opacity-50';
 export const btnPrimary = 'inline-flex h-8 items-center gap-1.5 rounded-[7px] bg-primary px-3 text-[12.5px] font-bold text-white hover:bg-primary-hover disabled:opacity-50';
-export const btnDanger = 'inline-flex h-8 items-center gap-1.5 rounded-[7px] bg-[#DC2626] px-3 text-[12.5px] font-bold text-white hover:bg-[#B91C1C] disabled:opacity-50';
+export const btnDanger = 'inline-flex h-8 items-center gap-1.5 rounded-[7px] bg-red px-3 text-[12.5px] font-bold text-white hover:bg-danger disabled:opacity-50';
 export const th = 'border-b border-line px-3 py-2 text-left text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase';
 export const td = 'border-b border-line px-3 py-2 text-[12.5px] text-ink';
 export const num = 'font-mono tabular-nums';

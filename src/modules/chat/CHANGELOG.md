@@ -4,6 +4,37 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.0.8 — 2026-10-27
+
+**Changed**
+
+- the parts this module shares with others now come from src/components (the page, list, record, form, card, call, console and report kits), and a lint rule keeps modules from importing each other (audit D-G08). Nothing a person sees changes.
+
+## 2.0.7 — 2026-10-27
+
+**Changed**
+
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+- its settings screen uses the shared Settings kit (src/components/SettingsKit.tsx): the same headers, cards and rows as Settings (D-G09)
+
+## 2.0.6 — 2026-10-26
+
+**Fixed**
+
+- a visitor in On site now is reached with Tab and opened with Enter or Space (D-G21)
+
+## 2.0.5 — 2026-10-26
+
+**Changed**
+
+- the figure cards (KPI, stat and summary tiles) are the shared StatCard — compact, a tinted icon chip and the label above a calm figure, a muted line under it, zero shown muted; cards that open a list are buttons with a focus ring and a soft lift; the same figures and actions as before
+
+## 2.0.4 — 2026-10-26
+
+**Fixed**
+
+- a call card's Call back / Call again is a filled button with the call's icon; it was pale green text on pale green in the drawer and a bare outline in the thread (#431)
+
 ## 2.0.3 — 2026-10-22
 
 - Message text and link cards can be selected and copied; Copy link on link cards (#412)

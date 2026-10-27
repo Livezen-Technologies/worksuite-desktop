@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ApiError } from '../../core/api';
 import { cx } from '../../components/ui';
-import { Seg } from '../hr/parts';
+import { Seg } from '../../components/PageKit';
 import { fetchScorecard, KP, type Scorecard as Card } from './api';
 
 /**
@@ -41,7 +41,7 @@ export function Scorecard({ vendorId }: { vendorId: number }) {
       <div className="flex items-center gap-2">
         <b className="text-[13px] text-ink">Scorecard</b>
         {c ? (
-          <span className={cx('rounded-[10px] px-2 text-[12px] font-bold tabular-nums', tone === 'good' ? 'bg-[#E4F4EA] text-[#145C39]' : tone === 'fair' ? 'bg-[#FFF4E0] text-[#9A4A06]' : 'bg-[#FCE9E4] text-[#8C2A14]')}>
+          <span className={cx('rounded-[10px] px-2 text-[12px] font-bold tabular-nums', tone === 'good' ? 'bg-success-bg text-success-ink' : tone === 'fair' ? 'bg-warning-bg text-warning-ink' : 'bg-danger-bg text-danger-ink')}>
             {c.score === null ? '—' : Math.round(c.score)} / 100
           </span>
         ) : null}

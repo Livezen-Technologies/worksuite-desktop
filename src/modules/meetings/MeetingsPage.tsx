@@ -14,6 +14,7 @@ import { ScheduleDialog } from './ScheduleDialog';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 import { invitationsChanged, useInvitationAnswer } from '../calendar/conflicts';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 type Tab = 'dashboard' | 'mine' | 'invitations' | 'rooms' | 'recurring';
 const TABS: Array<[Tab, string]> = [
@@ -52,14 +53,14 @@ export default function MeetingsPage(_props: ModuleProps) {
   if (agendaOf) return <AgendaWindow id={Number(agendaOf)} />;
   if (selected) return <MeetingDetail id={Number(selected)} onBack={() => go(`/meetings${tab === 'dashboard' ? '' : `?tab=${tab}`}`)} />;
   const k = dash.data?.kpi;
-  const kpis: Array<[string, string, string]> = k
+  const kpis: Array<[string, string, StatTone, string]> = k
     ? [
-        ['Happening now', String(k.ongoing), 'text-danger'],
-        ['Coming up', String(k.upcoming), 'text-ink'],
-        ['Awaiting your answer', String(k.pending_invitations), 'text-[#9A4A06] dark:text-warning'],
-        ['Your action items', String(k.action_items_pending), 'text-ink'],
-        ['Hours this month', String(Math.round(k.meeting_hours_this_month * 10) / 10), 'text-ink'],
-        ['Average attendance', k.average_attendance === null ? '—' : `${k.average_attendance}%`, 'text-success'],
+        ['Happening now', String(k.ongoing), 'red', 'video'],
+        ['Coming up', String(k.upcoming), 'blue', 'calendar-clock'],
+        ['Awaiting your answer', String(k.pending_invitations), 'amber', 'mail-open'],
+        ['Your action items', String(k.action_items_pending), 'violet', 'list-checks'],
+        ['Hours this month', String(Math.round(k.meeting_hours_this_month * 10) / 10), 'cyan', 'clock'],
+        ['Average attendance', k.average_attendance === null ? '—' : `${k.average_attendance}%`, 'green', 'user-check'],
       ]
     : [];
   return (
@@ -78,7 +79,7 @@ export default function MeetingsPage(_props: ModuleProps) {
           {TABS.map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => go(id === 'dashboard' ? '/meetings' : `/meetings?tab=${id}`)} className={cx('h-10 px-3', tab === id ? 'font-bold text-primary shadow-[inset_0_-2px_0_var(--color-primary)]' : 'font-medium text-ink-2')}>
               {label}
-              {id === 'invitations' && k?.pending_invitations ? <span className="ml-1.5 rounded-full bg-warning-bg px-1.5 text-[11px] font-bold text-[#9A4A06] dark:text-warning">{k.pending_invitations}</span> : null}
+              {id === 'invitations' && k?.pending_invitations ? <span className="ml-1.5 rounded-full bg-warning-bg px-1.5 text-[11px] font-bold text-warning-ink dark:text-warning">{k.pending_invitations}</span> : null}
             </button>
           ))}
           <span className="flex-1" />
@@ -88,14 +89,11 @@ export default function MeetingsPage(_props: ModuleProps) {
         {dash.error ? <ErrorNote error={dash.error} onRetry={() => void dash.refetch()} /> : null}
         {tab === 'dashboard' ? (
           <>
-            <div className="grid grid-cols-6 gap-2.5">
-              {kpis.map(([label, value, tone]) => (
-                <div key={label} className="flex flex-col gap-1 rounded-[12px] border border-line bg-surface px-3.5 py-3">
-                  <span className="text-[12px] text-ink-3">{label}</span>
-                  <span className={cx('text-[22px] font-bold', tone)}>{value}</span>
-                </div>
+            <StatGrid min={180}>
+              {kpis.map(([label, value, tone, icon]) => (
+                <StatCard key={label} label={label} value={value} tone={tone} icon={icon} />
               ))}
-            </div>
+            </StatGrid>
             <DayStrip day={day} onDay={setDay} />
             {/* Side by side on a wide window; one column on a narrow (or scaled-up) one, never wider than the page. */}
             <div className="grid grid-cols-1 items-start gap-4 min-[1200px]:[grid-template-columns:minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -321,7 +319,7 @@ function CompactInvitation({ m, busy, onOpen, send }: { m: Meeting; busy: boolea
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <button type="button" onClick={() => onOpen(m.id)} className="truncate text-left font-bold text-ink hover:underline">{m.title}</button>
         {clash ? (
-          <span className="truncate text-[12px] text-[#9A4A06] dark:text-warning">Clashes with {clash.busy_only ? 'something else' : (clash.title ?? 'something else')}</span>
+          <span className="truncate text-[12px] text-warning-ink dark:text-warning">Clashes with {clash.busy_only ? 'something else' : (clash.title ?? 'something else')}</span>
         ) : (
           <span className="text-[12px] text-ink-3">{day} · {time}</span>
         )}

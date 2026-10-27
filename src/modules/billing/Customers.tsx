@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { errorMessage } from '../../core/bridge';
 import { addDays, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { btnSmall } from '../hr/parts';
+import { btnSmall } from '../../components/PageKit';
 import { exportRequest, sendStatement } from './actions';
 import { can } from './api';
 import { useCanOpen } from '../../core/access';
@@ -13,12 +13,13 @@ import { useStore } from '../../core/store';
 import { dateLabel } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { Empty, input, Kpi, PageHead, SidePanel } from '../hr/parts';
+import { Empty, input, Kpi, PageHead, SidePanel } from '../../components/PageKit';
 import { agingParts, amount } from './api';
 import { fetchCustomer, fetchCustomers, frequencyLabel, KB } from './more';
 import { money, StatusChip } from './parts';
 import { Section } from './Payments';
 import { Checkbox } from '../../components/Checkbox';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Customers (BillCustomers): who owes what, largest first — outstanding,
@@ -82,7 +83,7 @@ export default function Customers({ org, openId, onOpen, onOpenInvoice, onOpenPa
           </div>
           {rows.length ? (
             rows.map((c) => (
-              <button key={c.id} type="button" data-customer={c.id} onClick={() => onOpen(c.id)} className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === c.id && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+              <button key={c.id} type="button" data-customer={c.id} onClick={() => onOpen(c.id)} className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === c.id && 'bg-info-soft dark:bg-selection/40')}>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <b className="truncate text-ink">{c.name}</b>
                   {c.email ? <span className="truncate text-[11.5px] text-ink-3">{c.email}</span> : null}
@@ -91,7 +92,7 @@ export default function Customers({ org, openId, onOpen, onOpenInvoice, onOpenPa
                 <span className="w-[120px] shrink-0 text-right text-ink tabular-nums">{c.billed ? money(c.billed, c.currency) : '—'}</span>
                 <b className="w-[130px] shrink-0 text-right text-ink tabular-nums">{c.outstanding > 0 ? amount(c.outstanding, c.currency) : '—'}</b>
                 <span className={cx('w-[130px] shrink-0 text-right tabular-nums', c.overdue > 0 ? 'font-bold text-danger' : 'text-ink-3')}>{c.overdue > 0 ? amount(c.overdue, c.currency) : '—'}</span>
-                <span className={cx('w-[120px] shrink-0 text-right tabular-nums', c.on_account > 0 ? 'font-bold text-[#9A4A06] dark:text-warning' : 'text-ink-3')}>{c.on_account > 0 ? amount(c.on_account, c.currency) : '—'}</span>
+                <span className={cx('w-[120px] shrink-0 text-right tabular-nums', c.on_account > 0 ? 'font-bold text-warning-ink dark:text-warning' : 'text-ink-3')}>{c.on_account > 0 ? amount(c.on_account, c.currency) : '—'}</span>
               </button>
             ))
           ) : (
@@ -132,12 +133,12 @@ function CustomerPanel({ id, org, onClose, onOpenInvoice, onOpenPayment, onOpenP
         <ErrorNote error={q.error} onRetry={() => void q.refetch()} />
       ) : d ? (
         <>
-          <div className="grid grid-cols-2 gap-2">
-            <Kpi label="Outstanding" value={amount(d.summary.outstanding, cur)} sub={`${d.summary.invoice_count} ${d.summary.invoice_count === 1 ? 'invoice' : 'invoices'}`} />
-            <Kpi label="Overdue" value={amount(d.summary.overdue, cur)} sub={d.summary.overdue > 0 ? 'needs chasing' : 'nothing late'} tone={d.summary.overdue > 0 ? 'red' : undefined} />
-            <Kpi label="Billed" value={money(d.summary.billed, cur)} sub="all time" />
-            <Kpi label="On account" value={amount(d.summary.on_account, cur)} sub="unallocated" tone={d.summary.on_account > 0 ? 'amber' : undefined} />
-          </div>
+          <StatGrid min={150}>
+            <Kpi icon="hourglass" tone="blue" label="Outstanding" value={amount(d.summary.outstanding, cur)} sub={`${d.summary.invoice_count} ${d.summary.invoice_count === 1 ? 'invoice' : 'invoices'}`} />
+            <Kpi icon="alert" label="Overdue" value={amount(d.summary.overdue, cur)} sub={d.summary.overdue > 0 ? 'needs chasing' : 'nothing late'} tone={d.summary.overdue > 0 ? 'red' : undefined} />
+            <Kpi icon="receipt" tone="violet" label="Billed" value={money(d.summary.billed, cur)} sub="all time" />
+            <Kpi icon="wallet" label="On account" value={amount(d.summary.on_account, cur)} sub="unallocated" tone={d.summary.on_account > 0 ? 'amber' : undefined} />
+          </StatGrid>
           {d.customer.billing_address ? <span className="text-[12px] text-ink-3">{d.customer.billing_address}</span> : null}
           <Statement customer={d.customer} org={org} canSend={can(perms, 'billing.invoice')} />
           <Section title="How old the money is">

@@ -5,9 +5,10 @@ import { attendanceTime } from './attendance';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { STATE_LABEL, type Profile } from './api';
 import { dayLong, dayShort, minutesLabel } from './dates';
-import { btn, btnPrimary, Cell, Empty, Facts, Grid, humanise, Kpi, Panel, row, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Facts, Grid, humanise, Kpi, Panel, row, StatusChip, THead } from '../../components/PageKit';
 import type { HrView } from './Rail';
 import { NewRequestSheet } from './Requests';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * My HR (HrProfile, HrProfilePersonal; `ProfileWorkspace self` on the web):
@@ -48,7 +49,7 @@ export default function MyHr({ onPick }: { onPick: (v: HrView) => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
       <div className="flex items-center gap-3">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0E7C86] text-[16px] font-bold text-white">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal text-[16px] font-bold text-white">
           {e.name
             .split(/\s+/)
             .slice(0, 2)
@@ -61,7 +62,7 @@ export default function MyHr({ onPick }: { onPick: (v: HrView) => void }) {
           <span className="truncate text-[12.5px] text-ink-3">
             {[e.employee_no, e.designation, e.department].filter(Boolean).join(' · ')}
             {' · '}
-            <b className={e.status === 'active' ? 'text-success' : 'text-[#9A4A06] dark:text-warning'}>{humanise(e.status)}</b>
+            <b className={e.status === 'active' ? 'text-success' : 'text-warning-ink dark:text-warning'}>{humanise(e.status)}</b>
           </span>
         </div>
         <button type="button" className={btn} onClick={() => onPick('leave')}>
@@ -91,12 +92,12 @@ export default function MyHr({ onPick }: { onPick: (v: HrView) => void }) {
 
       {tab === 'overview' ? (
         <>
-          <div className="grid grid-cols-4 gap-2.5">
-            <Kpi label="This month" value={att ? `${att.days_present} / ${att.work_days}` : '—'} sub="days present" />
-            <Kpi label="Hours worked" value={att ? `${Math.round(att.net_seconds / 3600)} h` : '—'} sub={att ? `${Math.round(att.overtime_minutes / 60)} h overtime` : undefined} />
-            <Kpi label="Leave available" value={Math.round(available * 10) / 10} sub="days, all types" onClick={() => onPick('leave')} />
-            <Kpi label="Open requests" value={open.length} sub={open[0]?.kind_label ?? 'Nothing waiting'} onClick={() => onPick('requests')} />
-          </div>
+          <StatGrid min={180}>
+            <Kpi icon="calendar" tone="blue" label="This month" value={att ? `${att.days_present} / ${att.work_days}` : '—'} sub="days present" />
+            <Kpi icon="clock" tone="violet" label="Hours worked" value={att ? `${Math.round(att.net_seconds / 3600)} h` : '—'} sub={att ? `${Math.round(att.overtime_minutes / 60)} h overtime` : undefined} />
+            <Kpi icon="plane" tone="cyan" label="Leave available" value={Math.round(available * 10) / 10} sub="days, all types" onClick={() => onPick('leave')} />
+            <Kpi icon="inbox" tone="amber" label="Open requests" value={open.length} sub={open[0]?.kind_label ?? 'Nothing waiting'} onClick={() => onPick('requests')} />
+          </StatGrid>
           <div className="grid min-h-0 flex-1 grid-cols-[1fr_1.3fr_1fr] gap-3">
             <Panel title="Employment" bodyClassName="px-3.5 py-2">
               <Facts

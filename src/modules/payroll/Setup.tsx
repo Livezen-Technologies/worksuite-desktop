@@ -4,9 +4,10 @@ import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { humanise } from '../hr/parts';
+import { humanise } from '../../components/PageKit';
 import { fetchComponents, fetchGroups, fetchPeriods, fetchStructures, generatePeriods } from './api';
 import { Badge, Card, NotYet, Pills, Table, td, useReadOnly } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Setup (D18–D20): components, structures, pay groups with their calendars (and Generate <year>), and GL mapping.
@@ -45,7 +46,7 @@ function Components() {
       <Card>
         <Table head={['Code', 'Name', 'Type', 'Method', 'Ver.']}>
           {list.map((c) => (
-            <tr key={c.id} onClick={() => setSel(c.id)} className={cx('cursor-default', c.id === sel ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+            <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} onClick={() => setSel(c.id)} className={cx('cursor-default', c.id === sel ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
               <td className={cx(td, 'font-mono text-[11px] font-bold')}>{c.code}</td>
               <td className={td}>{c.name}</td>
               <td className={td}>{humanise(c.kind)}</td>
@@ -81,7 +82,7 @@ function Structures() {
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start gap-2.5">
       <Card>
         {list.map((s) => (
-          <button key={s.id} type="button" onClick={() => setSel(s.id)} className={cx('flex w-full flex-col items-start border-b border-line/70 px-3.5 py-2.5 text-left text-[12.5px]', s.id === pick?.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+          <button key={s.id} type="button" onClick={() => setSel(s.id)} className={cx('flex w-full flex-col items-start border-b border-line/70 px-3.5 py-2.5 text-left text-[12.5px]', s.id === pick?.id ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
             <b>{s.name}</b>
             <span className="text-[11.5px] text-ink-2">{`${s.code} · ${s.items.length} components`}</span>
           </button>

@@ -4,6 +4,18 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.3 — 2026-10-27
+
+**Changed**
+
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+
+## 1.5.2 — 2026-10-26
+
+**Fixed**
+
+- a cart line is selected with Enter or Space as well as a tap (D-G21)
+
 ## 1.5.1 — 2026-10-13
 
 **Changed**

@@ -80,7 +80,9 @@ export function Board({ projectId, display = 'board', prefs, onDisplay, onPrefs,
   /** A card moved — dragged, ⇧←/→, or a status picked in the list: one path, one outbox entry (acceptance #14). */
   const move = async (t: Task, status: TaskStatus, blockedReason?: string): Promise<boolean> => {
     if (t.status === status) return false;
-    // Shown in its new column at once; the server has the last word.
+    // Shown in its new column at once; the server has the last word. A poll already on its way is stopped first, or it
+    // lands after this with the old status and the card jumps back until the next one (#430).
+    await qc.cancelQueries({ queryKey: qk.tasks(projectId), exact: true });
     qc.setQueryData(qk.tasks(projectId), (old: typeof list.data) =>
       old ? { ...old, data: { ...old.data, tasks: old.data.tasks.map((x) => (x.id === t.id ? { ...x, status, ...(blockedReason ? { blocked_reason: blockedReason } : {}) } : x)) } } : old,
     );
@@ -261,7 +263,7 @@ export function Board({ projectId, display = 'board', prefs, onDisplay, onPrefs,
                 setOver(null);
                 if (t) void move(t, c.status);
               }}
-              className={cx('flex min-h-0 flex-col gap-2 rounded-[12px] bg-[#EEF1F6] p-2 dark:bg-subtle', over === c.status && 'ring-2 ring-primary/40')}
+              className={cx('flex min-h-0 flex-col gap-2 rounded-[12px] bg-subtle p-2 dark:bg-subtle', over === c.status && 'ring-2 ring-primary/40')}
             >
               <div className="flex items-center gap-1.5 px-1 pt-0.5">
                 <b className="flex-1 text-[12.5px] text-ink">{TASK_STATUS_LABEL[c.status]}</b>
@@ -297,7 +299,7 @@ export function Board({ projectId, display = 'board', prefs, onDisplay, onPrefs,
                       onDoubleClick={() => onOpen(t.id)}
                       className={cx(
                         'flex flex-col gap-1 rounded-[9px] border bg-surface p-2 text-left',
-                        isSel ? 'border-primary ring-1 ring-primary' : mark ? 'border-dashed border-warning' : 'border-line hover:border-[#B8C1DA] dark:hover:border-ink-3',
+                        isSel ? 'border-primary ring-1 ring-primary' : mark ? 'border-dashed border-warning' : 'border-line hover:border-primary-soft dark:hover:border-ink-3',
                       )}
                     >
                       <span className="flex items-center gap-1.5">

@@ -48,6 +48,15 @@
   --ws-edge: rgba(15, 27, 61, 0.07);
   /* A card set into a surface: a shade below it on light, a shade above it on dark. */
   --ws-well: #f4f5f9;
+  /* Stat cards (components/StatCard): each tone's colour, drawn as the icon chip on a tint of itself (--ws-tone-mix). */
+  --ws-tone-blue: #2f55d4;
+  --ws-tone-violet: #6d3fd6;
+  --ws-tone-green: #1f7a4d;
+  --ws-tone-amber: #b45309;
+  --ws-tone-red: #c0392b;
+  --ws-tone-cyan: #0e7c86;
+  --ws-tone-neutral: #5b6275;
+  --ws-tone-mix: 11%;
   /* Mail accounts: the colour each mailbox is drawn in (its avatar, its tag on a row). White text on all of them. */
   --ws-acct-blue: #2563eb;
   --ws-acct-sky: #0369a1;
@@ -71,6 +80,92 @@
      so a fade to it is never darker than what is under it (worksuite-desktop#233). Its one soft hairline. */
   --launcher-bg: #ffffff;
   --launcher-line: rgba(18, 22, 51, 0.06);
+  /*
+   * Colour families (audit D-G23): the tints, words and lines of each hue a screen draws in — a chip, a status, a
+   * note — light here and dark below, so nothing needs a hex colour of its own. `-bg` is the tint behind, `-ink` the
+   * words on it, `-line` its edge, the bare name the solid colour.
+   */
+  --ws-success-ink: #145c39;
+  --ws-success-line: #bde5cf;
+  --ws-success-soft: #c9ecd8;
+  --ws-danger-ink: #8c2a14;
+  --ws-danger-line: #f1b8a8;
+  --ws-danger-soft: #fbd5cc;
+  --ws-warning-line: #f5d48a;
+  --ws-warning-soft: #fde6b8;
+  --ws-warning-strong: #7a3b05;
+  --ws-info-bg: #eaedfb;
+  --ws-info-ink: #1b2a85;
+  --ws-info-line: #c9d3f5;
+  --ws-info-soft: #f4f6fe;
+  --ws-violet: #6d28d9;
+  --ws-violet-bg: #efe9fd;
+  --ws-violet-ink: #5b21b6;
+  --ws-violet-line: #d9cdfa;
+  --ws-teal-bg: #e3f4f5;
+  --ws-teal-ink: #0b6770;
+  --ws-teal-line: #b7e3e6;
+  --ws-sky: #0369a1;
+  --ws-sky-bg: #e0f2fe;
+  --ws-sky-ink: #075985;
+  --ws-rose: #be185d;
+  --ws-rose-bg: #fce7f3;
+  --ws-rose-ink: #9d174d;
+  --ws-orange: #c2410c;
+  --ws-orange-bg: #ffedd5;
+  --ws-orange-ink: #9a3412;
+  --ws-amber: #f59e0b;
+  --ws-yellow-bg: #fef9c3;
+  --ws-yellow-ink: #854d0e;
+  --ws-green: #2f9e67;
+  --ws-red: #e5484d;
+  --ws-blue: #2563eb;
+  --ws-blue-bg: #dbeafe;
+  --ws-blue-ink: #1e40af;
+  --ws-slate: #64748b;
+  --ws-slate-bg: #f1f5f9;
+  --ws-slate-line: #cbd5e1;
+  --ws-slate-ink: #334155;
+  --ws-brand-soft: #3b5bdb;
+  --ws-ink-4: #94a3b8;
+  --ws-muted: #9aa3bd;
+  --ws-primary-soft: #c2cbf2;
+  --ws-amber-strong: #d97706;
+  --ws-green-bright: #22c55e;
+  --ws-indigo-bright: #7fa2ff;
+  /*
+   * The stage (D-G23): surfaces dark in both themes — the call and meeting stage, the ring cards, media viewers, the
+   * image and code editors — and what sits on them. The same in light and dark, so they are not in the dark block.
+   */
+  --ws-stage: #0b1226;
+  --ws-stage-2: #111b3b;
+  --ws-stage-3: #1b2850;
+  --ws-stage-4: #2a3a66;
+  --ws-stage-line: #2a3a66;
+  --ws-stage-line-soft: #1e2a4a;
+  --ws-stage-ink: #eef2fb;
+  --ws-stage-ink-2: #c3ceea;
+  --ws-stage-ink-3: #8c9bc0;
+  --ws-stage-ink-4: #5d6a8f;
+  --ws-stage-accent: #b3c0ff;
+  --ws-stage-success: #9ee6c3;
+  --ws-stage-warning: #fde68a;
+  --ws-stage-danger: #ffb4a3;
+  --ws-stage-violet: #d2b4fe;
+  --ws-stage-teal: #7fd8df;
+  --ws-stage-black: #000000;
+  --ws-stage-gray: #1f2329;
+  --ws-stage-gray-2: #2d3239;
+  --ws-stage-gray-ink: #d1d5db;
+  --ws-stage-green: #2f9e67;
+  --ws-stage-on-light: #151a2d;
+  --ws-stage-danger-ink: #b42318;
+  --ws-stage-primary: #23349e;
+  --ws-stage-primary-2: #5b7bff;
+  --ws-stage-green-bright: #22c55e;
+  --ws-stage-red: #e5484d;
+  --ws-stage-amber: #f59e0b;
+  --ws-stage-blue: #3b82f6;
 }
 
 [data-theme='dark'] {
@@ -98,6 +193,14 @@
   --ws-shadow-rgb: 0 0 0;
   --ws-edge: rgba(160, 176, 225, 0.16);
   --ws-well: #1a2447;
+  --ws-tone-blue: #8da2fb;
+  --ws-tone-violet: #b197fc;
+  --ws-tone-green: #5cc795;
+  --ws-tone-amber: #f0a04b;
+  --ws-tone-red: #f28b82;
+  --ws-tone-cyan: #5ccfd8;
+  --ws-tone-neutral: #9aa3bd;
+  --ws-tone-mix: 16%;
   --ws-acct-blue: #3b6ff0;
   --ws-acct-sky: #1683c4;
   --ws-acct-indigo: #4c63e6;
@@ -114,6 +217,54 @@
   --ws-glass-line: rgba(255, 255, 255, 0.14);
   --launcher-bg: #0b1124;
   --launcher-line: rgba(255, 255, 255, 0.06);
+  --ws-success-ink: #7fdcae;
+  --ws-success-line: #1f5c3c;
+  --ws-success-soft: #174a30;
+  --ws-danger-ink: #f5a39b;
+  --ws-danger-line: #6b2a24;
+  --ws-danger-soft: #4d1c18;
+  --ws-warning-line: #5a3b14;
+  --ws-warning-soft: #4a3112;
+  --ws-warning-strong: #f7c27a;
+  --ws-info-bg: #1a2550;
+  --ws-info-ink: #b3c0ff;
+  --ws-info-line: #2f3f7a;
+  --ws-info-soft: #151f44;
+  --ws-violet: #a78bfa;
+  --ws-violet-bg: #2a1f4a;
+  --ws-violet-ink: #d2b4fe;
+  --ws-violet-line: #463673;
+  --ws-teal-bg: #0f2f33;
+  --ws-teal-ink: #7fd8df;
+  --ws-teal-line: #1c4a4f;
+  --ws-sky: #38bdf8;
+  --ws-sky-bg: #0b2a3d;
+  --ws-sky-ink: #7dd3fc;
+  --ws-rose: #f472b6;
+  --ws-rose-bg: #3a1428;
+  --ws-rose-ink: #f9a8d4;
+  --ws-orange: #fb923c;
+  --ws-orange-bg: #3a210c;
+  --ws-orange-ink: #fdba74;
+  --ws-amber: #fbbf24;
+  --ws-yellow-bg: #3a3410;
+  --ws-yellow-ink: #fde68a;
+  --ws-green: #4cc38a;
+  --ws-red: #f2555a;
+  --ws-blue: #60a5fa;
+  --ws-blue-bg: #172554;
+  --ws-blue-ink: #93c5fd;
+  --ws-slate: #94a3b8;
+  --ws-slate-bg: #1e293b;
+  --ws-slate-line: #334155;
+  --ws-slate-ink: #cbd5e1;
+  --ws-brand-soft: #748ffc;
+  --ws-ink-4: #6f7a98;
+  --ws-muted: #5d6680;
+  --ws-primary-soft: #2b3a7a;
+  --ws-amber-strong: #f59e0b;
+  --ws-green-bright: #4ade80;
+  --ws-indigo-bright: #7fa2ff;
 }
 
 [data-density='compact'] {
@@ -156,6 +307,83 @@
   --color-scrim: var(--ws-scrim);
   --color-launcher: var(--launcher-bg);
   --color-launcher-line: var(--launcher-line);
+  --color-success-ink: var(--ws-success-ink);
+  --color-success-line: var(--ws-success-line);
+  --color-success-soft: var(--ws-success-soft);
+  --color-danger-ink: var(--ws-danger-ink);
+  --color-danger-line: var(--ws-danger-line);
+  --color-danger-soft: var(--ws-danger-soft);
+  --color-warning-line: var(--ws-warning-line);
+  --color-warning-soft: var(--ws-warning-soft);
+  --color-warning-strong: var(--ws-warning-strong);
+  --color-info-bg: var(--ws-info-bg);
+  --color-info-ink: var(--ws-info-ink);
+  --color-info-line: var(--ws-info-line);
+  --color-info-soft: var(--ws-info-soft);
+  --color-violet: var(--ws-violet);
+  --color-violet-bg: var(--ws-violet-bg);
+  --color-violet-ink: var(--ws-violet-ink);
+  --color-violet-line: var(--ws-violet-line);
+  --color-teal-bg: var(--ws-teal-bg);
+  --color-teal-ink: var(--ws-teal-ink);
+  --color-teal-line: var(--ws-teal-line);
+  --color-sky: var(--ws-sky);
+  --color-sky-bg: var(--ws-sky-bg);
+  --color-sky-ink: var(--ws-sky-ink);
+  --color-rose: var(--ws-rose);
+  --color-rose-bg: var(--ws-rose-bg);
+  --color-rose-ink: var(--ws-rose-ink);
+  --color-orange: var(--ws-orange);
+  --color-orange-bg: var(--ws-orange-bg);
+  --color-orange-ink: var(--ws-orange-ink);
+  --color-amber: var(--ws-amber);
+  --color-yellow-bg: var(--ws-yellow-bg);
+  --color-yellow-ink: var(--ws-yellow-ink);
+  --color-green: var(--ws-green);
+  --color-red: var(--ws-red);
+  --color-blue: var(--ws-blue);
+  --color-blue-bg: var(--ws-blue-bg);
+  --color-blue-ink: var(--ws-blue-ink);
+  --color-slate: var(--ws-slate);
+  --color-slate-bg: var(--ws-slate-bg);
+  --color-slate-line: var(--ws-slate-line);
+  --color-slate-ink: var(--ws-slate-ink);
+  --color-brand-soft: var(--ws-brand-soft);
+  --color-ink-4: var(--ws-ink-4);
+  --color-muted: var(--ws-muted);
+  --color-primary-soft: var(--ws-primary-soft);
+  --color-amber-strong: var(--ws-amber-strong);
+  --color-green-bright: var(--ws-green-bright);
+  --color-indigo-bright: var(--ws-indigo-bright);
+  --color-stage: var(--ws-stage);
+  --color-stage-2: var(--ws-stage-2);
+  --color-stage-3: var(--ws-stage-3);
+  --color-stage-4: var(--ws-stage-4);
+  --color-stage-line: var(--ws-stage-line);
+  --color-stage-line-soft: var(--ws-stage-line-soft);
+  --color-stage-ink: var(--ws-stage-ink);
+  --color-stage-ink-2: var(--ws-stage-ink-2);
+  --color-stage-ink-3: var(--ws-stage-ink-3);
+  --color-stage-ink-4: var(--ws-stage-ink-4);
+  --color-stage-accent: var(--ws-stage-accent);
+  --color-stage-success: var(--ws-stage-success);
+  --color-stage-warning: var(--ws-stage-warning);
+  --color-stage-danger: var(--ws-stage-danger);
+  --color-stage-violet: var(--ws-stage-violet);
+  --color-stage-teal: var(--ws-stage-teal);
+  --color-stage-black: var(--ws-stage-black);
+  --color-stage-gray: var(--ws-stage-gray);
+  --color-stage-gray-2: var(--ws-stage-gray-2);
+  --color-stage-gray-ink: var(--ws-stage-gray-ink);
+  --color-stage-green: var(--ws-stage-green);
+  --color-stage-on-light: var(--ws-stage-on-light);
+  --color-stage-danger-ink: var(--ws-stage-danger-ink);
+  --color-stage-primary: var(--ws-stage-primary);
+  --color-stage-primary-2: var(--ws-stage-primary-2);
+  --color-stage-green-bright: var(--ws-stage-green-bright);
+  --color-stage-red: var(--ws-stage-red);
+  --color-stage-amber: var(--ws-stage-amber);
+  --color-stage-blue: var(--ws-stage-blue);
   --font-sans: 'Plus Jakarta Sans Variable', 'Noto Sans Sinhala', 'Noto Sans Tamil', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --radius-control: 8px;
@@ -344,6 +572,109 @@ html[data-contrast='more'] :focus-visible {
   font-family: 'Plus Jakarta Sans Variable', var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
+}
+
+/*
+ * Stat cards (components/StatCard). `data-tone` picks the tone; the chip is the tone on a tint of itself, the figure
+ * stays in the text colour. A card that leads somewhere lifts a pixel on hover (not with reduced motion), its edge
+ * takes the tone, and its chevron shows.
+ */
+.ws-stat {
+  --stat-tone: var(--ws-tone-neutral);
+}
+/* Stat cards side by side: as many columns of at least --stat-min (220px) as fit, never wider than the row. */
+.ws-stat-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--stat-min, 220px), 100%), 1fr));
+}
+.ws-stat[data-tone='blue'] {
+  --stat-tone: var(--ws-tone-blue);
+}
+.ws-stat[data-tone='violet'] {
+  --stat-tone: var(--ws-tone-violet);
+}
+.ws-stat[data-tone='green'] {
+  --stat-tone: var(--ws-tone-green);
+}
+.ws-stat[data-tone='amber'] {
+  --stat-tone: var(--ws-tone-amber);
+}
+.ws-stat[data-tone='red'] {
+  --stat-tone: var(--ws-tone-red);
+}
+.ws-stat[data-tone='cyan'] {
+  --stat-tone: var(--ws-tone-cyan);
+}
+.ws-stat-chip {
+  color: var(--stat-tone);
+  background: color-mix(in srgb, var(--stat-tone) var(--ws-tone-mix), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--stat-tone) 14%, transparent);
+}
+.ws-stat[data-empty] .ws-stat-chip {
+  opacity: 0.7;
+}
+.ws-stat-action {
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    border-color 150ms ease;
+}
+.ws-stat-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--stat-tone) 38%, var(--ws-line));
+  box-shadow:
+    0 6px 18px -10px rgb(var(--ws-shadow-rgb) / 0.35),
+    0 1px 2px rgb(var(--ws-shadow-rgb) / 0.06);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ws-stat-action:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .ws-stat-action:active:not(:disabled) {
+    transform: none;
+  }
+}
+.ws-stat-action:focus-visible {
+  outline: 2px solid var(--ws-focus);
+  outline-offset: 2px;
+}
+.ws-stat-action:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.ws-stat-go {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.ws-stat-action:hover .ws-stat-go,
+.ws-stat-action:focus-visible .ws-stat-go {
+  opacity: 1;
+}
+.ws-stat-trend.is-good {
+  color: var(--ws-tone-green);
+  background: color-mix(in srgb, var(--ws-tone-green) var(--ws-tone-mix), transparent);
+}
+.ws-stat-trend.is-bad {
+  color: var(--ws-tone-red);
+  background: color-mix(in srgb, var(--ws-tone-red) var(--ws-tone-mix), transparent);
+}
+.ws-stat-trend.is-flat {
+  color: var(--ws-ink-3);
+  background: var(--ws-subtle);
+}
+
+/* A placeholder while something loads: a soft block that breathes (still, with reduced motion). */
+.ws-skeleton {
+  background: var(--ws-subtle);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ws-skeleton {
+    animation: ws-skeleton 1.4s ease-in-out infinite;
+  }
+}
+@keyframes ws-skeleton {
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* Menus open with a short fade and scale (worksuite-desktop#168); `motion-safe:` leaves it out for reduced motion. */
@@ -1016,4 +1347,28 @@ html:lang(si) .ws-localized-control, html:lang(ta) .ws-localized-control { white
   --pos-tier-account-ink: #c4b5fd;
   --pos-blind: #2a1f4d;
   --pos-blind-ink: #c4b5fd;
+}
+
+/*
+ * Settings kit (src/components/SettingsKit.tsx): rows written straight under a section's header, outside a SettingsGroup,
+ * join into one card per run — the same card a group draws — so every settings screen reads as grouped cards.
+ */
+@layer components {
+  [data-setting-row][data-loose] {
+    background-color: var(--ws-surface);
+    border-inline: 1px solid var(--ws-line);
+    border-bottom: 1px solid var(--ws-line);
+  }
+  [data-setting-row][data-loose]:first-child,
+  :not([data-setting-row][data-loose]) + [data-setting-row][data-loose] {
+    margin-top: 4px;
+    border-top: 1px solid var(--ws-line);
+    border-start-start-radius: 14px;
+    border-start-end-radius: 14px;
+  }
+  [data-setting-row][data-loose]:not(:has(+ [data-setting-row][data-loose])) {
+    margin-bottom: 20px;
+    border-end-start-radius: 14px;
+    border-end-end-radius: 14px;
+  }
 }

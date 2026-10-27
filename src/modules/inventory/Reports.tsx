@@ -3,10 +3,10 @@ import { useState, type ReactNode } from 'react';
 import { dateLabel } from '../../core/time';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { Empty, PageHead } from '../hr/parts';
+import { Empty, PageHead } from '../../components/PageKit';
 import { cost, MOVE_LABEL, num, qty, stampWords, type Warehouse } from './api';
 import { fetchReport, KI, reportQuery, reportsFor, reportView, SERIAL_STATE, type Col, type ReportData, type ReportDef } from './insight';
-import { minWidth, Pill } from './parts';
+import { minWidth, Pill } from '../../components/ListKit';
 import { pick } from './pickers';
 
 /**
@@ -66,7 +66,7 @@ export default function Reports({
                     data-report={r.key}
                     aria-current={r.key === def.key ? 'page' : undefined}
                     onClick={() => onReport(r.key)}
-                    className={cx('h-[29px] rounded-[7px] px-2.5 text-left text-[12.5px]', r.key === def.key ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+                    className={cx('h-[29px] rounded-[7px] px-2.5 text-left text-[12.5px]', r.key === def.key ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
                   >
                     {r.label}
                   </button>
@@ -129,7 +129,7 @@ function Body({ def, data, currency }: { def: ReportDef; data: ReportData; curre
         </section>
       ))}
       {v.notes.map((note) => (
-        <span key={note} role="note" className="rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#9A4A06] dark:text-warning">
+        <span key={note} role="note" className="rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-ink dark:text-warning">
           {note}
         </span>
       ))}

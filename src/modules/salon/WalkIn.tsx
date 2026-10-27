@@ -404,7 +404,7 @@ export default function WalkIn() {
 /** "Search services", at the page's right (D04). */
 export function ServiceSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <label className="flex min-h-12 w-full items-center gap-2 rounded-[12px] border border-[#C9CEDD] bg-surface px-3.5 focus-within:border-primary sm:w-[340px] dark:border-line">
+    <label className="flex min-h-12 w-full items-center gap-2 rounded-[12px] border border-slate-line bg-surface px-3.5 focus-within:border-primary sm:w-[340px] dark:border-line">
       <Icon name="search" size={18} className="text-ink-3" />
       <input aria-label="Search services" placeholder="Search services" value={value} onChange={(e) => onChange(e.target.value)} className="bare-focus min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3" />
     </label>

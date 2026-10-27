@@ -9,8 +9,8 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Checkbox } from '../../components/Checkbox';
 import { cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Empty, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import type { TenderDoc } from './api';
 import { saveTenderFile } from './files';
 import { diffLines, diffStats, sideBySide } from './lineDiff';
@@ -167,7 +167,7 @@ function Compare({ docId, from, to }: { docId: number; from: number; to: number 
         {rows.map((r, i) => (
           <div key={i} className="contents" data-kind={r.kind}>
             <div className={cx('px-2.5 py-1 whitespace-pre-wrap break-words', (r.kind === 'removed' || r.kind === 'changed') && 'bg-danger-bg text-danger')}>{r.left ?? ''}</div>
-            <div className={cx('border-s border-line px-2.5 py-1 whitespace-pre-wrap break-words', (r.kind === 'added' || r.kind === 'changed') && 'bg-[#E6F4EA] text-[#1F7A4D] dark:bg-[#1F7A4D]/20')}>{r.right ?? ''}</div>
+            <div className={cx('border-s border-line px-2.5 py-1 whitespace-pre-wrap break-words', (r.kind === 'added' || r.kind === 'changed') && 'bg-success-bg text-success dark:bg-success/20')}>{r.right ?? ''}</div>
           </div>
         ))}
       </div>

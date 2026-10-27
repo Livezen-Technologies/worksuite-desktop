@@ -125,8 +125,8 @@ export function FileShareCard({ card, onOpen }: { card: FileShareCardData; onOpe
   return (
     <CardFrame kind={kind} label={label} actions={actions}>
       <div className="flex flex-col gap-2 px-3.5 py-3">
-        <span className="text-[12.5px] text-ink-2 dark:text-[#C9CFE6]">
-          <b className="text-ink dark:text-[#E8EBF7]">{shareHeadline(card)}</b> · {LEVEL_WORDS[level]}
+        <span className="text-[12.5px] text-ink-2 dark:text-slate-ink">
+          <b className="text-ink dark:text-ink">{shareHeadline(card)}</b> · {LEVEL_WORDS[level]}
         </span>
         {card.state === 'changed' ? (
           <span>
@@ -136,7 +136,7 @@ export function FileShareCard({ card, onOpen }: { card: FileShareCardData; onOpe
         {one ? (
           <div className="flex items-center gap-3">
             {one.type === 'folder' ? (
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] bg-[#FDF1DF] text-[#F0A43A] dark:bg-[#2A2213]">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] bg-warning-bg text-stage-amber">
                 <Icon name="folder" size={24} />
               </span>
             ) : (
@@ -144,7 +144,7 @@ export function FileShareCard({ card, onOpen }: { card: FileShareCardData; onOpe
             )}
             <span className="min-w-0 flex-1">
               <b className="block truncate text-[14.5px]">{one.name}</b>
-              <span className="block truncate text-[12.5px] text-ink-3 dark:text-[#8D96B8]">{facts(one)}</span>
+              <span className="block truncate text-[12.5px] text-ink-3 dark:text-slate">{facts(one)}</span>
             </span>
           </div>
         ) : (
@@ -152,10 +152,10 @@ export function FileShareCard({ card, onOpen }: { card: FileShareCardData; onOpe
             {items.slice(0, 5).map((i, n) =>
               i.available ? (
                 <li key={`${i.type}${i.id ?? n}`}>
-                  <button type="button" disabled={!go(i.link)} onClick={(e) => (e.stopPropagation(), go(i.link)?.())} className="flex w-full items-center gap-2.5 rounded-[8px] px-1 py-1 text-left hover:bg-subtle disabled:hover:bg-transparent dark:hover:bg-[#1A2442]">
-                    {i.type === 'folder' ? <Icon name="folder" size={18} className="shrink-0 text-[#F0A43A]" /> : <FileBadge name={i.name ?? 'file'} size={26} />}
+                  <button type="button" disabled={!go(i.link)} onClick={(e) => (e.stopPropagation(), go(i.link)?.())} className="flex w-full items-center gap-2.5 rounded-[8px] px-1 py-1 text-left hover:bg-subtle disabled:hover:bg-transparent dark:hover:bg-subtle">
+                    {i.type === 'folder' ? <Icon name="folder" size={18} className="shrink-0 text-stage-amber" /> : <FileBadge name={i.name ?? 'file'} size={26} />}
                     <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{i.name}</span>
-                    <span className="shrink-0 text-[11.5px] text-ink-3 dark:text-[#8D96B8]">{facts(i)}</span>
+                    <span className="shrink-0 text-[11.5px] text-ink-3 dark:text-slate">{facts(i)}</span>
                   </button>
                 </li>
               ) : (

@@ -10,10 +10,11 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnSmall, Facts, SidePanel } from '../hr/parts';
+import { btnSmall, Facts, SidePanel } from '../../components/PageKit';
 import { archiveProduct, cost, costingLabel, fetchProduct, fetchTimeline, fetchTrade, K, kindLabel, moveWhat, num, pictureSrc, qty, restoreProduct, signed, trackingLabel, whole, type ProductDetail, type ProductImage, stampWords } from './api';
-import { Pill, Signed } from './parts';
+import { Pill, Signed } from '../../components/ListKit';
 import { openWeb } from './Rail';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * One product (InvProductDrawer): what it is and where it is — tiles, a row
@@ -144,13 +145,8 @@ function Block({ title, sub, children }: { title: string; sub?: ReactNode; child
   );
 }
 
-function Tile({ label, value, tone }: { label: string; value: string; tone?: 'red' | 'amber' }) {
-  return (
-    <div className="flex flex-col rounded-[10px] border border-line px-3 py-2">
-      <span className="text-[11.5px] font-semibold text-ink-3">{label}</span>
-      <b className={cx('text-[18px] tabular-nums', tone === 'red' ? 'text-danger' : tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : 'text-ink')}>{value}</b>
-    </div>
-  );
+function Tile({ label, value, tone, icon }: { label: string; value: string; tone?: 'red' | 'amber' | StatTone; icon?: string }) {
+  return <StatCard size="sm" label={label} value={value} tone={tone} icon={icon} />;
 }
 
 function Overview({ d, onOpenProduct }: { d: ProductDetail; onOpenProduct: (id: number) => void }) {
@@ -166,12 +162,12 @@ function Overview({ d, onOpenProduct }: { d: ProductDetail; onOpenProduct: (id: 
     <>
       {p.images?.length ? <Gallery images={p.images} name={p.name} /> : null}
       {p.is_stocked ? (
-        <div className="grid grid-cols-4 gap-2">
-          <Tile label="Available" value={qty(t.available)} tone={avail <= 0 ? 'red' : reorder !== null && avail <= reorder ? 'amber' : undefined} />
-          <Tile label="On hand" value={qty(t.on_hand)} />
-          <Tile label="Reserved" value={qty(t.reserved)} />
-          <Tile label="Incoming" value={qty(t.incoming)} />
-        </div>
+        <StatGrid min={130}>
+          <Tile icon="package-check" label="Available" value={qty(t.available)} tone={avail <= 0 ? 'red' : reorder !== null && avail <= reorder ? 'amber' : undefined} />
+          <Tile icon="boxes" tone="blue" label="On hand" value={qty(t.on_hand)} />
+          <Tile icon="lock" tone="violet" label="Reserved" value={qty(t.reserved)} />
+          <Tile icon="truck" tone="cyan" label="Incoming" value={qty(t.incoming)} />
+        </StatGrid>
       ) : (
         <span className="rounded-[10px] bg-subtle px-3 py-2 text-[12.5px] text-ink-2">{kindLabel(p.kind)} — not held in stock, so there is nothing on a shelf to count.</span>
       )}

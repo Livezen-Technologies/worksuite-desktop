@@ -227,15 +227,24 @@ export function SignOutDialog({ account, onClose }: SignOutDialogProps) {
               {error}
             </p>
           ) : null}
-          <div className="flex gap-2.5">
-            <Button data-autofocus={count > 0 ? undefined : true} size="lg" loading={busy === 'signout'} disabled={loading || (busy !== null && busy !== 'signout')} className={cx('h-11 flex-1 rounded-[10px] border-transparent bg-navy text-white hover:bg-navy-2')} onClick={() => void signOut()}>
-              Sign out
-            </Button>
+          <div className="flex justify-end gap-2.5">
             {count > 0 ? null : (
               <Button variant="ghost" size="lg" className="h-11 rounded-[10px]" onClick={onClose}>
                 Cancel
               </Button>
             )}
+            {/* A primary Button: the default (secondary) variant's own background could win over a bg-navy override and leave the label unreadable. */}
+            <Button
+              data-autofocus={count > 0 ? undefined : true}
+              variant="primary"
+              size="lg"
+              loading={busy === 'signout'}
+              disabled={loading || (busy !== null && busy !== 'signout')}
+              className={cx('h-11 rounded-[10px] px-5', count > 0 && 'flex-1')}
+              onClick={() => void signOut()}
+            >
+              Sign out
+            </Button>
           </div>
           <hr className="m-0 h-px border-0 bg-line" />
           <div className="text-[13px] text-ink-3">Different actions, different places:</div>

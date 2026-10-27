@@ -7,8 +7,8 @@ import { ModuleSettingsForm } from '../../components/ModuleSettingsForm';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Panel, Seg, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Panel, Seg, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { K, type Company } from './api';
 import { deleteRule, fetchRules, fetchRuns, fetchSources, KA, OPERATOR_WORDS, operatorsFor, rescoreOpen, ruleBody, ruleDraft, ruleSentence, saveRule, toggledRuleBody, type Factor, type Rule, type RuleDraft } from './admin';
 import { Checkbox } from '../../components/Checkbox';
@@ -99,7 +99,7 @@ function Scoring({ org, companies }: { org: string; companies: Company[] }) {
       {rules.length ? (
         rules.map((r) => (
           <div key={r.id} data-rule={r.id} className="flex items-center gap-3 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0">
-            <b className={cx('w-11 shrink-0 text-right font-mono text-[13px] tabular-nums', r.points > 0 ? 'text-[#145C39] dark:text-success' : 'text-danger', !r.enabled && 'opacity-40')}>{r.points > 0 ? `+${r.points}` : r.points}</b>
+            <b className={cx('w-11 shrink-0 text-right font-mono text-[13px] tabular-nums', r.points > 0 ? 'text-success-ink dark:text-success' : 'text-danger', !r.enabled && 'opacity-40')}>{r.points > 0 ? `+${r.points}` : r.points}</b>
             <span className={cx('flex min-w-0 flex-1 flex-col', !r.enabled && 'opacity-50')}>
               <span className="flex flex-wrap items-center gap-1.5">
                 <b className={cx('text-[13px] text-ink', !r.enabled && 'line-through')}>{r.name}</b>
@@ -258,7 +258,7 @@ function SourceList({ org, companies }: { org: string; companies: Company[] }) {
             <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', d.usable.ok ? 'bg-success' : 'bg-ink-3/40')} />
             <span className="flex min-w-0 flex-1 flex-col">
               <b className="text-ink">{d.label}</b>
-              {!d.usable.ok && d.usable.why ? <span className="text-[12px] leading-relaxed text-[#9A4A06] dark:text-warning">{d.usable.why}</span> : null}
+              {!d.usable.ok && d.usable.why ? <span className="text-[12px] leading-relaxed text-warning-ink dark:text-warning">{d.usable.why}</span> : null}
             </span>
             <Pill tone={d.usable.ok ? 'green' : 'grey'}>{d.usable.ok ? 'Ready' : 'Not available'}</Pill>
           </div>

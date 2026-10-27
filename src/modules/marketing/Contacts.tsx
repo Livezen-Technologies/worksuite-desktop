@@ -16,6 +16,7 @@ import { act, emailWord, everybody, MoreMenu, Pager, Refused, ROW_LINK, SearchFi
 import { btn, btnBad, btnPrimary, btnSmall, Field, Initials, input, n, PageHeader, Pill, Sheet } from './parts';
 import type { Filter } from './routes';
 import { refusal, type ContactRow, type Options } from './types';
+import { clickOnKey } from '../../components/press';
 
 const PER = 50;
 
@@ -241,7 +242,7 @@ export default function Contacts({ org, options, filter, onFilter, onOpen }: { o
                 {rows.map((c) => {
                   const word = emailWord(c, options);
                   return (
-                    <tr key={c.id} className={cx(ROW_LINK, selected.has(c.id) && 'bg-selection/50')} onClick={() => onOpen(c.id)}>
+                    <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} className={cx(ROW_LINK, selected.has(c.id) && 'bg-selection/50')} onClick={() => onOpen(c.id)}>
                       <td className={cx(TD, 'w-9 pr-0')}>
                         <Checkbox aria-label={`Select ${c.name}`} checked={selected.has(c.id)} onChange={() => toggle(c.id)} />
                       </td>

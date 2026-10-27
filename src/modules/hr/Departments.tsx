@@ -9,7 +9,7 @@ import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { pickable, type EmployeeRow } from './api';
 import { ymd } from './dates';
-import { btn, btnPrimary, btnSmall, Cell, Empty, Field, Initials, input, PageHead, Panel, row, Sheet, THead } from './parts';
+import { btn, btnPrimary, btnSmall, Cell, Empty, Field, Initials, input, PageHead, Panel, row, Sheet, THead } from '../../components/PageKit';
 import { can } from './Rail';
 import { below, inTreeOrder, type Department } from './departmentTree';
 

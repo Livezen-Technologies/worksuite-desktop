@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { day, K, money, pGet, type Widget } from './api';
 import { NoAccess, usePms } from './parts';
 import type { PmsView } from './routes';

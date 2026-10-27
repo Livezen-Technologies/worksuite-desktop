@@ -8,7 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet, SidePanel } from '../../components/PageKit';
 import { cost, num, qty, stampWords, whole, type Warehouse } from '../inventory/api';
 import { OFFLINE_WRITE, purchaseCan, refreshPurchase, usePurchaseOffline, type Duplicate } from './api';
 import { refusalCode, refusalText } from './chain';
@@ -32,7 +32,7 @@ import {
   type ReceiptLine,
   type ReceiptLineDraft,
 } from './buying';
-import { minWidth, Pill } from '../inventory/parts';
+import { minWidth, Pill } from '../../components/ListKit';
 import { pick, ProductPick, WarehousePick } from '../inventory/pickers';
 
 /**
@@ -116,7 +116,7 @@ export function Receipts({ org, warehouse, openId, onOpen }: { org: string; ware
           <ErrorNote error={list.error} onRetry={() => void list.refetch()} />
         ) : rows.length ? (
           rows.map((g) => (
-            <button key={g.id} type="button" data-grn={g.id} onClick={() => onOpen(Number(g.id))} className={cx(rowCls, openId === Number(g.id) && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+            <button key={g.id} type="button" data-grn={g.id} onClick={() => onOpen(Number(g.id))} className={cx(rowCls, openId === Number(g.id) && 'bg-info-soft dark:bg-selection/40')}>
               <b className="min-w-0 flex-1 truncate text-ink">{g.grn_number}</b>
               <span className="shrink-0 truncate text-ink-2" style={{ width: W.po }}>
                 {g.po_number ?? '—'}
@@ -625,7 +625,7 @@ function OrderForm({
           </span>
         ) : null}
         {dupes?.length ? (
-          <div className="flex flex-col rounded-[10px] border border-[#F3D9A4] bg-[#FFF8EA] px-3 py-2 text-[12.5px] dark:border-warning/40 dark:bg-warning-bg" aria-label="Possible duplicates">
+          <div className="flex flex-col rounded-[10px] border border-warning-line bg-warning-bg px-3 py-2 text-[12.5px] dark:border-warning/40 dark:bg-warning-bg" aria-label="Possible duplicates">
             <b className="text-ink">Possible duplicates</b>
             {dupes.map((x) => (
               <span key={x.id} className="flex gap-2 text-ink-2">

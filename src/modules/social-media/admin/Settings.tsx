@@ -3,13 +3,14 @@ import { useState, type ReactNode } from 'react';
 import { errorMessage } from '../../../core/bridge';
 import { useTab } from '../../../core/tab-context';
 import { toast } from '../../../core/toasts';
-import { Button, cx } from '../../../components/ui';
+import { Button } from '../../../components/ui';
 import { dataOf, rowsOf, SK, socialApi, useBrands, useInvalidate, useModuleStatus, useSettings, type SettingsPage, type SettingsSection, type SettingValue } from '../api';
 import { useSocialAccess } from '../access';
-import { Notice, NotOffered, OptionalView, PageBody, PageHeader, Panel } from '../parts';
+import { Notice, NotOffered, OptionalView, PageBody, PageHeader } from '../parts';
 import { fieldsFor, FieldRows } from './settings/fields';
 import { ProviderAppsSection } from './settings/ProviderApps';
 import { AdvancedTools, BrandsList, isDiagnosticKey, isNotificationKey, NotificationsGrid, PermissionsMatrix } from './settings/sections';
+import { SettingsGroup, SettingsNavItem } from '../../../components/SettingsKit';
 
 /**
  * A02 · Module settings (SMM-ADM-001…007, §19). The standard ten sections down the left, one at a time on the
@@ -94,12 +95,18 @@ export default function Settings({ section }: { section: string | null }) {
   const title = known?.label ?? current.replace(/[-_]/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
   let body: ReactNode;
-  if (isProviders) body = <ProviderAppsSection canEdit={canEdit} />;
+  if (isProviders)
+    body = (
+      <SettingsGroup title={title} className="!mb-0">
+        <div className="px-[18px] py-3">
+          <ProviderAppsSection canEdit={canEdit} />
+        </div>
+      </SettingsGroup>
+    );
   else
     body = (
-      <>
-        <h2 className="text-[16px] font-bold text-ink">{title}</h2>
-        {known?.sub ? <p className="mb-2 text-[12.5px] text-ink-3">{known.sub}</p> : null}
+      <SettingsGroup title={title} description={known?.sub} className="!mb-0">
+        <div className="flex flex-col gap-1 px-[18px] py-2">
         {current === 'permissions' && q.data && !q.data.offered ? (
           <div className="flex flex-col gap-3">
             <NotOffered what="Social Media Manager’s permissions" compact />
@@ -110,7 +117,8 @@ export default function Settings({ section }: { section: string | null }) {
             {(page) => <SectionForm section={current} page={page} draft={draft} onChange={onChange} canEdit={canEdit} onEditRoles={() => tab.openLink('/admin/roles')} />}
           </OptionalView>
         )}
-      </>
+        </div>
+      </SettingsGroup>
     );
 
   return (
@@ -133,22 +141,20 @@ export default function Settings({ section }: { section: string | null }) {
         <div className="grid min-w-0 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
           <nav aria-label="Settings sections" className="h-fit rounded-[14px] border border-line bg-surface p-2">
             <ul className="flex flex-col gap-0.5">
-              {SECTIONS.map((s) => {
-                const on = s.id === current;
-                return (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      aria-current={on ? 'page' : undefined}
-                      onClick={() => tab.go(`/social-media/settings/${s.id}`)}
-                      className={cx('flex h-9 w-full items-center gap-2 rounded-[8px] px-3 text-left text-[13px]', on ? 'bg-selection font-bold text-primary' : 'font-medium text-ink-2 hover:bg-subtle hover:text-ink')}
-                    >
-                      {s.label}
-                      {drafts[s.id] && Object.keys(drafts[s.id]!).length ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-warning" aria-label="Unsaved changes" /> : null}
-                    </button>
-                  </li>
-                );
-              })}
+              {SECTIONS.map((s) => (
+                <li key={s.id}>
+                  <SettingsNavItem
+                    current={s.id === current}
+                    onClick={() => tab.go(`/social-media/settings/${s.id}`)}
+                    label={
+                      <>
+                        {s.label}
+                        {drafts[s.id] && Object.keys(drafts[s.id]!).length ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-warning" aria-label="Unsaved changes" /> : null}
+                      </>
+                    }
+                  />
+                </li>
+              ))}
             </ul>
           </nav>
           <div className="flex min-w-0 flex-col gap-3">
@@ -157,7 +163,7 @@ export default function Settings({ section }: { section: string | null }) {
                 You can look, but only Social Admins (social.settings.manage) can change settings.
               </Notice>
             ) : null}
-            <Panel bodyClassName="flex flex-col gap-1 pt-4">{body}</Panel>
+            {body}
             <p className="text-[11.5px] text-ink-3">Only Social Admins (social.settings.manage) can open settings; every change is audited.</p>
           </div>
         </div>

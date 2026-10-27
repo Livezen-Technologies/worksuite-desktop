@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet } from '../../components/PageKit';
 import { Menu } from '../../components/Menu';
 import { BULK_LABEL, bulkAct, bulkFile, bulkSummary, exportRequest, type BulkAction, type BulkResult, type ExportFormat } from './actions';
 import { amount, fetchInvoices, invoiceName, K, PER_PAGE, SORTS, STATUS, STATUSES, type Invoice, type ListFilters } from './api';
@@ -168,7 +168,7 @@ export default function Invoices({ org, narrow, salesDate, outstanding, currency
         </div>
       ) : null}
       {chosen.length && canIssue ? (
-        <div role="toolbar" aria-label="With the chosen invoices" className="flex flex-wrap items-center gap-2 self-start rounded-[9px] border border-[#C7D0F5] bg-[#EEF1FC] px-2.5 py-1.5 dark:border-primary/40 dark:bg-selection">
+        <div role="toolbar" aria-label="With the chosen invoices" className="flex flex-wrap items-center gap-2 self-start rounded-[9px] border border-info-line bg-selection px-2.5 py-1.5 dark:border-primary/40 dark:bg-selection">
           <b className="text-[12.5px] text-primary">{chosen.length} selected</b>
           {(['issue', 'send', 'pdf', 'mark_sent', 'record_payment', 'cancel'] as BulkAction[]).map((a) => (
             <button
@@ -297,7 +297,7 @@ function Row({ r, chosen, canChoose, onChoose, onOpen }: { r: Invoice; chosen: b
   const draft = r.status === 'draft';
   const late = r.status === 'overdue' || r.days_overdue > 0;
   return (
-    <div data-invoice={r.id} className={cx('flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', chosen && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+    <div data-invoice={r.id} className={cx('flex items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] last:border-b-0 hover:bg-subtle/60', chosen && 'bg-info-soft dark:bg-selection/40')}>
       {canChoose ? <Checkbox aria-label={`Choose ${invoiceName(r)}`} checked={chosen} onChange={onChoose} /> : null}
       <button type="button" aria-label={`Open ${invoiceName(r)}`} onClick={onOpen} className="flex w-[130px] shrink-0 flex-col text-left">
         <b className={cx('truncate', draft ? 'text-ink-3' : 'text-ink')}>{draft ? 'Draft' : r.number}</b>

@@ -9,7 +9,7 @@ import { dateLabel, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Field, input, Sheet } from '../../components/PageKit';
 import { ApprovalsPanel, DecideSheet, type Decision } from './Approvals';
 import { BarRow, Chips, crmCan, money, moneyFull, StatusBar } from './parts';
 import {
@@ -32,6 +32,8 @@ import {
   type ProposalEvents,
 } from './proposalLogic';
 import { useCrmScope } from './scope';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Proposals (CRM SRS v1.3 §17, desk-proposals): the list for the company the
@@ -45,14 +47,14 @@ import { useCrmScope } from './scope';
 
 const TONE: Record<string, string> = {
   draft: 'bg-subtle text-ink-2',
-  pending_approval: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  approved: 'bg-[#E3F4F5] text-[#0B6770] dark:bg-teal/15 dark:text-teal',
+  pending_approval: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  approved: 'bg-teal-bg text-teal-ink dark:bg-teal/15 dark:text-teal',
   sent: 'bg-selection text-primary',
-  viewed: 'bg-[#EEEAFB] text-[#3730A3] dark:bg-[#2A1F45] dark:text-[#C4A8F0]',
-  accepted: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
-  converted: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
-  declined: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  expired: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
+  viewed: 'bg-violet-bg text-primary dark:text-violet-ink',
+  accepted: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
+  converted: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
+  declined: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  expired: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
   withdrawn: 'bg-subtle text-ink-3',
 };
 
@@ -63,8 +65,8 @@ export function DocStatus({ status }: { status: string }) {
 /** The green "reading now" mark. */
 function LiveDot({ label = 'Reading now' }: { label?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-[#145C39] dark:text-success" title={label}>
-      <span className="h-2 w-2 animate-pulse rounded-full bg-[#1F7A4D] dark:bg-success" aria-hidden /> now
+    <span className="inline-flex items-center gap-1 text-[11.5px] font-bold text-success-ink dark:text-success" title={label}>
+      <span className="h-2 w-2 animate-pulse rounded-full bg-success dark:bg-success" aria-hidden /> now
     </span>
   );
 }
@@ -123,7 +125,7 @@ export default function Proposals({ openId, onOpen, onOpenDeal, onOpenEstimate }
               options={[{ id: '', label: 'All', count: meta?.total ?? null }, ...PROPOSAL_STATUSES.filter(([s]) => s === status || count(s) > 0 || !meta?.counts).map(([s, l]) => ({ id: s as Filter, label: l, count: count(s) || null }))]}
             />
           </div>
-          <div role="row" className="flex shrink-0 items-center gap-2 border-b border-line bg-[#F7F8FB] px-3 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+          <div role="row" className="flex shrink-0 items-center gap-2 border-b border-line bg-info-soft px-3 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
             <span role="columnheader" className="min-w-0 flex-1">Proposal</span>
             <span role="columnheader" className="w-[118px] shrink-0">Status</span>
             <span role="columnheader" className="w-[84px] shrink-0 text-right">Value</span>
@@ -142,6 +144,8 @@ export default function Proposals({ openId, onOpen, onOpenDeal, onOpenEstimate }
                 <div
                   key={r.id}
                   role="row"
+                  tabIndex={0}
+                  onKeyDown={clickOnKey}
                   data-proposal={r.id}
                   aria-selected={r.id === openId}
                   onClick={() => onOpen(r.id === openId ? null : r.id)}
@@ -308,18 +312,18 @@ export function ProposalPreview({ id, onClose, onOpen, onOpenDeal, onOpenEstimat
       </div>
 
       {p.approval && p.approval.status !== 'none' && (p.status === 'pending_approval' || p.approval.status === 'sent_back') ? (
-        <div role="note" className={cx('rounded-[8px] border px-3 py-2 text-[12.5px]', p.approval.status === 'sent_back' ? 'border-danger/30 bg-danger-bg text-ink' : 'border-[#F5C77E] bg-[#FFF8EB] text-ink dark:border-warning/40 dark:bg-warning-bg')}>
+        <div role="note" className={cx('rounded-[8px] border px-3 py-2 text-[12.5px]', p.approval.status === 'sent_back' ? 'border-danger/30 bg-danger-bg text-ink' : 'border-warning-line bg-warning-bg text-ink dark:border-warning/40 dark:bg-warning-bg')}>
           <b>{p.approval.status === 'sent_back' ? 'Sent back' : 'Needs approval'}</b>
           {p.approval.rules.length ? ` — ${p.approval.rules.map((r) => r.label).join('; ')}` : ''}
           {p.approval.note ? <span className="block text-ink-2">“{p.approval.note}”{nameOf(p.approval.decided_by) ? ` — ${nameOf(p.approval.decided_by)}` : ''}</span> : null}
         </div>
       ) : null}
 
-      <div className="grid grid-cols-3 gap-2">
-        <Figure label="Opens" value={`${e?.opens ?? 0}${viewers.length ? ` · ${viewers.length} ${viewers.length === 1 ? 'person' : 'people'}` : ''}`} sub={e?.last_opened_at ? `last ${relative(e.last_opened_at)}` : 'not opened yet'} />
-        <Figure label="Time reading" value={readingTime(e?.time_seconds)} />
-        <Figure label="Total" value={moneyFull(p.total, p.currency)} sub={p.valid_until ? `valid until ${dateLabel(p.valid_until)}` : undefined} />
-      </div>
+      <StatGrid min={140}>
+        <Figure icon="eye" tone="blue" label="Opens" value={`${e?.opens ?? 0}${viewers.length ? ` · ${viewers.length} ${viewers.length === 1 ? 'person' : 'people'}` : ''}`} sub={e?.last_opened_at ? `last ${relative(e.last_opened_at)}` : 'not opened yet'} />
+        <Figure icon="clock" tone="violet" label="Time reading" value={readingTime(e?.time_seconds)} />
+        <Figure icon="coins" tone="green" label="Total" value={moneyFull(p.total, p.currency)} sub={p.valid_until ? `valid until ${dateLabel(p.valid_until)}` : undefined} />
+      </StatGrid>
 
       <div className="grid gap-2.5 @min-[720px]:grid-cols-2">
         <Box title="Time per section">
@@ -393,14 +397,8 @@ function PreviewFrame({ children, onClose, label = 'Proposal' }: { children: Rea
   );
 }
 
-function Figure({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
-  return (
-    <div data-figure={label} className="flex min-w-0 flex-col gap-0.5 rounded-[10px] border border-line px-3 py-2.5">
-      <span className="text-[12px] font-semibold text-ink-3">{label}</span>
-      <b className="truncate text-[17px] text-ink tabular-nums">{value}</b>
-      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-    </div>
-  );
+function Figure({ label, value, sub, icon, tone }: { label: string; value: ReactNode; sub?: ReactNode; icon?: string; tone?: StatTone }) {
+  return <StatCard data-figure={label} size="sm" label={label} value={value} sub={sub} icon={icon} tone={tone} />;
 }
 
 function Box({ title, children }: { title: string; children: ReactNode }) {

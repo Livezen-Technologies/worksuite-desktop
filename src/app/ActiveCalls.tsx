@@ -3,7 +3,7 @@ import type { ActiveCall } from '@shared/types';
 import { call, on } from '../core/bridge';
 import { navigate } from '../core/tabs';
 import { Icon } from '../components/Icon';
-import { useNow } from '../modules/calls/parts';
+import { useNow } from '../components/CallKit';
 import { useWebsiteCall } from '../modules/chat/website/call';
 
 /**
@@ -53,7 +53,7 @@ function CallPill({ kind, title, since, onOpen }: { kind: 'meet' | 'call'; title
       onClick={onOpen}
       title={`${what}: ${title} — back to it`}
       aria-label={`${what}: ${title}, ${clock}. Back to it`}
-      className="no-drag flex h-8 max-w-[280px] items-center gap-2 rounded-full bg-[#1F7A4D] pr-3 pl-2.5 text-[12.5px] font-semibold text-white hover:bg-[#23905A]"
+      className="no-drag flex h-8 max-w-[280px] items-center gap-2 rounded-full bg-success pr-3 pl-2.5 text-[12.5px] font-semibold text-white hover:bg-green"
     >
       <span className="relative flex h-2 w-2 shrink-0">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/70" />

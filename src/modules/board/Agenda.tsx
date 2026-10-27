@@ -56,7 +56,7 @@ export default function Agenda({ meeting, meetingId, onItem, onComments, onRoom 
               {items.map((i) => {
                 const paper = i.papers?.[0] ?? null;
                 return (
-                  <li key={i.id} style={{ paddingInlineStart: `${(i.depth ?? 0) * 18}px` }} className={`flex items-start gap-2.5 border-b border-line py-2.5 ${sel?.id === i.id ? 'bg-[#EEF1FD] dark:bg-selection' : ''}`}>
+                  <li key={i.id} style={{ paddingInlineStart: `${(i.depth ?? 0) * 18}px` }} className={`flex items-start gap-2.5 border-b border-line py-2.5 ${sel?.id === i.id ? 'bg-selection dark:bg-selection' : ''}`}>
                     {paper ? <FileBadge name={`${paper.title}.pdf`} size={30} /> : <span className="w-[30px]" />}
                     <button type="button" disabled={i.withheld} className="min-w-0 flex-1 text-left" onClick={() => { setSel(i); if (paper) onItem(i.id); }} aria-label={`${i.number} ${i.title}`}>
                       <div className="flex flex-wrap items-center gap-1.5 text-[13px] font-semibold">{i.number} {i.title} <FlagChip flag={flagOf(i.flags)} /></div>

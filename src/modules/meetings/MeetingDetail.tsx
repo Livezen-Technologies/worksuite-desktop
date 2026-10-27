@@ -9,7 +9,7 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, dateLabel, relative, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Button, Chip, Empty, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
-import { useNow } from '../calls/parts';
+import { useNow } from '../../components/CallKit';
 import { openMeeting } from '../meet/api';
 import { RecordingProgress } from '../meet/RecordingProgress';
 import type { Stroke } from '../meet/session';
@@ -142,10 +142,10 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
           {can.start ? <button type="button" className={btn} onClick={() => void status('start')}>Start</button> : null}
           {can.complete ? <button type="button" className={btn} onClick={() => void status('complete')}>Complete</button> : null}
           {can.cancel && open ? (
-            <button type="button" className="h-9 rounded-[8px] border border-[#F1B8A8] bg-surface px-3 font-semibold text-danger hover:bg-danger-bg" onClick={() => setConfirm('cancel')}>Cancel meeting</button>
+            <button type="button" className="h-9 rounded-[8px] border border-danger-line bg-surface px-3 font-semibold text-danger hover:bg-danger-bg" onClick={() => setConfirm('cancel')}>Cancel meeting</button>
           ) : null}
           {can.delete ? (
-            <button type="button" className="h-9 rounded-[8px] border border-[#F1B8A8] bg-surface px-3 font-semibold text-danger hover:bg-danger-bg" onClick={() => setConfirm('delete')}>Delete</button>
+            <button type="button" className="h-9 rounded-[8px] border border-danger-line bg-surface px-3 font-semibold text-danger hover:bg-danger-bg" onClick={() => setConfirm('delete')}>Delete</button>
           ) : null}
           {joinable ? (
             <button
@@ -393,7 +393,7 @@ function AgendaTab({ d, canRun, act }: { d: Detail; canRun: boolean; act: Act })
               <b className={cx('truncate text-ink', status === 'skipped' && 'line-through opacity-60')}>{a.title}</b>
               <span className="text-[11.5px] text-ink-3">{a.presenter ?? ''}</span>
             </span>
-            <span className={cx('font-mono text-[12px]', over ? 'font-semibold text-danger' : status === 'running' ? 'font-semibold text-[#B45309] dark:text-warning' : 'text-ink-2')}>
+            <span className={cx('font-mono text-[12px]', over ? 'font-semibold text-danger' : status === 'running' ? 'font-semibold text-warning dark:text-warning' : 'text-ink-2')}>
               {spent > 0 || status === 'running' ? `${mmss(spent)} / ` : ''}{a.minutes} min
             </span>
             {canRun ? (

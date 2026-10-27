@@ -5,6 +5,7 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { fetchBatches, fetchProfiles, fetchVersions, has, K, type Access, type StationHome } from './api';
 import type { ChequeView } from './ChequeShell';
 import { Badge, Note, PageHead, Panel, Tile, btn, btnPrimary, num, useStation } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * D01 — Cheque Manager home on the print station: what is ready to print, what waits for approval, a batch that
@@ -49,12 +50,12 @@ export default function Home({ data, access, onGo }: { data: UseQueryResult<Stat
       {data.isLoading ? <Spinner /> : data.error ? <ErrorNote error={data.error} onRetry={() => void data.refetch()} /> : null}
 
       {d ? (
-        <div className="grid grid-cols-4 gap-2.5">
-          <Tile tone="violet" label="Ready to print" value={d.ready_to_print} sub="Approved, waiting for a leaf" onClick={() => onGo('queue')} />
-          <Tile tone="amber" label="Awaiting approval" value={d.awaiting_approval} />
-          <Tile tone="red" label="Batch needs attention" value={attention.length} sub={attention[0] ? `${attention[0].reference} ${attention[0].status === 'RECONCILE_REQUIRED' ? 'interrupted' : 'paused'}` : 'None'} onClick={attention[0] ? () => onGo('batch', `&batch=${attention[0]!.id}`) : undefined} />
-          <Tile tone="green" label="Received, to deposit" value={d.received_pending} />
-        </div>
+        <StatGrid>
+          <Tile icon="printer" tone="violet" label="Ready to print" value={d.ready_to_print} sub="Approved, waiting for a leaf" onClick={() => onGo('queue')} />
+          <Tile icon="hourglass" tone="amber" label="Awaiting approval" value={d.awaiting_approval} />
+          <Tile icon="warning" tone="red" label="Batch needs attention" value={attention.length} sub={attention[0] ? `${attention[0].reference} ${attention[0].status === 'RECONCILE_REQUIRED' ? 'interrupted' : 'paused'}` : 'None'} onClick={attention[0] ? () => onGo('batch', `&batch=${attention[0]!.id}`) : undefined} />
+          <Tile icon="landmark" tone="green" label="Received, to deposit" value={d.received_pending} />
+        </StatGrid>
       ) : null}
 
       <div className="grid grid-cols-2 gap-2.5">
@@ -66,7 +67,7 @@ export default function Home({ data, access, onGo }: { data: UseQueryResult<Stat
               return (
                 <div key={p.name}>
                   <div className="flex items-center gap-2 text-[13px]">
-                    <span aria-hidden className={`size-2 rounded-full ${ps.length ? 'bg-[#16A34A]' : 'bg-[#94A3B8]'}`} />
+                    <span aria-hidden className={`size-2 rounded-full ${ps.length ? 'bg-green' : 'bg-muted'}`} />
                     <b className="min-w-0 flex-1 truncate">{p.displayName}</b>
                     {ps.length ? <Badge tone="ok">Cheque profile</Badge> : <Badge>Not for cheques</Badge>}
                   </div>

@@ -1,6 +1,10 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import a11y from './build-tools/eslint-a11y.mjs';
+import colors from './build-tools/eslint-colors.mjs';
+import boundaries from './build-tools/eslint-boundaries.mjs';
+import { MODULE_IMPORTS } from './build-tools/module-boundaries.mjs';
 
 export default tseslint.config(
   { ignores: ['vendor/**', 'out/**', 'dist/**', 'release/**', 'node_modules/**', 'build/**', 'scripts/**'] },
@@ -8,9 +12,34 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['src/**/*.{ts,tsx}'],
-    plugins: { 'react-hooks': reactHooks },
+    plugins: { 'react-hooks': reactHooks, a11y, colors, boundaries },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Clicks the keyboard can make too, and pictures that say what they show (audit D-G21; build-tools/eslint-a11y.mjs).
+      'a11y/click-has-keys': 'error',
+      'a11y/img-alt': 'error',
+      // A module never imports another module's files (audit D-G08; build-tools/eslint-boundaries.mjs). Shared UI is in
+      // src/components; the pairs that remain are the reviewed, shrinking allow-list in build-tools/module-boundaries.mjs.
+      'boundaries/no-module-imports': ['error', { allow: MODULE_IMPORTS }],
+      // Colours from the design tokens, light and dark (audit D-G23; build-tools/eslint-colors.mjs). The allow-list is
+      // reviewed: each entry is a colour that must not follow the app's theme, and says why.
+      'colors/no-raw-hex': [
+        'error',
+        {
+          allow: [
+            // Other companies' marks, in their own colours: Google's G and Microsoft's four squares.
+            { files: ['src/app/connect/personal/PersonalWelcome.tsx'], colors: ['#4285F4', '#F25022', '#7FBA00', '#00A4EF', '#FFB900'] },
+            // What a website visitor sees: the widget preview draws the organisation's own widget colours and themes.
+            { files: ['src/modules/chat/website/widget/WidgetPreview.tsx'] },
+            // An email as its recipients see it: the email editor and gallery draw the email's own colours.
+            { files: ['src/modules/marketing/email-*.tsx'] },
+            // Text the person adds onto their own picture in the image editor: its pill is the colour it is drawn in.
+            { files: ['src/modules/files/image/Panels.tsx'], colors: ['#1B1F2E', '#fff'] },
+            // A QR code is scanned by a phone camera: black on white whatever the theme.
+            { files: ['src/modules/chat/channels/LinkPhone.tsx'], colors: ['#ffffff', '#fff', '#000000', '#000'] },
+          ],
+        },
+      ],
       // The renderer is sandboxed: it must never reach for Node or Electron.
       'no-restricted-imports': [
         'error',

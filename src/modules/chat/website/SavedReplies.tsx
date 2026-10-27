@@ -7,7 +7,7 @@ import { useTabTitle } from '../../../core/tab-context';
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
 import { Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
-import { Note } from '../../account/parts';
+import { Note } from '../../../components/CardKit';
 import { ReplyLine } from '../SlashMenu';
 import { useCanned } from './api';
 import { matchReplies, type SavedReply } from './profile';

@@ -9,7 +9,7 @@ import { toast } from '../../../../core/toasts';
 import { Icon } from '../../../../components/Icon';
 import { Select } from '../../../../components/Select';
 import { Button, Empty, ErrorNote, Spinner, TextField, cx } from '../../../../components/ui';
-import { Note, Pill } from '../../../account/parts';
+import { Note, Pill } from '../../../../components/CardKit';
 import { WA, type WaAccount } from '../../channels/whatsapp';
 import { Area, Group } from './parts';
 import {

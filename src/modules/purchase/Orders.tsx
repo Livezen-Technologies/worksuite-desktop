@@ -6,9 +6,9 @@ import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../../components/PageKit';
 import { cost, num, qty, stampWords, whole } from '../inventory/api';
-import { Pill } from '../inventory/parts';
+import { Pill } from '../../components/ListKit';
 import { pick } from '../inventory/pickers';
 import { closeOrder, fetchMatch, fetchOrderFull, fxOf, KP, landedShare, OFFLINE_WRITE, refreshPurchase, sendOrder, usePurchaseCan, usePurchaseOffline, type OrderFull } from './api';
 import { approvalOf, currentStep, decide, refusalText } from './chain';
@@ -161,7 +161,7 @@ export default function Orders({
                       data-po={o.id}
                       onClick={() => onOpen(Number(o.id))}
                       onDoubleClick={() => setWide(true)}
-                      className={cx('flex cursor-default items-center gap-2 border-b border-line/60 px-3.5 py-[7px] text-[12.5px]', openId === Number(o.id) ? 'bg-[#EEF1FC] dark:bg-selection/50' : 'hover:bg-subtle/60')}
+                      className={cx('flex cursor-default items-center gap-2 border-b border-line/60 px-3.5 py-[7px] text-[12.5px]', openId === Number(o.id) ? 'bg-selection dark:bg-selection/50' : 'hover:bg-subtle/60')}
                     >
                       <b className="w-[110px] truncate text-ink">{o.po_number}</b>
                       <span className="min-w-0 flex-1 truncate text-ink">{o.vendor ?? '—'}</span>
@@ -364,7 +364,7 @@ function OrderPane({
                         {r.code ? <span className="truncate text-[11px] text-ink-3">{r.code}</span> : null}
                       </span>
                       <span className="w-[52px] text-right text-ink tabular-nums">{qty(r.ordered)}</span>
-                      <span className={cx('w-[52px] text-right tabular-nums', r.received >= r.ordered ? 'text-[#166534] dark:text-success' : r.received > 0 ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-3')}>{qty(r.received)}</span>
+                      <span className={cx('w-[52px] text-right tabular-nums', r.received >= r.ordered ? 'text-success-ink dark:text-success' : r.received > 0 ? 'text-warning-ink dark:text-warning' : 'text-ink-3')}>{qty(r.received)}</span>
                       <span className={cx('w-[52px] text-right tabular-nums', r.billed > r.received ? 'font-bold text-danger' : 'text-ink-2')}>{qty(r.billed)}</span>
                       {prices ? (
                         <span className="w-[86px] text-right text-ink-2 tabular-nums" title={share ? `${whole(r.unit_cost)} + ${whole(share)} freight, insurance and duty` : undefined}>
@@ -378,7 +378,7 @@ function OrderPane({
               })}
               {!match ? <div className="px-3 py-2 text-[12px] text-ink-3">{m.isLoading ? 'Matching…' : 'No match yet.'}</div> : null}
             </div>
-            {match?.matched ? <span className="text-[12px] font-semibold text-[#166534] dark:text-success">Ordered, received and billed agree.</span> : null}
+            {match?.matched ? <span className="text-[12px] font-semibold text-success-ink dark:text-success">Ordered, received and billed agree.</span> : null}
             {charges > 0 && prices ? <span className="text-[12px] text-ink-2">Freight, insurance and duty {cost(charges, cur)}, spread over the lines by value: each receipt brings its share into the cost of the stock.</span> : null}
           </Block>
 

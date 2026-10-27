@@ -10,6 +10,7 @@ import { CAMPAIGN_STATUS } from '../lib/status';
 import { Check, Field, full, INPUT, NativeSelect, OptionalView, PageBody, PageHeader, Panel, Pill, Table, TD, TR, useBrandScope } from '../parts';
 import { CampaignDetail } from './measure/CampaignDetail';
 import { dayLabel } from './measure/TrendChart';
+import { clickOnKey } from '../../../components/press';
 
 /**
  * W09 — Campaigns (WS-SMM-SRS-001 SMM-CPG-001…004, WF-13): posts grouped toward a goal with default UTM tags and a
@@ -58,7 +59,7 @@ export default function Campaigns({ campaignId }: { campaignId: number | null })
                       const s = CAMPAIGN_STATUS[c.status] ?? { label: c.status, tone: 'muted' as const };
                       const on = c.id === campaignId;
                       return (
-                        <tr key={c.id} className={cx(TR, 'cursor-pointer', on ? 'bg-selection' : 'hover:bg-subtle')} onClick={() => go(`/social-media/campaigns/${c.id}`)}>
+                        <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} className={cx(TR, 'cursor-pointer', on ? 'bg-selection' : 'hover:bg-subtle')} onClick={() => go(`/social-media/campaigns/${c.id}`)}>
                           <td className={TD}>
                             {/* The row takes the click; this button is how a keyboard reaches it. */}
                             <button type="button" aria-current={on ? 'true' : undefined} className="text-left font-bold text-ink">

@@ -72,7 +72,7 @@ export function PageCard({ r, title, from }: { r: PageRef; title?: string | null
     <CardFrame kind="page" app={look} label={def!.label} org={elsewhere} actions={[{ label: 'Open', tone: 'primary', onClick: open }]}>
       <div className="flex flex-col gap-1 px-3.5 py-3.5">
         <b className="block text-[15px] leading-snug">{name}</b>
-        <span data-page-summary className="block text-[12.5px] text-ink-3 dark:text-[#8D96B8]">
+        <span data-page-summary className="block text-[12.5px] text-ink-3 dark:text-slate">
           {!elsewhere && `${r.app}/${r.page}` === 'hr/announcements' ? <AnnouncementsSummary /> : `A page in ${def!.label}`}
         </span>
       </div>

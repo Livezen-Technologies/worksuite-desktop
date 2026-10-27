@@ -7,9 +7,9 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { Caps, LoadFailed, Notice } from '../finance/parts';
-import { btn, btnPrimary, btnSmall, Field, input, Kpi, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { Caps, LoadFailed, Notice } from '../../components/RecordKit';
+import { btn, btnPrimary, btnSmall, Field, input, Kpi, PageHead, Seg, Sheet, SidePanel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, K, money } from './api';
 import {
   atLeast,
@@ -40,6 +40,7 @@ import {
 } from './money';
 import { Note, words } from './parts';
 import type { ScreenProps } from './Rail';
+import { StatCard, StatGrid } from '../../components/StatCard';
 
 /**
  * Corporate cards and their statements.
@@ -154,15 +155,16 @@ function CardsScreen({ orgId, orgs, onGo }: ScreenProps & { orgId: number }) {
 
       {tab === 'transactions' ? (
         <>
-          <div className="grid max-w-[620px] grid-cols-2 gap-3">
-            <Kpi label="On file" value={summary ? summary.total.toLocaleString() : '—'} />
+          <StatGrid className="max-w-[620px]">
+            <Kpi icon="credit-card" tone="blue" label="On file" value={summary ? summary.total.toLocaleString() : '—'} />
             <Kpi
+              icon="unlink"
               label="Unmatched"
               value={summary ? summary.unmatched.toLocaleString() : '—'}
               sub={summary ? `${money(summary.unmatched_value, cur)} nobody has explained` : undefined}
               tone={summary && summary.unmatched > 0 ? 'amber' : undefined}
             />
-          </div>
+          </StatGrid>
 
           <div className="flex flex-wrap items-center gap-2">
             <label className="relative w-[240px]">
@@ -282,7 +284,7 @@ function TxnRow({ t, may, busy, onMatch, onAct, onClaim }: { t: CardTxn; may: bo
       <span className="shrink-0 truncate text-ink-2" style={{ width: TXN_COLS.card }}>
         {cardName(t.card, t.last4)}
       </span>
-      <span className={cx('flex shrink-0 flex-col items-end font-semibold tabular-nums', refund ? 'text-[#166534] dark:text-success' : 'text-ink')} style={{ width: TXN_COLS.amount }}>
+      <span className={cx('flex shrink-0 flex-col items-end font-semibold tabular-nums', refund ? 'text-success-ink dark:text-success' : 'text-ink')} style={{ width: TXN_COLS.amount }}>
         {money(t.amount, t.currency)}
         {refund ? <span className="text-[11px] font-normal text-ink-3">refund</span> : null}
       </span>
@@ -365,7 +367,7 @@ function CardList({ cards, may, onImport, onEdit }: { cards: Card[]; may: boolea
               </span>
               <span className="shrink-0 text-right tabular-nums" style={{ width: CARD_COLS.unmatched }}>
                 {c.unmatched > 0 ? (
-                  <span className="font-semibold text-[#9A4A06] dark:text-warning">
+                  <span className="font-semibold text-warning-ink dark:text-warning">
                     {c.unmatched.toLocaleString()} · {money(c.unmatched_value, c.currency)}
                   </span>
                 ) : (
@@ -449,11 +451,11 @@ function ImportSheet({ orgId, card, onClose, onDone }: { orgId: number; card: Ca
       <span className="text-[12.5px] text-ink-3">{cardName(card.label, card.last4)}</span>
       {result ? (
         <>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <Figure n={result.imported} label="new" tone="green" />
-            <Figure n={result.duplicates} label="already on file" tone="grey" />
-            <Figure n={result.rejected} label="not readable" tone="amber" />
-          </div>
+          <StatGrid min={130} className="text-center">
+            <Figure icon="plus" n={result.imported} label="new" tone="green" />
+            <Figure icon="copy" n={result.duplicates} label="already on file" tone="grey" />
+            <Figure icon="file-warning" n={result.rejected} label="not readable" tone="amber" />
+          </StatGrid>
           <p className="m-0 text-[13px] text-ink-2">{result.message}</p>
           {result.problems.length ? (
             <Notice tone="amber">
@@ -509,19 +511,8 @@ function ImportSheet({ orgId, card, onClose, onDone }: { orgId: number; card: Ca
   );
 }
 
-function Figure({ n, label, tone }: { n: number; label: string; tone: 'green' | 'grey' | 'amber' }) {
-  const c =
-    tone === 'green'
-      ? 'bg-[#EFF8F2] text-[#145C39] dark:bg-success-bg dark:text-success'
-      : tone === 'amber'
-        ? 'bg-[#FFF8E6] text-[#7A3B05] dark:bg-warning-bg dark:text-warning'
-        : 'bg-subtle text-ink-2';
-  return (
-    <div className={cx('rounded-[10px] px-2 py-3', c)}>
-      <b className="block text-[22px] leading-tight tabular-nums">{n.toLocaleString()}</b>
-      <span className="text-[11.5px]">{label}</span>
-    </div>
-  );
+function Figure({ n, label, tone, icon }: { n: number; label: string; tone: 'green' | 'grey' | 'amber'; icon?: string }) {
+  return <StatCard size="sm" label={label} value={n.toLocaleString()} tone={tone === 'grey' ? 'neutral' : tone} icon={icon} />;
 }
 
 /** Add or edit a card. Only the last four digits: a full number is refused, not truncated. */

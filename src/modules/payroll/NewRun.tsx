@@ -100,7 +100,7 @@ export default function NewRun({ onClose, onCreated }: { onClose: () => void; on
           </div>
           <div role="radiogroup" aria-label="Run type" className="grid grid-cols-2 gap-2">
             {KINDS.map((k) => (
-              <label key={k.id} className={cx('flex cursor-pointer items-start gap-2.5 rounded-[9px] border px-3 py-2.5 text-[12.5px]', kind === k.id ? 'border-2 border-primary bg-[#F5F7FF] dark:bg-selection' : 'border-line')}>
+              <label key={k.id} className={cx('flex cursor-pointer items-start gap-2.5 rounded-[9px] border px-3 py-2.5 text-[12.5px]', kind === k.id ? 'border-2 border-primary bg-info-soft dark:bg-selection' : 'border-line')}>
                 <input type="radio" name="run-kind" checked={kind === k.id} onChange={() => setKind(k.id)} />
                 <span>
                   <b className="text-ink">{k.label}</b>

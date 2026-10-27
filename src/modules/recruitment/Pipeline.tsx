@@ -4,7 +4,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Avatar, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, input, PageHead } from '../hr/parts';
+import { btn, btnPrimary, input, PageHead } from '../../components/PageKit';
 import { EXIT_STATUSES, fetchJobs, fetchPipeline, isBackward, K, moveApplication, type Card, type Stage } from './api';
 
 /**
@@ -146,7 +146,7 @@ export function PipelineCard({ card, draggable, onDragStart, onDragEnd }: { card
 }
 
 function Flag({ tone, children }: { tone: 'amber' | 'red'; children: string }) {
-  return <span className={cx('inline-flex h-5 items-center rounded-full px-[7px] text-[11px] font-bold whitespace-nowrap', tone === 'red' ? 'bg-danger-bg text-danger' : 'bg-[#FEF3C7] text-[#92400E] dark:bg-warning-bg dark:text-warning')}>{children}</span>;
+  return <span className={cx('inline-flex h-5 items-center rounded-full px-[7px] text-[11px] font-bold whitespace-nowrap', tone === 'red' ? 'bg-danger-bg text-danger' : 'bg-yellow-bg text-orange-ink dark:bg-warning-bg dark:text-warning')}>{children}</span>;
 }
 
 /** The reason for a backward move, or the status and reason for taking a candidate out of the pipeline. */

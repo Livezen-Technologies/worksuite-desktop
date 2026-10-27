@@ -9,6 +9,7 @@ import { toast } from '../../../core/toasts';
 import { WEBSITE } from './api';
 import { Segmented, Tile, type SubTone, type Tone } from './live/LiveDashboard';
 import { clock } from './live/liveMap';
+import { StatGrid, type StatTone } from '../../../components/StatCard';
 
 /**
  * Insights (worksuite-desktop L-07; WS-WCHAT X-UI-13, UX-INS-01…03, closing RPT-04): how website chat is doing across
@@ -237,19 +238,20 @@ function Report({ d, all }: { d: Insights; all: boolean }) {
   const conv = conversationsChange(d.conversations.value, d.conversations.previous);
   const first = timeChange(d.first_response.value, d.first_response.previous, 's');
   const res = timeChange(d.resolution.value, d.resolution.previous, 'min');
-  const tiles: Array<{ label: string; value: string; sub?: string; tone: Tone; subTone: SubTone }> = [
-    { label: 'Conversations', value: count(d.conversations.value), sub: conv.sub, tone: 'plain', subTone: conv.tone },
-    { label: 'Avg first response', value: d.first_response.value === null ? '—' : clock(d.first_response.value), sub: first.sub, tone: 'plain', subTone: first.tone },
-    { label: 'Avg resolution', value: d.resolution.value === null ? '—' : minutes(d.resolution.value), sub: res.sub, tone: 'plain', subTone: res.tone },
-    { label: 'Avg rating', value: d.rating.value === null ? '—' : d.rating.value.toFixed(1), sub: text('from {n} rated', { n: count(d.rating.rated) }), tone: 'plain', subTone: 'plain' },
+  const tiles: Array<{ label: string; value: string; sub?: string; tone: Tone; subTone: SubTone; icon: string; accent?: StatTone }> = [
+    { label: 'Conversations', icon: 'messages', accent: 'blue', value: count(d.conversations.value), sub: conv.sub, tone: 'plain', subTone: conv.tone },
+    { label: 'Avg first response', icon: 'reply', accent: 'violet', value: d.first_response.value === null ? '—' : clock(d.first_response.value), sub: first.sub, tone: 'plain', subTone: first.tone },
+    { label: 'Avg resolution', icon: 'check-circle', accent: 'green', value: d.resolution.value === null ? '—' : minutes(d.resolution.value), sub: res.sub, tone: 'plain', subTone: res.tone },
+    { label: 'Avg rating', icon: 'star', accent: 'amber', value: d.rating.value === null ? '—' : d.rating.value.toFixed(1), sub: text('from {n} rated', { n: count(d.rating.rated) }), tone: 'plain', subTone: 'plain' },
     {
       label: 'Missed',
+      icon: 'phone-missed',
       value: count(d.missed.value),
       sub: d.missed.share === null ? undefined : text('{pct}% of chats', { pct: d.missed.share }),
       tone: d.missed.value ? 'red' : 'plain',
       subTone: d.missed.value ? 'bad' : 'plain',
     },
-    { label: 'Visitors', value: count(d.visitors.value), sub: d.visitors.returning_share === null ? undefined : text('{pct}% returning', { pct: d.visitors.returning_share }), tone: 'plain', subTone: 'plain' },
+    { label: 'Visitors', icon: 'users', accent: 'cyan', value: count(d.visitors.value), sub: d.visitors.returning_share === null ? undefined : text('{pct}% returning', { pct: d.visitors.returning_share }), tone: 'plain', subTone: 'plain' },
   ];
   return (
     <>
@@ -261,11 +263,11 @@ function Report({ d, all }: { d: Insights; all: boolean }) {
           <span className="text-ink-3">{text('Try a longer period or another widget.')}</span>
         </div>
       ) : null}
-      <div className="grid grid-cols-6 gap-2.5" role="list" aria-label={text('Figures')}>
+      <StatGrid min={170} role="list" label={text('Figures')}>
         {tiles.map((t) => (
           <Tile key={t.label} stack {...t} />
         ))}
-      </div>
+      </StatGrid>
       <div className="grid gap-3 [grid-template-columns:minmax(0,2fr)_minmax(0,1fr)]">
         <PerDay days={d.days} />
         <section aria-label={text('Traffic sources')} className="flex flex-col gap-[9px] rounded-[12px] border border-line bg-surface px-4 py-3.5 text-[12.5px]">
@@ -299,10 +301,10 @@ function PerDay({ days }: { days: Insights['days'] }) {
         <h2 className="flex-1 text-[14px] font-bold">{text('Conversations per day')}</h2>
         <span className="flex gap-3 text-[11.5px] text-ink-2" role="list" aria-label={text('Legend')}>
           <span role="listitem">
-            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#273498] align-[-1px] dark:bg-[#7c8fe8]" aria-hidden /> {text('Answered')}
+            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-primary align-[-1px] dark:bg-brand-soft" aria-hidden /> {text('Answered')}
           </span>
           <span role="listitem">
-            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#e8a33d] align-[-1px]" aria-hidden /> {text('Missed')}
+            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-amber align-[-1px]" aria-hidden /> {text('Missed')}
           </span>
         </span>
       </div>
@@ -311,8 +313,8 @@ function PerDay({ days }: { days: Insights['days'] }) {
           const said = text('{day}: {answered} answered, {missed} missed', { day: dayLabel(x.date), answered: x.answered, missed: x.missed });
           return (
             <li key={x.date} title={said} aria-label={said} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-[2px] hover:opacity-80">
-              {x.missed ? <span className="block rounded-t-[2px] bg-[#e8a33d]" style={{ height: `${(x.missed / top) * 100}%` }} /> : null}
-              {x.answered ? <span className={cx('block bg-[#273498] dark:bg-[#7c8fe8]', !x.missed && 'rounded-t-[2px]')} style={{ height: `${(x.answered / top) * 100}%` }} /> : null}
+              {x.missed ? <span className="block rounded-t-[2px] bg-amber" style={{ height: `${(x.missed / top) * 100}%` }} /> : null}
+              {x.answered ? <span className={cx('block bg-primary dark:bg-brand-soft', !x.missed && 'rounded-t-[2px]')} style={{ height: `${(x.answered / top) * 100}%` }} /> : null}
             </li>
           );
         })}
@@ -336,7 +338,7 @@ function Sources({ sources }: { sources: Insights['sources'] }) {
         <li key={s.name} className="flex items-center gap-2">
           <span className="w-[92px] truncate">{s.name}</span>
           <span className="h-1.5 flex-1 rounded-[3px] bg-subtle" aria-hidden>
-            <span className="block h-1.5 rounded-[3px] bg-[#4a63e8]" style={{ width: `${(s.share / top) * 100}%` }} />
+            <span className="block h-1.5 rounded-[3px] bg-blue" style={{ width: `${(s.share / top) * 100}%` }} />
           </span>
           <b className="w-[34px] text-right tabular-nums">{s.share}%</b>
         </li>
@@ -510,7 +512,7 @@ function Hours({ hours, zone }: { hours: number[][]; zone: string | null }) {
                   role="cell"
                   aria-label={said}
                   title={said}
-                  className={cx('block h-3.5 rounded-[2px]', n ? 'bg-[#273498] dark:bg-[#7c8fe8]' : 'bg-subtle')}
+                  className={cx('block h-3.5 rounded-[2px]', n ? 'bg-primary dark:bg-brand-soft' : 'bg-subtle')}
                   style={n ? { opacity: 0.2 + (0.8 * n) / top } : undefined}
                 />
               );
@@ -541,7 +543,7 @@ function StartPages({ pages }: { pages: NonNullable<Insights['start_pages']> }) 
             <li key={p.page} className="flex items-center gap-2" title={p.page}>
               <span className="min-w-0 flex-1 truncate">{p.page}</span>
               <span className="h-1.5 w-[64px] shrink-0 rounded-[3px] bg-subtle" aria-hidden>
-                <span className="block h-1.5 rounded-[3px] bg-[#4a63e8]" style={{ width: `${(p.share / top) * 100}%` }} />
+                <span className="block h-1.5 rounded-[3px] bg-blue" style={{ width: `${(p.share / top) * 100}%` }} />
               </span>
               <b className="w-[34px] text-right tabular-nums">{p.share}%</b>
             </li>

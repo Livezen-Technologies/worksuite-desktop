@@ -6,6 +6,7 @@ import { clip, paletteOf, TAG_MAX, TAG_PRESETS, type AccountTagPref, type Accoun
 import { AccountTag } from './parts';
 import { useAccountTags } from './useAccountTags';
 import type { Mailbox } from './types';
+import { SettingRow, SettingRowFrame, SettingsGroup } from '../../components/SettingsKit';
 
 const SHOW: Array<[AccountTagShow, string]> = [
   ['combined', 'Combined views'],
@@ -49,16 +50,18 @@ export function AccountTagSettings({ box }: { box: Mailbox }) {
   const renamed = !own.label && tag.label !== tag.auto;
 
   return (
-    <section aria-label={text('Account tag')} className="flex flex-col gap-3 border-t border-line pt-4">
-      <div className="flex items-center gap-2">
-        <h3 className="flex-1 text-[14px] font-bold text-ink">{text('Account tag')}</h3>
+    <SettingsGroup
+      title={text('Account tag')}
+      className="!mb-0"
+      actions={
         <span aria-label={text('Preview')} className="inline-flex items-center">
           <AccountTag tag={preview} mode={mode === 'off' ? 'name' : mode} />
         </span>
-      </div>
-      <label className="flex items-center gap-3">
-        <span className="w-[96px] shrink-0 text-ink-2">{text('Tag label')}</span>
+      }
+    >
+      <SettingRow label={text('Tag label')}>
         <input
+          aria-label={text('Tag label')}
           value={draft}
           maxLength={TAG_MAX}
           placeholder={tag.auto}
@@ -70,18 +73,19 @@ export function AccountTagSettings({ box }: { box: Mailbox }) {
               commit();
             }
           }}
-          className="h-8 min-w-0 flex-1 rounded-[7px] border border-line bg-surface px-2 text-ink outline-none focus:border-primary"
+          className="h-8 w-[200px] min-w-0 rounded-[7px] border border-line bg-surface px-2 text-ink outline-none focus:border-primary"
         />
-      </label>
+      </SettingRow>
       {tag.clash || renamed ? (
-        <p role="note" className="rounded-[8px] bg-warning-bg px-2.5 py-1.5 text-[12px] text-[#9A4A06] dark:text-warning">
+        <SettingRowFrame>
+        <p role="note" className="rounded-[8px] bg-warning-bg px-2.5 py-1.5 text-[12px] text-warning-ink">
           {tag.clash
             ? text('Another account also shows “{label}”. Rename one so you can tell them apart.', { label: tag.label })
             : text('Shown as “{label}”: another account has the same name. Rename one here.', { label: tag.label })}
         </p>
+        </SettingRowFrame>
       ) : null}
-      <div className="flex items-center gap-3">
-        <span className="w-[96px] shrink-0 text-ink-2">{text('Colour')}</span>
+      <SettingRow label={text('Colour')}>
         <div role="radiogroup" aria-label={text('Colour')} className="flex flex-wrap items-center gap-1.5">
           {TAG_PRESETS.map((p) => (
             <button
@@ -103,9 +107,8 @@ export function AccountTagSettings({ box }: { box: Mailbox }) {
             {text('Custom')}
           </label>
         </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="w-[96px] shrink-0 text-ink-2">{text('Show tag in')}</span>
+      </SettingRow>
+      <SettingRow label={text('Show tag in')}>
         <div role="radiogroup" aria-label={text('Show tag in')} className="flex rounded-[10px] bg-subtle p-0.5">
           {SHOW.map(([v, l]) => (
             <button key={v} type="button" role="radio" aria-checked={tag.show === v} onClick={() => save({ show: v === 'combined' ? undefined : v })} className={cx('h-7 rounded-[8px] px-2.5 text-[12.5px] font-semibold', tag.show === v ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink')}>
@@ -113,8 +116,8 @@ export function AccountTagSettings({ box }: { box: Mailbox }) {
             </button>
           ))}
         </div>
-      </div>
-      <div className="flex items-center gap-3">
+      </SettingRow>
+      <SettingRowFrame className="flex items-center gap-3">
         <span className="flex-1 text-[12px] text-ink-3">{mode === 'off' ? text('Account tags are off in Appearance & reading.') : text('Also beside the account in the sidebar, in From when you write, and above the message you read.')}</span>
         <Button
           size="sm"
@@ -126,7 +129,7 @@ export function AccountTagSettings({ box }: { box: Mailbox }) {
         >
           {text('Reset to default')}
         </Button>
-      </div>
-    </section>
+      </SettingRowFrame>
+    </SettingsGroup>
   );
 }

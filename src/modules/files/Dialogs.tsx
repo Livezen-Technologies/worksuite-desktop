@@ -468,7 +468,7 @@ export function SendToChatDialog({ item, discuss, onClose, onOpenChat }: { item:
         <div className="flex max-h-[220px] flex-col gap-0.5 overflow-y-auto scroll-thin">
           {list.map((r) => (
             <button key={`${r.kind}${r.id}`} type="button" onClick={() => (setTo(r), setNeeds(null))} className={cx('flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-left', to?.kind === r.kind && to.id === r.id ? 'bg-selection' : 'hover:bg-ground')}>
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#FDF0E1] text-[10.5px] font-bold text-[#9A4A06] dark:bg-warning-bg dark:text-warning">{r.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()}</span>
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-warning-bg text-[10.5px] font-bold text-warning-ink dark:bg-warning-bg dark:text-warning">{r.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()}</span>
               <b className="min-w-0 flex-1 truncate text-ink">{r.name}</b>
               <span className="shrink-0 text-[11.5px] text-ink-3">{r.sub}</span>
             </button>

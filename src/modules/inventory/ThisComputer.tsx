@@ -8,8 +8,8 @@ import { useStore } from '../../core/store';
 import { bytes, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { cx } from '../../components/ui';
-import { btn, btnSmall, PageHead, Panel } from '../hr/parts';
-import { Pill } from './parts';
+import { btn, btnSmall, PageHead, Panel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 
 /**
  * This computer, for Inventory (the dashboard's card, and the rail's Desktop section): the barcode scanner (heard
@@ -70,7 +70,7 @@ export function ComputerCard({ copy, onOpen }: { copy: { products: number; wareh
       {computerLines(c, copy).map((l) => (
         <div key={l.label} className="flex items-baseline justify-between gap-3">
           <span className="text-ink-2">{l.label}</span>
-          <span className={cx('truncate text-right', l.good ? 'font-semibold text-[#166534] dark:text-success' : 'text-ink')}>{l.value}</span>
+          <span className={cx('truncate text-right', l.good ? 'font-semibold text-success-ink dark:text-success' : 'text-ink')}>{l.value}</span>
         </div>
       ))}
     </Panel>

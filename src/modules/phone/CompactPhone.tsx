@@ -143,7 +143,7 @@ function Stage({ line }: { line: Line }) {
     { id: 'notes', label: 'Notes', on: pane === 'notes', onClick: () => setPane(pane === 'notes' ? 'none' : 'notes') },
   ];
   return (
-    <section aria-label="Call in progress" className="flex flex-col gap-3 rounded-[14px] bg-[#0b1220] p-3.5 text-white">
+    <section aria-label="Call in progress" className="flex flex-col gap-3 rounded-[14px] bg-stage p-3.5 text-white">
       <div className="flex items-center gap-3">
         <CallerBadge name={name ?? line.remote} size={40} />
         <div className="min-w-0 flex-1">
@@ -154,7 +154,7 @@ function Stage({ line }: { line: Line }) {
       </div>
       <div className="grid grid-cols-4 gap-1.5">
         {controls.map((c) => (
-          <button key={c.id} type="button" aria-pressed={c.on} disabled={!connected} onClick={c.onClick} className={cx('h-10 rounded-[9px] border text-[11.5px] font-semibold disabled:opacity-35', c.on ? 'border-[#2563eb] bg-[#1d3a8a]' : 'border-white/10 bg-white/5 hover:bg-white/10')}>
+          <button key={c.id} type="button" aria-pressed={c.on} disabled={!connected} onClick={c.onClick} className={cx('h-10 rounded-[9px] border text-[11.5px] font-semibold disabled:opacity-35', c.on ? 'border-brand bg-stage-primary' : 'border-white/10 bg-white/5 hover:bg-white/10')}>
             {c.label}
           </button>
         ))}
@@ -185,7 +185,7 @@ function Stage({ line }: { line: Line }) {
       {pane === 'notes' ? (
         <textarea value={line.note} onChange={(e) => void runPhone({ cmd: 'note', id: line.id, text: e.target.value })} rows={3} placeholder="Notes, saved to the call" aria-label="Call notes" className="rounded-[8px] border border-white/15 bg-white/5 p-2 text-[12.5px] text-white outline-none" />
       ) : null}
-      <button type="button" onClick={() => void act({ cmd: 'hangup', id: line.id })} className="h-10 rounded-full bg-[#D92D20] text-[13px] font-bold hover:opacity-90">
+      <button type="button" onClick={() => void act({ cmd: 'hangup', id: line.id })} className="h-10 rounded-full bg-orange text-[13px] font-bold hover:opacity-90">
         End call
       </button>
     </section>

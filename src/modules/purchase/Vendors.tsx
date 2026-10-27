@@ -8,15 +8,16 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, PageHead, Sheet, SidePanel } from '../../components/PageKit';
 import { can, cost, short, stampWords } from '../inventory/api';
 import { archiveVendor, checkDuplicates, fetchVendor, fetchVendorRecords, fetchVendors, KB, saveVendor, VENDOR_STATUSES, VENDOR_TYPES, vendorChanges, vendorForm, vendorTone, vendorType, type VendorDetail, type VendorForm } from './buying';
-import { minWidth, Pill } from '../inventory/parts';
+import { minWidth, Pill } from '../../components/ListKit';
 import { pick } from '../inventory/pickers';
 import { PoChip } from './Purchasing';
 import { Checkbox } from '../../components/Checkbox';
 import { refreshPurchase } from './api';
 import { Scorecard } from './Scorecard';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Vendors (InvVendors, InvVendorRecord, InvVendorForm): who the business
@@ -114,11 +115,11 @@ export default function Vendors({
                   type="button"
                   data-vendor={v.id}
                   onClick={() => onOpen(v.id)}
-                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === v.id && 'bg-[#F4F6FE] dark:bg-selection/40')}
+                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === v.id && 'bg-info-soft dark:bg-selection/40')}
                 >
                   <span className="flex min-w-0 flex-1 flex-col">
                     <b className="truncate text-ink">
-                      {v.is_favourite ? <span className="mr-1 text-[#E9A23B]">★</span> : null}
+                      {v.is_favourite ? <span className="mr-1 text-stage-amber">★</span> : null}
                       {v.name}
                       {v.lapsed_documents ? <span className="ml-1.5 text-[11px] font-semibold text-danger">{v.lapsed_documents} lapsed</span> : null}
                     </b>
@@ -192,14 +193,8 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
-  return (
-    <div className="flex flex-col rounded-[10px] border border-line px-3 py-2">
-      <span className="text-[11.5px] font-semibold text-ink-3">{label}</span>
-      <b className="text-[16px] text-ink tabular-nums">{value}</b>
-      {sub ? <span className="truncate text-[11px] text-ink-3">{sub}</span> : null}
-    </div>
-  );
+function Stat({ label, value, sub, icon, tone }: { label: string; value: ReactNode; sub?: string; icon?: string; tone?: StatTone }) {
+  return <StatCard size="sm" label={label} value={value} sub={sub} icon={icon} tone={tone} />;
 }
 
 function VendorPanel({
@@ -376,14 +371,14 @@ function Overview({ d, currency }: { d: VendorDetail; currency: string | null })
   const t = d.trade;
   return (
     <>
-      <div className="grid grid-cols-3 gap-2">
-        {t ? <Stat label="Orders placed" value={t.orders} sub={`${t.open_orders} still open`} /> : null}
-        {t ? <Stat label="Ordered value" value={short(t.ordered_value, currency)} sub={t.last_order ? `last ${dateLabel(t.last_order)}` : undefined} /> : null}
-        {t ? <Stat label="Received value" value={short(t.received_value, currency)} /> : null}
-        <Stat label="On-time delivery" value={p.on_time_pct !== null ? `${p.on_time_pct}%` : '—'} sub={p.rated_receipts ? `over ${p.rated_receipts} receipts` : 'no dated orders yet'} />
-        <Stat label="Average lead time" value={p.avg_lead_days !== null ? `${p.avg_lead_days}d` : '—'} sub={d.vendor.lead_time_days !== null ? `${d.vendor.lead_time_days} agreed` : undefined} />
-        <Stat label="Rejected on arrival" value={p.reject_pct !== null ? `${p.reject_pct}%` : '—'} sub={`${p.receipts} receipts`} />
-      </div>
+      <StatGrid min={150}>
+        {t ? <Stat icon="cart" tone="blue" label="Orders placed" value={t.orders} sub={`${t.open_orders} still open`} /> : null}
+        {t ? <Stat icon="coins" tone="violet" label="Ordered value" value={short(t.ordered_value, currency)} sub={t.last_order ? `last ${dateLabel(t.last_order)}` : undefined} /> : null}
+        {t ? <Stat icon="package-check" tone="green" label="Received value" value={short(t.received_value, currency)} /> : null}
+        <Stat icon="clock" tone="cyan" label="On-time delivery" value={p.on_time_pct !== null ? `${p.on_time_pct}%` : '—'} sub={p.rated_receipts ? `over ${p.rated_receipts} receipts` : 'no dated orders yet'} />
+        <Stat icon="timer" tone="neutral" label="Average lead time" value={p.avg_lead_days !== null ? `${p.avg_lead_days}d` : '—'} sub={d.vendor.lead_time_days !== null ? `${d.vendor.lead_time_days} agreed` : undefined} />
+        <Stat icon="package-x" tone="red" label="Rejected on arrival" value={p.reject_pct !== null ? `${p.reject_pct}%` : '—'} sub={`${p.receipts} receipts`} />
+      </StatGrid>
       {!t ? <span className="text-[12px] text-ink-3">You do not have permission to see this vendor's figures.</span> : null}
       <Scorecard vendorId={d.vendor.id} />
       {d.compliance.items.length ? (
@@ -556,7 +551,7 @@ function VendorFormSheet({ id, initial, canCost: fromServer, onClose, onSaved }:
         </div>
         {f.status !== initial.status && f.status !== 'active' ? text('status_reason', 'Why', { max: 400, hint: `Why is this vendor ${f.status}? This is recorded on the timeline.` }) : null}
         {dupes.length ? (
-          <span className="rounded-[10px] bg-[#FFF4E0] px-3 py-2 text-[12.5px] text-[#9A4A06] dark:bg-warning-bg dark:text-warning">
+          <span className="rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-ink dark:bg-warning-bg dark:text-warning">
             <b>This may already be on file</b> — {dupes.map((m) => `${m.name}${m.code ? ` · ${m.code}` : ''} (${m.reasons.join(', ')})`).join('; ')}. Two branches of one group are genuinely two vendors, so this does not stop you saving.
           </span>
         ) : null}

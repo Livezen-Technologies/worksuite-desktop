@@ -231,7 +231,7 @@ export function SearchPanel({ state, pageCount, advanced, inputRef, onQuery, onO
               </span>
               <span className="line-clamp-2 text-[12.5px] text-ink-2">
                 {h.before}
-                <mark className="rounded-[2px] bg-[#FFE066] px-0.5 text-ink dark:text-[#1B2233]">{h.match}</mark>
+                <mark className="rounded-[2px] bg-warning-soft px-0.5 text-ink dark:text-ink-4">{h.match}</mark>
                 {h.after}
               </span>
             </button>

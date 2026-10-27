@@ -9,6 +9,7 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Modal } from '../../components/ui';
+import { SectionHeader, SettingRow, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Settings › Sidebar: the person's own sidebar (core/sidebar-prefs) — what is pinned, what they removed from it (to
@@ -16,30 +17,20 @@ import { Button, Modal } from '../../components/ui';
  * app there, or drag it. Only apps the person may open are listed.
  */
 
-function Card({ title, hint, aside, children }: { title: string; hint?: string; aside?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="flex min-w-0 flex-col gap-3 rounded-[16px] border border-line bg-surface p-[18px]" aria-label={title}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <h3 className="text-[16px] font-bold text-ink">{title}</h3>
-          {hint ? <p className="text-[13px] text-ink-3">{hint}</p> : null}
-        </div>
-        {aside ? <span className="text-[12px] text-ink-3">{aside}</span> : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
+/** An app's row: its icon and name, and what can be done with it. */
 function Line({ a, children }: { a: AppDefinition; children: ReactNode }) {
   return (
-    <li className="flex items-center gap-3 border-t border-line pt-3 first:border-t-0 first:pt-0">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-subtle text-ink-2">
-        <Icon name={a.icon} size={17} />
-      </span>
-      <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">{appLabel(a)}</span>
+    <SettingRow
+      as="li"
+      label={appLabel(a)}
+      icon={
+        <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-subtle text-ink-2">
+          <Icon name={a.icon} size={17} />
+        </span>
+      }
+    >
       {children}
-    </li>
+    </SettingRow>
   );
 }
 
@@ -64,23 +55,27 @@ export function SidebarSettings() {
     });
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex max-w-[560px] flex-col gap-1">
-          <h2 className="text-[22px] font-bold text-ink">{t('sidebar.title')}</h2>
-          <p className="text-[13.5px] text-ink-3">{t('sidebar.hint')}</p>
-          <p className="text-[12.5px] text-ink-3" data-sidebar-source={source}>
-            {source === 'local' ? t('sidebar.local') : t('sidebar.synced')}
-          </p>
-        </div>
-        <Button icon="undo" onClick={() => setConfirm(true)}>
-          {t('sidebar.reset')}
-        </Button>
-      </div>
+    <div className="flex flex-col">
+      <SectionHeader
+        title={t('sidebar.title')}
+        hint={
+          <>
+            {t('sidebar.hint')}
+            <span className="mt-1 block text-[12.5px]" data-sidebar-source={source}>
+              {source === 'local' ? t('sidebar.local') : t('sidebar.synced')}
+            </span>
+          </>
+        }
+        actions={
+          <Button icon="undo" onClick={() => setConfirm(true)}>
+            {t('sidebar.reset')}
+          </Button>
+        }
+      />
 
-      <Card title={t('nav.pinned')} hint={t('sidebar.pinnedHint')} aside={pinned.length ? String(pinned.length) : undefined}>
+      <SettingsGroup title={t('nav.pinned')} description={t('sidebar.pinnedHint')} actions={pinned.length ? <span className="text-[12px] text-ink-3">{pinned.length}</span> : undefined} list={pinned.length ? t('nav.pinned') : undefined}>
         {pinned.length ? (
-          <ul className="flex flex-col gap-3" aria-label={t('nav.pinned')}>
+          <>
             {pinned.map((a) => (
               <Line key={a.id} a={a}>
                 <Button size="sm" icon="pin-off" onClick={() => void pinSidebarItem(a.id, false)}>
@@ -88,15 +83,15 @@ export function SidebarSettings() {
                 </Button>
               </Line>
             ))}
-          </ul>
+          </>
         ) : (
-          <p className="text-[13px] text-ink-3">{t('sidebar.nonePinned')}</p>
+          <p className="px-[18px] py-3.5 text-[13px] text-ink-3">{t('sidebar.nonePinned')}</p>
         )}
-      </Card>
+      </SettingsGroup>
 
-      <Card title={t('sidebar.hidden')} hint={t('sidebar.hiddenHint')} aside={hidden.length ? String(hidden.length) : undefined}>
+      <SettingsGroup title={t('sidebar.hidden')} description={t('sidebar.hiddenHint')} actions={hidden.length ? <span className="text-[12px] text-ink-3">{hidden.length}</span> : undefined} list={hidden.length ? t('sidebar.hidden') : undefined}>
         {hidden.length ? (
-          <ul className="flex flex-col gap-3" aria-label={t('sidebar.hidden')}>
+          <>
             {hidden.map((a) => (
               <Line key={a.id} a={a}>
                 <Button size="sm" icon="eye" onClick={() => restore(a)}>
@@ -104,11 +99,11 @@ export function SidebarSettings() {
                 </Button>
               </Line>
             ))}
-          </ul>
+          </>
         ) : (
-          <p className="text-[13px] text-ink-3">{t('sidebar.noneHidden')}</p>
+          <p className="px-[18px] py-3.5 text-[13px] text-ink-3">{t('sidebar.noneHidden')}</p>
         )}
-      </Card>
+      </SettingsGroup>
 
       {confirm ? (
         <Modal

@@ -122,7 +122,7 @@ export default function Scan({ org, active }: { org: number; can: Can; active: b
             </button>
           ))}
         </div>
-        <div className="rounded-[12px] border-2 border-dashed border-[#9FB0F0] bg-[#F5F7FF] p-6 text-center dark:bg-primary/5">
+        <div className="rounded-[12px] border-2 border-dashed border-indigo-bright bg-info-soft p-6 text-center dark:bg-primary/5">
           <div className="text-[17px] font-semibold text-ink">{mode === 'issue' || mode === 'loan' ? "Scan an asset, then the person's ID card" : 'Scan an asset'}</div>
           <div className="mt-1 text-[12px] text-ink-3">USB scanner or a code typed here and Enter</div>
           <input
@@ -195,7 +195,7 @@ export default function Scan({ org, active }: { org: number; can: Can; active: b
           <span className="text-[11px] text-ink-3">{`${log.length} scans`}</span>
         </div>
         {log.map((l, i) => (
-          <div key={i} className={cx('flex items-center gap-2 border-t border-line/70 px-3.5 py-2 text-[12px]', l.kind === 'refused' && 'bg-[#FEF2F2] dark:bg-danger/10')}>
+          <div key={i} className={cx('flex items-center gap-2 border-t border-line/70 px-3.5 py-2 text-[12px]', l.kind === 'refused' && 'bg-ground dark:bg-danger/10')}>
             <Badge status={l.kind === 'checked_out' ? 'issued' : l.kind}>{{ issued: 'Issued', returned: 'Returned', looked: 'Looked up', refused: 'Refused', checked_out: 'Lent' }[l.kind]}</Badge>
             <span className="min-w-0 flex-1">{l.text}</span>
             <span className="text-[11px] text-ink-3">{l.at}</span>

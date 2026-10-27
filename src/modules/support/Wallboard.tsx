@@ -11,6 +11,7 @@ import { Button, Modal, Spinner, cx } from '../../components/ui';
 import { K, agents as agentsOf, meta as metaOf, views as viewsOf } from './api';
 import { useRealtimeLive } from './live';
 import { shortSpan } from './parts';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /**
  * The support wallboard on a second display (WS-SUPPORT-SRS-001 D-12; FR-RPT-01/02/03/06, FR-SLA-05/07, FR-ASN-06,
@@ -84,7 +85,7 @@ export function mayReadReports(meta: Meta | undefined): boolean {
   return !!meta && (meta.can?.reports === true || (meta.organizations ?? []).some((o) => o.can?.reports === true));
 }
 
-const PRESENCE_DOT: Record<string, string> = { available: 'bg-[#22C55E]', busy: 'bg-[#F59E0B]', dnd: 'bg-[#EF4444]', away: 'bg-[#A3A3A3]', offline: 'bg-[#525252]' };
+const PRESENCE_DOT: Record<string, string> = { available: 'bg-green-bright', busy: 'bg-amber', dnd: 'bg-red', away: 'bg-muted', offline: 'bg-slate' };
 const PRESENCE_WORD: Record<string, string> = { available: 'Online', busy: 'Busy', dnd: 'Do not disturb', away: 'Away', offline: 'Offline' };
 const TARGETS: SlaTarget[] = ['first_response', 'resolution'];
 
@@ -128,18 +129,18 @@ export function SupportWallWindow() {
   const scope = (metaQ.data?.organizations ?? []).map((o) => o.name);
   const err = dash.error;
   return (
-    <main aria-label={text('Support wallboard')} className="flex h-full flex-col gap-4 overflow-hidden bg-[#070B16] p-6 text-[#F8FAFC] select-none">
+    <main aria-label={text('Support wallboard')} className="flex h-full flex-col gap-4 overflow-hidden bg-stage p-6 text-stage-ink select-none">
       <header className="flex items-center gap-4">
         <h1 className="text-[22px] font-extrabold">{text('Support wallboard')}</h1>
-        <span className="text-[15px] text-[#CBD5E1]">{scope.length === 1 ? scope[0] : scope.length ? text('{n} organizations', { n: scope.length }) : null}</span>
-        <span className={cx('ml-auto flex items-center gap-2 text-[14px] font-semibold', live ? 'text-[#4ADE80]' : 'text-[#FBBF24]')}>
-          <span className={cx('h-2.5 w-2.5 rounded-full', live ? 'bg-[#22C55E]' : 'bg-[#F59E0B]')} />
+        <span className="text-[15px] text-stage-gray-ink">{scope.length === 1 ? scope[0] : scope.length ? text('{n} organizations', { n: scope.length }) : null}</span>
+        <span className={cx('ml-auto flex items-center gap-2 text-[14px] font-semibold', live ? 'text-stage-green-bright' : 'text-stage-amber')}>
+          <span className={cx('h-2.5 w-2.5 rounded-full', live ? 'bg-green-bright' : 'bg-amber')} />
           {live ? text('Live') : text('Every 60 s')}
         </span>
         <span className="font-mono text-[22px] font-bold tabular-nums" aria-label={text('Time')}>
           {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </span>
-        <button type="button" onClick={() => void call('windows:close').catch(() => undefined)} className="rounded-[8px] border border-[#334155] px-3 py-1.5 text-[13px] font-semibold text-[#E2E8F0] hover:bg-[#1E293B]">
+        <button type="button" onClick={() => void call('windows:close').catch(() => undefined)} className="rounded-[8px] border border-stage-4 px-3 py-1.5 text-[13px] font-semibold text-stage-ink hover:bg-stage-line-soft">
           {text('Exit (Esc)')}
         </button>
       </header>
@@ -150,7 +151,7 @@ export function SupportWallWindow() {
       ) : err ? (
         <Notice title={text('The dashboard could not be read')} body={err instanceof Error ? err.message : String(err)} />
       ) : !dash.data ? (
-        <Spinner className="flex-1 text-[#CBD5E1]" />
+        <Spinner className="flex-1 text-stage-gray-ink" />
       ) : (
         <Board d={dash.data} views={viewsQ.data?.views ?? []} people={people.data ?? new Map()} now={now.getTime()} />
       )}
@@ -160,28 +161,22 @@ export function SupportWallWindow() {
 
 function Notice({ title, body }: { title: string; body: string }) {
   return (
-    <div role="alert" className="m-auto max-w-[640px] rounded-[16px] border border-[#334155] bg-[#0F172A] p-8 text-center">
+    <div role="alert" className="m-auto max-w-[640px] rounded-[16px] border border-stage-4 bg-stage p-8 text-center">
       <p className="text-[24px] font-bold">{title}</p>
-      <p className="mt-2 text-[16px] text-[#CBD5E1]">{body}</p>
+      <p className="mt-2 text-[16px] text-stage-gray-ink">{body}</p>
     </div>
   );
 }
 
-function Kpi({ label, value, hint, tone = 'plain' }: { label: string; value: string | number; hint?: string; tone?: 'plain' | 'red' | 'amber' | 'green' }) {
-  const colour = tone === 'red' ? 'text-[#F87171]' : tone === 'amber' ? 'text-[#FBBF24]' : tone === 'green' ? 'text-[#4ADE80]' : 'text-[#F8FAFC]';
-  return (
-    <div role="group" aria-label={label} className="rounded-[14px] border border-[#1E293B] bg-[#0F172A] px-4 py-3">
-      <p className="text-[13px] font-bold tracking-[.6px] text-[#94A3B8] uppercase">{label}</p>
-      <p className={cx('text-[44px] leading-tight font-extrabold tabular-nums', colour)}>{value}</p>
-      {hint ? <p className="text-[13px] text-[#94A3B8]">{hint}</p> : null}
-    </div>
-  );
+/** A wallboard figure: the shared StatCard at wallboard size, drawn in the dark theme whatever the app's is. */
+function Kpi({ label, value, hint, tone = 'plain', icon }: { label: string; value: string | number; hint?: string; tone?: 'plain' | 'red' | 'amber' | 'green' | StatTone; icon?: string }) {
+  return <StatCard size="lg" label={label} value={value} sub={hint} icon={icon} tone={tone === 'plain' ? 'neutral' : tone} />;
 }
 
 function Panel({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <section aria-label={title} className={cx('flex min-h-0 flex-col rounded-[14px] border border-[#1E293B] bg-[#0F172A] p-4', className)}>
-      <h2 className="mb-2 text-[14px] font-bold tracking-[.6px] text-[#94A3B8] uppercase">{title}</h2>
+    <section aria-label={title} className={cx('flex min-h-0 flex-col rounded-[14px] border border-stage-line-soft bg-stage p-4', className)}>
+      <h2 className="mb-2 text-[14px] font-bold tracking-[.6px] text-ink-4 uppercase">{title}</h2>
       {children}
     </section>
   );
@@ -196,15 +191,15 @@ function Board({ d, views, people, now }: { d: Dashboard; views: ViewCount[]; pe
   const priorities = (['urgent', 'high', 'normal', 'low'] as const).filter((p) => d.sla_by_priority?.[p]);
   return (
     <>
-      <div className="grid grid-cols-8 gap-3">
-        <Kpi label={text('Open')} value={d.now.open} />
-        <Kpi label={text('Unassigned')} value={d.now.unassigned} tone={d.now.unassigned ? 'amber' : 'plain'} />
-        <Kpi label={text('Overdue')} value={d.now.overdue} tone={d.now.overdue ? 'red' : 'plain'} />
-        <Kpi label={text('Due today')} value={d.now.due_today} />
-        <Kpi label={text('Escalated')} value={d.now.escalated} tone={d.now.escalated ? 'red' : 'plain'} />
-        <Kpi label={text('First response')} value={minutesLabel(f.frt_median)} hint={text('median today')} />
-        <Kpi label={text('SLA today')} value={sla === null ? '—' : `${sla}%`} tone={sla === null ? 'plain' : sla >= 95 ? 'green' : sla >= 85 ? 'amber' : 'red'} />
-        <Kpi label={text('Resolved today')} value={f.resolved} hint={f.csat !== null ? text('CSAT {n}%', { n: f.csat }) : undefined} />
+      <div data-theme="dark" className="grid grid-cols-8 gap-3">
+        <Kpi icon="ticket" tone="blue" label={text('Open')} value={d.now.open} />
+        <Kpi icon="user-x" label={text('Unassigned')} value={d.now.unassigned} tone={d.now.unassigned ? 'amber' : 'plain'} />
+        <Kpi icon="alert" label={text('Overdue')} value={d.now.overdue} tone={d.now.overdue ? 'red' : 'plain'} />
+        <Kpi icon="calendar-clock" tone="violet" label={text('Due today')} value={d.now.due_today} />
+        <Kpi icon="siren" label={text('Escalated')} value={d.now.escalated} tone={d.now.escalated ? 'red' : 'plain'} />
+        <Kpi icon="reply" tone="cyan" label={text('First response')} value={minutesLabel(f.frt_median)} hint={text('median today')} />
+        <Kpi icon="gauge" label={text('SLA today')} value={sla === null ? '—' : `${sla}%`} tone={sla === null ? 'plain' : sla >= 95 ? 'green' : sla >= 85 ? 'amber' : 'red'} />
+        <Kpi icon="check-circle" tone="green" label={text('Resolved today')} value={f.resolved} hint={f.csat !== null ? text('CSAT {n}%', { n: f.csat }) : undefined} />
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[1fr_1.4fr_1.4fr] gap-3">
         <div className="flex min-h-0 flex-col gap-3">
@@ -213,7 +208,7 @@ function Board({ d, views, people, now }: { d: Dashboard; views: ViewCount[]; pe
               {queues.map((v) => (
                 <li key={v.key} className="flex items-center justify-between">
                   <span>{text(v.label)}</span>
-                  <b className={cx('tabular-nums', v.key === 'overdue' && v.count ? 'text-[#F87171]' : v.key === 'unassigned' && v.count ? 'text-[#FBBF24]' : '')}>{v.count}</b>
+                  <b className={cx('tabular-nums', v.key === 'overdue' && v.count ? 'text-stage-red' : v.key === 'unassigned' && v.count ? 'text-stage-amber' : '')}>{v.count}</b>
                 </li>
               ))}
             </ul>
@@ -228,10 +223,10 @@ function Board({ d, views, people, now }: { d: Dashboard; views: ViewCount[]; pe
                     if (!o) return null;
                     const pct = o.compliance ?? 0;
                     return (
-                      <div key={t} className="flex items-center gap-2 text-[13px] text-[#CBD5E1]">
+                      <div key={t} className="flex items-center gap-2 text-[13px] text-stage-gray-ink">
                         <span className="w-[110px] shrink-0">{text(SLA_TARGET_LABEL[t])}</span>
-                        <span className="h-3 flex-1 overflow-hidden rounded-full bg-[#1E293B]" role="meter" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${PRIORITY_LABEL[p]} ${SLA_TARGET_LABEL[t]}`}>
-                          <span className={cx('block h-full', pct >= 95 ? 'bg-[#22C55E]' : pct >= 85 ? 'bg-[#F59E0B]' : 'bg-[#EF4444]')} style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
+                        <span className="h-3 flex-1 overflow-hidden rounded-full bg-stage-line-soft" role="meter" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${PRIORITY_LABEL[p]} ${SLA_TARGET_LABEL[t]}`}>
+                          <span className={cx('block h-full', pct >= 95 ? 'bg-green-bright' : pct >= 85 ? 'bg-amber' : 'bg-red')} style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
                         </span>
                         <span className="w-[48px] text-right tabular-nums">{o.compliance === null ? '—' : `${o.compliance}%`}</span>
                       </div>
@@ -239,7 +234,7 @@ function Board({ d, views, people, now }: { d: Dashboard; views: ViewCount[]; pe
                   })}
                 </li>
               ))}
-              {!priorities.length ? <li className="text-[14px] text-[#94A3B8]">{text('No SLA targets met or missed today.')}</li> : null}
+              {!priorities.length ? <li className="text-[14px] text-ink-4">{text('No SLA targets met or missed today.')}</li> : null}
             </ul>
           </Panel>
         </div>
@@ -253,22 +248,22 @@ function Board({ d, views, people, now }: { d: Dashboard; views: ViewCount[]; pe
                   <span className={cx('h-3 w-3 shrink-0 rounded-full', PRESENCE_DOT[p] ?? PRESENCE_DOT.offline)} role="img" aria-label={text(PRESENCE_WORD[p] ?? p)} title={text(PRESENCE_WORD[p] ?? p)} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[17px] font-semibold">{a.name}</span>
-                    <span className="block text-[13px] text-[#94A3B8]">
+                    <span className="block text-[13px] text-ink-4">
                       {[text(PRESENCE_WORD[p] ?? p), a.at_risk ? text('{n} at risk', { n: a.at_risk }) : null, a.overdue ? text('{n} overdue', { n: a.overdue }) : null, text('{n} resolved', { n: a.resolved })].filter(Boolean).join(' · ')}
                     </span>
                   </span>
                   <span className="w-[120px] shrink-0">
                     <span className="block text-right text-[17px] font-bold tabular-nums">{a.capacity ? `${a.open} / ${a.capacity}` : a.open}</span>
                     {load !== null ? (
-                      <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-[#1E293B]">
-                        <span className={cx('block h-full', load >= 100 ? 'bg-[#EF4444]' : load >= 80 ? 'bg-[#F59E0B]' : 'bg-[#3B82F6]')} style={{ width: `${load}%` }} />
+                      <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-stage-line-soft">
+                        <span className={cx('block h-full', load >= 100 ? 'bg-red' : load >= 80 ? 'bg-amber' : 'bg-blue')} style={{ width: `${load}%` }} />
                       </span>
                     ) : null}
                   </span>
                 </li>
               );
             })}
-            {!d.agents.length ? <li className="text-[14px] text-[#94A3B8]">{text('Nobody has open tickets.')}</li> : null}
+            {!d.agents.length ? <li className="text-[14px] text-ink-4">{text('Nobody has open tickets.')}</li> : null}
           </ul>
         </Panel>
         <Panel title={text('Needs attention')}>
@@ -277,21 +272,21 @@ function Board({ d, views, people, now }: { d: Dashboard; views: ViewCount[]; pe
               const tone = breachTone(t.due, now);
               const left = t.due ? parseTs(t.due).getTime() - now : null;
               return (
-                <li key={t.id} className="flex items-center gap-3 border-b border-[#1E293B] pb-2 last:border-b-0">
+                <li key={t.id} className="flex items-center gap-3 border-b border-primary pb-2 last:border-b-0">
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] text-[#94A3B8]">
+                    <span className="block text-[13px] text-ink-4">
                       <span className="font-mono">{t.reference}</span> · {t.assignee ?? text('Unassigned')} · {text(statusLabel(t.status))}
                     </span>
                     <span className="block truncate text-[17px] font-semibold">{t.subject}</span>
                   </span>
-                  {t.priority === 'urgent' || t.priority === 'high' ? <span className={cx('shrink-0 rounded-[6px] px-2 py-0.5 text-[12px] font-bold', t.priority === 'urgent' ? 'bg-[#DC2626] text-white' : 'bg-[#7C2D12] text-[#FDBA74]')}>{text(PRIORITY_LABEL[t.priority])}</span> : null}
-                  <span className={cx('w-[96px] shrink-0 text-right font-mono text-[20px] font-bold tabular-nums', tone === 'red' ? 'text-[#F87171]' : tone === 'amber' ? 'text-[#FBBF24]' : 'text-[#E2E8F0]')}>
+                  {t.priority === 'urgent' || t.priority === 'high' ? <span className={cx('shrink-0 rounded-[6px] px-2 py-0.5 text-[12px] font-bold', t.priority === 'urgent' ? 'bg-stage-red text-white' : 'bg-stage-gray-2 text-stage-danger')}>{text(PRIORITY_LABEL[t.priority])}</span> : null}
+                  <span className={cx('w-[96px] shrink-0 text-right font-mono text-[20px] font-bold tabular-nums', tone === 'red' ? 'text-stage-red' : tone === 'amber' ? 'text-stage-amber' : 'text-stage-ink')}>
                     {left === null || !Number.isFinite(left) ? (t.sla_state === 'breached' ? text('Breached') : '—') : left < 0 ? `−${shortSpan(left)}` : shortSpan(left)}
                   </span>
                 </li>
               );
             })}
-            {!d.attention.length ? <li className="text-[16px] text-[#4ADE80]">{text('Nothing at risk.')}</li> : null}
+            {!d.attention.length ? <li className="text-[16px] text-stage-green-bright">{text('Nothing at risk.')}</li> : null}
           </ul>
         </Panel>
       </div>

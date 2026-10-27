@@ -5,7 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { addDays, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
-import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Sheet } from '../../components/PageKit';
 import type { FollowUpOptions, Owner } from './api';
 import { isMissing, normaliseSearch, type RecordRef } from './logic';
 import { useCrmScope } from './scope';

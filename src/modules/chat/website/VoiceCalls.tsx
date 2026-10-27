@@ -7,12 +7,13 @@ import { dayKey, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Select } from '../../../components/Select';
 import { Avatar, Button, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
-import { useNow } from '../../calls/parts';
+import { useNow } from '../../../components/CallKit';
 import { WEBSITE } from './api';
 import { CallbackBoard, dial } from './Callbacks';
 import { Segmented, Tile } from './live/LiveDashboard';
 import { clock } from './Ringing';
 import { FilterPill, PANEL_HEADING, ROW_PICKED, TABLE_FRAME, TABLE_HEAD, Tag, useMe, whenLabel } from './rowParts';
+import { StatGrid } from '../../../components/StatCard';
 
 /**
  * Voice calls (V-01, X-UI-08; UX-CALL-01/02): the website widget's calls in one place — the calls on now in a green
@@ -281,14 +282,14 @@ export function VoiceCalls({ show = 'calls', selected, onSelect, onOpenChat, onC
         <>
           {d.live.map((c) => <LiveBanner key={c.id} c={c} onOpen={() => onOpenChat(c.conversation_id)} />)}
           {s ? (
-            <div className="grid grid-cols-6 gap-2.5" role="list" aria-label={text('Calls in this period')}>
-              <Tile label="Calls" value={String(s.requested)} tone="plain" action="show all calls" onClick={() => filter('all')} />
-              <Tile label="Answered" value={String(s.answered)} tone="green" action="show answered calls" onClick={() => filter('answered')} />
-              <Tile label="Missed" value={String(s.missed)} tone={s.missed ? 'red' : 'plain'} action="show missed calls" onClick={() => filter('missed')} />
-              <Tile label="Avg wait" value={span(s.avg_wait)} tone="plain" />
-              <Tile label="Avg length" value={span(s.avg_duration)} tone="plain" />
-              <Tile label="Call-backs open" value={String(cbOpen)} tone={cbOpen ? 'amber' : 'plain'} action="open call-backs" onClick={onCallbacks} />
-            </div>
+            <StatGrid min={170} role="list" label={text('Calls in this period')}>
+              <Tile icon="phone" accent="blue" label="Calls" value={String(s.requested)} tone="plain" action="show all calls" onClick={() => filter('all')} />
+              <Tile icon="phone-incoming" label="Answered" value={String(s.answered)} tone="green" action="show answered calls" onClick={() => filter('answered')} />
+              <Tile icon="phone-missed" label="Missed" value={String(s.missed)} tone={s.missed ? 'red' : 'plain'} action="show missed calls" onClick={() => filter('missed')} />
+              <Tile icon="hourglass" accent="violet" label="Avg wait" value={span(s.avg_wait)} tone="plain" />
+              <Tile icon="timer" accent="cyan" label="Avg length" value={span(s.avg_duration)} tone="plain" />
+              <Tile icon="phone-outgoing" label="Call-backs open" value={String(cbOpen)} tone={cbOpen ? 'amber' : 'plain'} action="open call-backs" onClick={onCallbacks} />
+            </StatGrid>
           ) : null}
           <div className="flex min-h-[360px] flex-1 gap-3">
             <div className={cx(TABLE_FRAME, 'flex min-w-0 flex-1 flex-col')}>
@@ -368,12 +369,12 @@ function LiveBanner({ c, onOpen }: { c: LiveVoiceCall; onOpen: () => void }) {
   return (
     <div role="status" className="flex items-center gap-3 rounded-[12px] border border-success/30 bg-success-bg px-3.5 py-2.5">
       <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full bg-success shadow-[0_0_0_4px_rgb(47_158_103/0.2)]" />
-      <div className="min-w-0 flex-1 truncate text-[13px] text-[#14502e] dark:text-success">
+      <div className="min-w-0 flex-1 truncate text-[13px] text-success-ink dark:text-success">
         <b>{lead}</b> {people.length ? text('{visitor} with {people}', { visitor: who, people: people.join(' & ') }) : who}
         {' · '}<span className="font-mono tabular-nums">{time}</span>
         {' · '}{c.recorded ? text('recorded') : text('not recorded')}
       </div>
-      <button type="button" onClick={onOpen} className="h-[30px] shrink-0 rounded-[15px] border border-success/30 bg-surface px-3 text-[12.5px] font-semibold text-[#14502e] hover:bg-subtle dark:text-success">
+      <button type="button" onClick={onOpen} className="h-[30px] shrink-0 rounded-[15px] border border-success/30 bg-surface px-3 text-[12.5px] font-semibold text-success-ink hover:bg-subtle dark:text-success">
         {text('Open call')}
       </button>
     </div>
@@ -460,7 +461,7 @@ function CallDetails({ id, onOpenChat }: { id: number; onOpenChat: (conversation
         )}
         <h3 className={cx(PANEL_HEADING, 'mt-1')}>{text('Call notes · staff only')}</h3>
         {c.notes ? (
-          <div className="rounded-[10px] border border-dashed border-[#d9a441] bg-warning-bg px-3 py-2.5 text-[12.5px] whitespace-pre-wrap text-[#6b4a10] select-text dark:text-warning">{c.notes}</div>
+          <div className="rounded-[10px] border border-dashed border-amber bg-warning-bg px-3 py-2.5 text-[12.5px] whitespace-pre-wrap text-warning-strong select-text dark:text-warning">{c.notes}</div>
         ) : !noting ? (
           <div className="text-[12.5px] text-ink-3">{text('No notes yet.')}</div>
         ) : null}

@@ -14,6 +14,7 @@ import { StatusMenu } from '../StatusMenu';
 import { liveLines } from '../softphone/engine';
 import { runPhone, usePhaseLabel, usePhoneState } from '../softphone/client';
 import InCall from './InCall';
+import { StatGrid } from '../../../components/StatCard';
 
 /**
  * W01 · Phone — dial pad & recents (VOIP-SP-04/05/09, VOIP-HIS-01). The number field matches people as it is typed
@@ -301,12 +302,12 @@ function MyDay() {
   const unheard = (vm.data?.recordings ?? []).filter((r) => !r.listened && (!ext || r.extension === ext)).length;
   return (
     <Panel title="My day">
-      <div className="grid grid-cols-2 gap-2">
-        <Kpi label="Calls" value={h.isLoading ? '…' : mine.length} />
-        <Kpi label="Missed" value={h.isLoading ? '…' : missed} tone={missed ? 'danger' : undefined} />
-        <Kpi label="Talk time" value={h.isLoading ? '…' : talkTime(talk)} />
-        <Kpi label="New voicemail" value={vm.isLoading ? '…' : unheard} tone={unheard ? 'primary' : undefined} />
-      </div>
+      <StatGrid min={140}>
+        <Kpi icon="phone" tone="blue" label="Calls" value={h.isLoading ? '…' : mine.length} />
+        <Kpi icon="phone-missed" label="Missed" value={h.isLoading ? '…' : missed} tone={missed ? 'danger' : undefined} />
+        <Kpi icon="clock" tone="violet" label="Talk time" value={h.isLoading ? '…' : talkTime(talk)} />
+        <Kpi icon="voicemail" label="New voicemail" value={vm.isLoading ? '…' : unheard} tone={unheard ? 'primary' : undefined} />
+      </StatGrid>
     </Panel>
   );
 }

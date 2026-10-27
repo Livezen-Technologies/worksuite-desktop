@@ -9,7 +9,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Sheet } from '../../components/PageKit';
 import type { FollowUp, FollowUpList, FollowUpOptions } from './api';
 import { Chips, crmCan } from './parts';
 import { exportCrmCsv } from './exportCsv';
@@ -114,10 +114,10 @@ function when(local: string): string {
 }
 
 const STANDING: Record<FollowUp['standing'], string> = {
-  overdue: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
-  due: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
+  overdue: 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger',
+  due: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
   upcoming: 'bg-selection text-primary',
-  completed: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
+  completed: 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success',
   cancelled: 'bg-subtle text-ink-2',
 };
 
@@ -137,7 +137,7 @@ function Card({ f, canComplete, canEdit, onOpen, onClose, onMove, onCallOff }: {
         : [whatFor(f) || f.notes, f.company && f.company !== name ? f.company : null, f.assignee, f.priority && f.priority !== 'normal' ? f.priority[0]!.toUpperCase() + f.priority.slice(1) : null].filter(Boolean).join(' · ');
   return (
     <div data-followup={f.id} className={cx('flex items-center gap-3 rounded-[10px] border bg-surface px-3.5 py-2.5', late && open ? 'border-danger/50' : 'border-line')}>
-      <span aria-hidden className={cx('flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[8px]', late && open ? 'bg-[#FCE9E4] text-[#B42318] dark:bg-danger-bg dark:text-danger' : 'bg-selection text-primary')}>
+      <span aria-hidden className={cx('flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[8px]', late && open ? 'bg-danger-bg text-danger dark:bg-danger-bg dark:text-danger' : 'bg-selection text-primary')}>
         <Icon name={KIND_ICON[f.kind] ?? 'phone'} size={16} />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-[2px]">

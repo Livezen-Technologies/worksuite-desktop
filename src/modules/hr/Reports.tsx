@@ -9,9 +9,10 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { attendanceTime } from './attendance';
 import { STATE_LABEL, type AttendanceReport, type RosterResponse } from './api';
 import { dayShort, minutesLabel, ymd } from './dates';
-import { btn, Cell, Empty, input, Kpi, PageHead, Panel, row, StatusChip, THead } from './parts';
+import { btn, Cell, Empty, input, Kpi, PageHead, Panel, row, StatusChip, THead } from '../../components/PageKit';
 import { can } from './Rail';
 import { Select } from '../../components/Select';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Reports (HrReports; the web's AttendanceReports): attendance over a period
@@ -102,15 +103,15 @@ export default function Reports() {
       </div>
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {t ? (
-        <div className="grid grid-cols-7 gap-2">
-          <Kpi label="Days" value={t.work_days} />
-          <Kpi label="Present" value={t.present} tone="green" />
-          <Kpi label="Absent" value={t.absent} tone={t.absent ? 'red' : undefined} />
-          <Kpi label="Leave" value={t.leave} />
-          <Kpi label="Late" value={t.late} tone={t.late ? 'amber' : undefined} />
-          <Kpi label="Early" value={t.early} />
-          <Kpi label="No check-out" value={t.missing_check_outs} tone={t.missing_check_outs ? 'red' : undefined} />
-        </div>
+        <StatGrid min={160}>
+          <Kpi icon="calendar" tone="blue" label="Days" value={t.work_days} />
+          <Kpi icon="user-check" label="Present" value={t.present} tone="green" />
+          <Kpi icon="user-x" label="Absent" value={t.absent} tone={t.absent ? 'red' : undefined} />
+          <Kpi icon="plane" tone="violet" label="Leave" value={t.leave} />
+          <Kpi icon="snooze" label="Late" value={t.late} tone={t.late ? 'amber' : undefined} />
+          <Kpi icon="logout" tone="cyan" label="Early" value={t.early} />
+          <Kpi icon="door" label="No check-out" value={t.missing_check_outs} tone={t.missing_check_outs ? 'red' : undefined} />
+        </StatGrid>
       ) : null}
       {d ? (
         <>

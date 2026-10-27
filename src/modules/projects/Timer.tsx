@@ -89,9 +89,9 @@ export function TimerPill() {
       onClick={() => void call('projects:timerWindow').catch((e) => toast('error', errorMessage(e)))}
       title={`${targetLabel(r)} — open the mini timer`}
       aria-label={`Timer running on ${targetLabel(r)}: ${clockOf(elapsedOf(r.startedAt, now))}. Open the mini timer`}
-      className="no-drag flex h-8 items-center gap-2 rounded-full bg-[#43B581]/12 px-3 text-[12.5px] font-semibold text-[#7EE2B0] hover:bg-[#43B581]/20"
+      className="no-drag flex h-8 items-center gap-2 rounded-full bg-stage-green/12 px-3 text-[12.5px] font-semibold text-stage-success hover:bg-stage-green/20"
     >
-      <span className="h-2 w-2 rounded-full bg-[#43B581]" />
+      <span className="h-2 w-2 rounded-full bg-green" />
       {r.taskNumber ? <span className="font-mono">{r.taskNumber}</span> : null}
       <span className="font-mono tabular-nums">{clockOf(elapsedOf(r.startedAt, now))}</span>
     </button>

@@ -7,6 +7,7 @@ import { Button, Chip, cx, Empty, Spinner } from '../../../components/ui';
 import { phoneApi, PK, useSettings, useSyncRun, useSyncRuns, type Settings as S } from '../api';
 import { stamp } from '../lib/format';
 import { INPUT, Mono, PageBody, PageHeader, Panel, StatusChip, Tabs } from '../parts';
+import { SettingRow, SettingRowFrame, SettingsGroup } from '../../../components/SettingsKit';
 
 /**
  * A12 · Settings & sync runs (VOIP-ADM-02/03, VOIP-SYN-01…03). Provisioning, calls and media, recording and
@@ -184,23 +185,21 @@ function SettingsView({ q }: { q: ReturnType<typeof useSettings> }) {
   );
 }
 
+/** A card of settings: the Settings kit's group. */
 function Group({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) {
   return (
-    <Panel title={title} sub={sub} bodyClassName="flex flex-col">
+    <SettingsGroup title={title} description={sub} className="!mb-0">
       {children}
-    </Panel>
+    </SettingsGroup>
   );
 }
 
+/** One setting: the Settings kit's row. */
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line py-2.5 last:border-b-0">
-      <span className="min-w-0">
-        <b className="block text-[13px] text-ink">{label}</b>
-        {hint ? <span className="block text-[11.5px] text-ink-3">{hint}</span> : null}
-      </span>
+    <SettingRow label={label} hint={hint}>
       {children}
-    </div>
+    </SettingRow>
   );
 }
 
@@ -216,26 +215,26 @@ function OnOff({ value, onChange }: { value: string | undefined; onChange: (v: s
 
 function NotificationRow({ event, label, hint, note }: { event: string; label: string; hint: string; note: string }) {
   return (
-    <div className="flex flex-col gap-0.5 border-b border-line py-2.5 last:border-b-0">
+    <SettingRowFrame className="flex flex-col gap-0.5">
       <span className="flex items-center gap-2">
         <b className="text-[13px]">{label}</b>
         <Mono className="text-[11px] text-ink-3">{event}</Mono>
       </span>
       <span className="text-[11.5px] text-ink-2">{hint}</span>
       <span className="text-[11.5px] text-ink-3">{note}</span>
-    </div>
+    </SettingRowFrame>
   );
 }
 
 function PermRow({ perm, who, can }: { perm: string; who: string; can: string }) {
   return (
-    <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-3 border-b border-line py-2.5 text-[12.5px] last:border-b-0">
+    <SettingRowFrame className="grid grid-cols-[140px_minmax(0,1fr)] gap-3 text-[12.5px]">
       <span>
         <Mono className="block font-semibold">{perm}</Mono>
         <span className="text-[11px] text-ink-3">{who}</span>
       </span>
       <span className="text-ink-2">{can}</span>
-    </div>
+    </SettingRowFrame>
   );
 }
 

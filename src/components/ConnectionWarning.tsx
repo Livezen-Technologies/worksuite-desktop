@@ -17,7 +17,7 @@ export function ConnectionWarning({ className, tone = 'light' }: { className?: s
       data-level={s.level}
       className={cx(
         'flex items-center gap-1.5 text-[12px] font-medium',
-        tone === 'dark' ? 'rounded-full bg-[#5A3A10] px-2 py-0.5 text-[11.5px] font-semibold text-[#FFD28A]' : 'border-t border-line bg-warning-bg px-3.5 py-1 text-warning-ink',
+        tone === 'dark' ? 'rounded-full bg-stage-gray-2 px-2 py-0.5 text-[11.5px] font-semibold text-stage-warning' : 'border-t border-line bg-warning-bg px-3.5 py-1 text-warning-ink',
         className,
       )}
     >

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { PageHead } from '../hr/parts';
+import { PageHead } from '../../components/PageKit';
 import { boardColumns, fetchBoard, K, money, type Band, type Column } from './api';
 import { Left, PriorityPill, Score, subline } from './parts';
 
@@ -25,7 +25,7 @@ export default function Board({ org, bands, onOpen, onList }: { org: string; ban
         {decided.map((c) => (
           <button key={c.key} type="button" onClick={() => onList(c.key as 'won' | 'lost')} className="flex flex-col items-end rounded-[8px] px-2 py-0.5 hover:bg-subtle">
             <span className="text-[11.5px] text-ink-3">{c.label}</span>
-            <b className={cx('tabular-nums', c.key === 'won' ? 'text-[#145C39] dark:text-success' : 'text-ink')}>{c.count}</b>
+            <b className={cx('tabular-nums', c.key === 'won' ? 'text-success-ink dark:text-success' : 'text-ink')}>{c.count}</b>
           </button>
         ))}
       </PageHead>
@@ -40,7 +40,7 @@ export default function Board({ org, bands, onOpen, onList }: { org: string; ban
 
 function Lane({ c, bands, onOpen }: { c: Column; bands: Band[] | undefined; onOpen: (id: number) => void }) {
   return (
-    <section aria-label={c.label} data-stage={c.key} className="flex w-[252px] shrink-0 flex-col overflow-hidden rounded-[12px] border border-line bg-[#F6F7FA] dark:bg-surface">
+    <section aria-label={c.label} data-stage={c.key} className="flex w-[252px] shrink-0 flex-col overflow-hidden rounded-[12px] border border-line bg-ground dark:bg-surface">
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
         <b className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{c.label}</b>
         <span className="flex h-[18px] min-w-5 items-center justify-center rounded-[9px] bg-surface px-1.5 text-[11px] font-bold text-ink-2 tabular-nums dark:bg-subtle">{c.count}</span>

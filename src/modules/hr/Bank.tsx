@@ -5,7 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
 import type { BankInfo } from './api';
-import { btn, btnPrimary, Field, input, Panel, Sheet, StatusChip } from './parts';
+import { btn, btnPrimary, Field, input, Panel, Sheet, StatusChip } from '../../components/PageKit';
 
 /**
  * The bank card (HrProfileSheet "Bank"): where the salary goes, masked.
@@ -76,7 +76,7 @@ export function BankCard({ employeeId }: { employeeId: number }) {
               <span className={mono ? 'font-mono text-[12.5px] font-semibold text-ink' : 'font-semibold text-ink'}>{v || '—'}</span>
             </div>
           ))}
-          {!a.payable.ok && a.payable.reason ? <div className="rounded-[8px] bg-warning-bg px-2.5 py-1.5 text-[12px] text-[#9A4A06] dark:text-warning">{a.payable.reason}</div> : null}
+          {!a.payable.ok && a.payable.reason ? <div className="rounded-[8px] bg-warning-bg px-2.5 py-1.5 text-[12px] text-warning-ink dark:text-warning">{a.payable.reason}</div> : null}
           {a.verified_at ? <span className="text-[12px] text-ink-3">Verified{a.verified_by ? ` by ${a.verified_by}` : ''}.</span> : null}
           <div className="flex flex-wrap gap-2">
             {b!.can.view_number && !b!.revealed ? (

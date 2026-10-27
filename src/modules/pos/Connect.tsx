@@ -63,18 +63,18 @@ export default function Connect({ status, onChange }: { status: PosTillStatus; o
           <span className="text-[24px] font-extrabold">{t('pos.bar.brand')}</span>
         </div>
         <h1 className="text-[38px] leading-[1.15] font-extrabold max-xl:text-[30px]">{t('pos.pairing.headline')}</h1>
-        <p className="text-[15px] leading-relaxed text-[#cbd5e1]">{t('pos.pairing.explain')}</p>
+        <p className="text-[15px] leading-relaxed text-stage-gray-ink">{t('pos.pairing.explain')}</p>
         <div className="mt-auto flex flex-col gap-3.5">
           {steps.map((s, i) => (
             <div key={s.label} className="flex items-center gap-3.5">
-              <span className={cx('flex h-[34px] w-[34px] items-center justify-center rounded-full text-[14px] font-extrabold', s.state === 'done' ? 'bg-teal-light text-navy' : s.state === 'now' ? 'bg-white text-navy' : 'bg-white/[.12] text-[#cbd5e1]')}>
+              <span className={cx('flex h-[34px] w-[34px] items-center justify-center rounded-full text-[14px] font-extrabold', s.state === 'done' ? 'bg-teal-light text-navy' : s.state === 'now' ? 'bg-white text-navy' : 'bg-white/[.12] text-stage-gray-ink')}>
                 {s.state === 'done' ? <Icon name="check" size={16} strokeWidth={2.4} /> : i + 1}
               </span>
-              <span className={cx('text-[15px]', s.state === 'now' ? 'font-extrabold' : 'font-medium', s.state === 'next' ? 'text-[#94a3b8]' : 'text-white')}>{t(s.label)}</span>
+              <span className={cx('text-[15px]', s.state === 'now' ? 'font-extrabold' : 'font-medium', s.state === 'next' ? 'text-ink-4' : 'text-white')}>{t(s.label)}</span>
             </div>
           ))}
         </div>
-        <div className="text-[12px] text-[#94a3b8]">{[server ? t('pos.pairing.server', { host: server.replace(/^https?:\/\//, '') }) : null, info ? `WorkSuite Desktop ${info.version}` : null, info?.osVersion].filter(Boolean).join(' · ')}</div>
+        <div className="text-[12px] text-ink-4">{[server ? t('pos.pairing.server', { host: server.replace(/^https?:\/\//, '') }) : null, info ? `WorkSuite Desktop ${info.version}` : null, info?.osVersion].filter(Boolean).join(' · ')}</div>
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto bg-pos-ground px-[72px] py-14 scroll-thin max-xl:px-10">
@@ -138,7 +138,7 @@ export default function Connect({ status, onChange }: { status: PosTillStatus; o
               maxLength={120}
               onChange={(e) => setDeviceName(e.target.value.slice(0, 120))}
               placeholder={t('pos.pairing.deviceNameHint')}
-              className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+              className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
             />
           </label>
         ) : null}

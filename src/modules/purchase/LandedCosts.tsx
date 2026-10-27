@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { btn, btnPrimary, Empty, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Empty, Field, input, Sheet } from '../../components/PageKit';
 import { whole, withOrg } from '../inventory/api';
 import { pick } from '../inventory/pickers';
 import { PURCHASE_API } from '@shared/purchase';

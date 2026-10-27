@@ -64,7 +64,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
   if (!found) {
     return (
       <>
-        <div className="no-drag absolute inset-0 z-20 bg-[#0F1B3D]/[.18]" onMouseDown={onClose} />
+        <div className="no-drag absolute inset-0 z-20 bg-navy/[.18]" onMouseDown={onClose} />
         <aside role="dialog" aria-label="Contact" className="no-drag absolute top-0 right-0 bottom-0 z-30 flex w-[460px] max-w-full flex-col border-l border-line bg-surface shadow-[-20px_0_50px_rgb(var(--ws-shadow-rgb)/.14)]">
           <div className="flex h-14 shrink-0 items-center border-b border-line pr-2.5 pl-5">
             <b className="flex-1 text-[15px] text-ink">Contact</b>
@@ -207,11 +207,11 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
 
   return (
     <>
-      <div className="no-drag absolute inset-0 z-20 bg-[#0F1B3D]/[.18]" onMouseDown={onClose} />
+      <div className="no-drag absolute inset-0 z-20 bg-navy/[.18]" onMouseDown={onClose} />
       <aside role="dialog" aria-label={`Contact ${c.display_name}`} className="no-drag absolute top-0 right-0 bottom-0 z-30 flex w-[460px] max-w-full flex-col border-l border-line bg-surface shadow-[-20px_0_50px_rgb(var(--ws-shadow-rgb)/.14)]">
         <div className="flex h-14 shrink-0 items-center gap-0.5 border-b border-line pr-2.5 pl-5">
           <b className="flex-1 text-[15px] text-ink">Contact</b>
-          <HeadButton label={c.is_favorite ? 'Remove from favorites' : 'Add to favorites'} pressed={c.is_favorite} onClick={() => void toggle('favorite')} className="text-[#D97706]">
+          <HeadButton label={c.is_favorite ? 'Remove from favorites' : 'Add to favorites'} pressed={c.is_favorite} onClick={() => void toggle('favorite')} className="text-amber-strong">
             <Icon name="star" size={17} className={c.is_favorite ? 'fill-current' : ''} />
           </HeadButton>
           <HeadButton label="Edit" disabled={!detail.data} onClick={() => detail.data && onEdit(detail.data)}>
@@ -273,7 +273,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
                       aria-label={a.label}
                       title={a.on ? a.label : a.label === 'Email' ? 'No email on file' : a.label === 'WhatsApp' ? 'No phone number on file' : 'Link this contact to a team member to chat'}
                       onClick={() => void a.go()}
-                      className={cx('flex h-[46px] w-[46px] items-center justify-center rounded-full border', a.on ? 'border-[#DCE2F5] bg-selection text-primary hover:brightness-95 dark:border-line' : 'border-line bg-ground text-ink-3')}
+                      className={cx('flex h-[46px] w-[46px] items-center justify-center rounded-full border', a.on ? 'border-line bg-selection text-primary hover:brightness-95 dark:border-line' : 'border-line bg-ground text-ink-3')}
                     >
                       <Icon name={a.icon} size={19} />
                     </button>
@@ -468,7 +468,7 @@ function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading:
           ))}
         </div>
       ) : null}
-      {c.notes ? <div className="shrink-0 rounded-[10px] border border-[#F6E3B4] bg-[#FFF8E6] px-3 py-2.5 text-[12.5px] leading-[1.5] whitespace-pre-wrap text-[#5C4A12] dark:border-warning/30 dark:bg-warning-bg dark:text-warning">{c.notes}</div> : null}
+      {c.notes ? <div className="shrink-0 rounded-[10px] border border-warning-line bg-warning-bg px-3 py-2.5 text-[12.5px] leading-[1.5] whitespace-pre-wrap text-warning-strong dark:border-warning/30 dark:bg-warning-bg dark:text-warning">{c.notes}</div> : null}
       {whatsapp ? <WhatsappSend phone={whatsapp} name={c.display_name} contactId={c.id} onClose={() => setWhatsapp(null)} /> : null}
     </div>
   );
@@ -486,7 +486,7 @@ function PhoneMenu({ phone, onClose, onWhatsapp, onCall, onPhone }: { phone: str
         {onWhatsapp && d.length >= 7 ? (
           <>
             <button type="button" role="menuitem" autoFocus onClick={onWhatsapp} className={item}>
-              <Icon name="send" size={15} className="text-[#15803D]" /> Send a WhatsApp message
+              <Icon name="send" size={15} className="text-success" /> Send a WhatsApp message
             </button>
             <button type="button" role="menuitem" onClick={() => (onClose(), navigate(whatsappRoute({ to: d })))} className={item}>
               <Icon name="user" size={15} className="text-ink-2" /> Open the conversation
@@ -571,11 +571,11 @@ function Notes({ id, list, loading }: { id: number; list: ContactNote[] | undefi
       </div>
       {loading ? <Spinner /> : null}
       {sorted.map((n) => (
-        <div key={n.id} role="article" aria-label={n.pinned ? 'Pinned note' : 'Note'} className={cx('rounded-[12px] border px-3 py-2.5', n.pinned ? 'border-[#F6E3B4] bg-[#FFF8E6] dark:border-warning/30 dark:bg-warning-bg' : 'border-line bg-surface')}>
+        <div key={n.id} role="article" aria-label={n.pinned ? 'Pinned note' : 'Note'} className={cx('rounded-[12px] border px-3 py-2.5', n.pinned ? 'border-warning-line bg-warning-bg dark:border-warning/30 dark:bg-warning-bg' : 'border-line bg-surface')}>
           <div className="flex items-center gap-1.5 text-[11px] text-ink-3">
             {n.pinned ? (
               <>
-                <span className="flex items-center gap-[3px] font-bold text-[#B45309] dark:text-warning"><Icon name="pin" size={11} /> Pinned</span>
+                <span className="flex items-center gap-[3px] font-bold text-warning dark:text-warning"><Icon name="pin" size={11} /> Pinned</span>
                 <span>·</span>
               </>
             ) : null}

@@ -21,6 +21,7 @@ import { ProjectTeam } from './Team';
 import { exportProjectReport } from './client-api';
 import { ShareDialog } from './ShareDialog';
 import { SaveAsTemplate } from './SaveAsTemplate';
+import { StatGrid } from '../../../components/StatCard';
 
 /**
  * W04 · One project (PRJ-STS, PRJ-BUD, PRJ-INT), natively: its header (status and health in words, Start timer, Edit,
@@ -305,13 +306,13 @@ function Overview({ d, onGo }: { d: FullDetail; onGo: (route: string) => void })
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_300px] items-start gap-3.5 px-5 py-3.5">
       <div className="flex min-w-0 flex-col gap-3.5">
-        <section aria-label="Figures" className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5">
-          <Kpi label="Progress" value={`${Math.round(pr.progress)}%`} sub="weighted by estimate" />
-          <Kpi label="Tasks" value={`${pr.done} / ${pr.total}`} sub={`${pr.overdue} overdue · ${pr.blocked} blocked`} />
-          <Kpi label="Hours logged" value={num(d.time?.hours)} sub={`of ${num(d.time?.estimate_hours || p.estimated_hours)} estimated`} />
-          <Kpi label="Ends" value={fmtDay(p.end_date)} sub={endsSub} tone={late ? 'text-danger' : 'text-ink'} />
-          {b ? <Kpi label="Budget used" value={`${Math.round(b.used_percent)}%`} sub={`${shortMoney(b.spent, cur)} of ${shortMoney(b.budget)}${b.over ? ' · over' : ''}`} tone={usedTone(b.used_percent, b.warn_percent)} /> : null}
-        </section>
+        <StatGrid min={180} label="Figures">
+          <Kpi icon="gauge" tone="blue" label="Progress" value={`${Math.round(pr.progress)}%`} sub="weighted by estimate" />
+          <Kpi icon="list-checks" tone="violet" label="Tasks" value={`${pr.done} / ${pr.total}`} sub={`${pr.overdue} overdue · ${pr.blocked} blocked`} />
+          <Kpi icon="timer" tone="cyan" label="Hours logged" value={num(d.time?.hours)} sub={`of ${num(d.time?.estimate_hours || p.estimated_hours)} estimated`} />
+          <Kpi icon="calendar-check" label="Ends" value={fmtDay(p.end_date)} sub={endsSub} tone={late ? 'text-danger' : 'text-ink'} />
+          {b ? <Kpi icon="wallet" label="Budget used" value={`${Math.round(b.used_percent)}%`} sub={`${shortMoney(b.spent, cur)} of ${shortMoney(b.budget)}${b.over ? ' · over' : ''}`} tone={usedTone(b.used_percent, b.warn_percent)} /> : null}
+        </StatGrid>
 
         {warn ? (
           <section aria-label={health === 'at_risk' ? 'Why this project is at risk' : 'Why this project is on watch'} className={cx('flex flex-col gap-1.5 rounded-[12px] px-3.5 py-2.5', health === 'at_risk' ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning-ink')}>

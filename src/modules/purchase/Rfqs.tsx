@@ -6,9 +6,9 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnPrimary, btnSmall, Empty, Field, input } from '../hr/parts';
+import { btnPrimary, btnSmall, Empty, Field, input } from '../../components/PageKit';
 import { qty, whole } from '../inventory/api';
-import { Pill } from '../inventory/parts';
+import { Pill } from '../../components/ListKit';
 import { pick as pickCls } from '../inventory/pickers';
 import { PURCHASE_API } from '@shared/purchase';
 import { fetchRfq, fetchRfqs, KP, OFFLINE_WRITE, refreshPurchase, sendRfq, usePurchaseCan, usePurchaseOffline } from './api';
@@ -185,7 +185,7 @@ function RfqDetail({ id, currency, onBack, onOrder }: { id: number; currency: st
             <b className="text-[13px] text-ink">Against target</b>
             {save ? (
               <>
-                <span className={cx('text-[24px] font-bold tabular-nums', save.diff <= 0 ? 'text-[#166534] dark:text-success' : 'text-danger')}>
+                <span className={cx('text-[24px] font-bold tabular-nums', save.diff <= 0 ? 'text-success-ink dark:text-success' : 'text-danger')}>
                   {save.pct > 0 ? '+' : ''}
                   {save.pct}%
                 </span>
@@ -262,7 +262,7 @@ function Grid({ c, picks, onPick, readOnly }: { c: Comparison; picks: Picks; onP
                 aria-label={`${v} for ${l.product}: ${whole(b.total)}${on ? ', awarded' : ''}`}
                 disabled={readOnly}
                 onClick={() => onPick(l.rfq_line_id, b.bid_id)}
-                className={cx('flex w-[160px] shrink-0 flex-col px-2 py-2 text-left', on ? 'bg-[#E4F4EA] dark:bg-success-bg' : !readOnly && 'hover:bg-subtle')}
+                className={cx('flex w-[160px] shrink-0 flex-col px-2 py-2 text-left', on ? 'bg-success-bg dark:bg-success-bg' : !readOnly && 'hover:bg-subtle')}
               >
                 <b className="text-ink tabular-nums">{whole(b.total, b.currency)}</b>
                 <span className="text-[11px] text-ink-3">{[b.cheapest ? 'cheapest' : null, b.fastest ? 'fastest' : null, on ? 'award ✓' : null].filter(Boolean).join(' · ') || (b.lead_days !== null ? `${b.lead_days} days` : '')}</span>
@@ -277,7 +277,7 @@ function Grid({ c, picks, onPick, readOnly }: { c: Comparison; picks: Picks; onP
         {totals.map((t, i) => (
           <span key={vendors[i]} className="flex w-[160px] shrink-0 flex-col px-2 py-2">
             <b className="text-ink tabular-nums">{whole(t.sum)}</b>
-            {t.missing ? <span className="text-[11px] text-[#9A4A06] dark:text-warning">missing {t.missing} {t.missing === 1 ? 'line' : 'lines'}</span> : null}
+            {t.missing ? <span className="text-[11px] text-warning-ink dark:text-warning">missing {t.missing} {t.missing === 1 ? 'line' : 'lines'}</span> : null}
           </span>
         ))}
       </div>

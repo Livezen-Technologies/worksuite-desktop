@@ -37,7 +37,7 @@ function Pair({ l, r, b }: { l: string; r: string; b?: boolean }) {
 }
 
 function Rule() {
-  return <div className="my-2 border-t border-dashed border-[#6b7280]" />;
+  return <div className="my-2 border-t border-dashed border-slate" />;
 }
 
 export default function ReceiptPreview({ sale, till }: { sale: PosSale; till: string | null }) {
@@ -47,7 +47,7 @@ export default function ReceiptPreview({ sale, till }: { sale: PosSale; till: st
   const foot = (settings.data?.footer ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 8);
   const at = new Date(sale.created_at);
   return (
-    <div aria-label={t('pos.receipt')} className="flex w-[260px] flex-col gap-[3px] overflow-hidden bg-white px-4 py-[18px] font-mono text-[10.5px] leading-snug text-[#111827] shadow-[0_2px_10px_rgba(0,0,0,.08)]">
+    <div aria-label={t('pos.receipt')} className="flex w-[260px] flex-col gap-[3px] overflow-hidden bg-white px-4 py-[18px] font-mono text-[10.5px] leading-snug text-ink shadow-[0_2px_10px_rgba(0,0,0,.08)]">
       {head.map((l, i) => (
         <div key={i} className={`text-center ${i === 0 ? 'text-[13px] font-bold' : ''}`}>
           {l}

@@ -8,8 +8,8 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { BLANK, fetchList, K, useOwners, type DocAccess } from './api';
 import { ReviewScreen } from './Review';
 import { notifiedNote, reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
@@ -135,7 +135,7 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
                 className={cx(
                   'h-7 rounded-[14px] border px-2.5 text-[12px] font-semibold',
                   filter === f ? 'border-primary bg-selection text-primary' : 'border-line bg-surface text-ink-2 hover:bg-subtle',
-                  f === 'outstanding' && filter !== f && 'text-[#9A4A06] dark:text-warning',
+                  f === 'outstanding' && filter !== f && 'text-warning-ink dark:text-warning',
                   f === 'rejected' && filter !== f && 'text-danger',
                 )}
               >
@@ -147,7 +147,7 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
       ) : null}
 
       {picked.length ? (
-        <div className="flex items-center gap-2 self-start rounded-[9px] border border-[#C7D0F5] bg-[#EEF1FC] px-2.5 py-1.5 dark:border-primary/40 dark:bg-selection">
+        <div className="flex items-center gap-2 self-start rounded-[9px] border border-info-line bg-selection px-2.5 py-1.5 dark:border-primary/40 dark:bg-selection">
           <b className="text-[12.5px] text-primary">{picked.length} selected</b>
           {canApprove ? (
             <button type="button" className={btnSmall + ' !h-7'} disabled={busy !== null} onClick={() => void act('bulk', () => bulkLines(id, 'approve', picked), 'Approved — lines with nothing on file were left.').then((ok) => ok && setPicked([]))}>
@@ -296,7 +296,7 @@ function LineRow({
     <div
       data-line={l.id}
       {...zone.props}
-      className={cx('flex flex-col gap-1 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0', chosen && 'bg-[#F4F6FE] dark:bg-selection/40', zone.over && 'bg-selection outline-2 -outline-offset-2 outline-primary outline-dashed')}
+      className={cx('flex flex-col gap-1 border-b border-line/60 px-3.5 py-2.5 text-[12.5px] last:border-b-0', chosen && 'bg-info-soft dark:bg-selection/40', zone.over && 'bg-selection outline-2 -outline-offset-2 outline-primary outline-dashed')}
     >
       <div className="flex items-start gap-2.5">
         {onChoose ? <Checkbox aria-label={`Choose ${l.label}`} checked={chosen} onChange={onChoose} className="mt-1" /> : null}
@@ -313,7 +313,7 @@ function LineRow({
               Sent back{l.reviewer_name ? ` by ${l.reviewer_name}` : ''}: {l.rejection_reason}
             </span>
           ) : l.mandatory && !l.settled && l.why_not ? (
-            <span className="text-[#9A4A06] dark:text-warning">{l.why_not}</span>
+            <span className="text-warning-ink dark:text-warning">{l.why_not}</span>
           ) : null}
           <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-ink-3">
             {current ? (
@@ -380,7 +380,7 @@ function LineRow({
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {canManage && can.upload ? <AttachMenu small label={current ? 'New version' : 'Attach'} disabled={busy !== null} onComputer={onAttach} onDrive={onDrive} /> : null}
           {canApprove && reviewable && l.status !== 'approved' ? (
-            <button type="button" className={btnSmall + ' !h-7 !border-[#9BD3B3] !text-[#145C39] dark:!text-success'} disabled={busy !== null} onClick={onApprove}>
+            <button type="button" className={btnSmall + ' !h-7 !border-success-line !text-success-ink dark:!text-success'} disabled={busy !== null} onClick={onApprove}>
               Approve
             </button>
           ) : null}
@@ -592,7 +592,7 @@ function LineSheet({ tenderId, org, line, sections, onClose, onSaved }: { tender
               <input type="date" aria-label="Expires on" value={d.expires_on} onChange={set('expires_on')} className={input} />
             </Field>
           </div>
-          {line.mandatory && !d.mandatory && !line.settled ? <p className="m-0 text-[12px] text-[#9A4A06] dark:text-warning">This line is required and not yet satisfied. Making it optional needs the approval permission.</p> : null}
+          {line.mandatory && !d.mandatory && !line.settled ? <p className="m-0 text-[12px] text-warning-ink dark:text-warning">This line is required and not yet satisfied. Making it optional needs the approval permission.</p> : null}
         </>
       ) : null}
       {error ? <p className="m-0 text-[12.5px] text-danger">{error}</p> : null}

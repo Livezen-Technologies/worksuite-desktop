@@ -7,11 +7,11 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../../components/PageKit';
 import { can, fetchCategories, K, num, qty, signed, stampWords, treeOf, type Warehouse } from './api';
 import { DocChip } from './Adjustments';
 import { countAct, countedOf, countKind, COUNT_KINDS, createCount, deleteCount, fetchCount, fetchCounts, KC, PER, saveCountLines } from './control';
-import { minWidth, Signed } from './parts';
+import { minWidth, Signed } from '../../components/ListKit';
 import { pick, WarehousePick } from './pickers';
 import CountDesk, { countsHere } from './CountDesk';
 
@@ -115,7 +115,7 @@ export default function Counts({
                   type="button"
                   data-count={c.id}
                   onClick={() => onOpen(c.id)}
-                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === c.id && 'bg-[#F4F6FE] dark:bg-selection/40')}
+                  className={cx('flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60', openId === c.id && 'bg-info-soft dark:bg-selection/40')}
                 >
                   <b className="min-w-0 flex-1 truncate text-ink">{c.reference}</b>
                   <span className="shrink-0 truncate text-ink-2" style={{ width: W.wh }}>
@@ -240,7 +240,7 @@ function CountPanel({ id, currency, onClose, onOpenAdjustment }: { id: number; c
             </span>
             {c.status === 'draft' ? <span className="rounded-[10px] bg-subtle px-3 py-2 text-[12.5px] text-ink-2">Starting the count freezes what is expected on every line. Start it when the counters are ready.</span> : null}
             {d.drifted && open ? (
-              <span className="rounded-[10px] bg-[#FFF4E0] px-3 py-2 text-[12.5px] text-[#9A4A06] dark:bg-warning-bg dark:text-warning">
+              <span className="rounded-[10px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-ink dark:bg-warning-bg dark:text-warning">
                 {d.drifted} {d.drifted === 1 ? 'line has' : 'lines have'} moved since the sheet was frozen. Posting applies the variance on top of that movement.
               </span>
             ) : null}
@@ -273,7 +273,7 @@ function CountPanel({ id, currency, onClose, onOpenAdjustment }: { id: number; c
                       <span className="w-[56px] truncate text-ink-2">{l.bin ?? '—'}</span>
                       <span className="w-[86px] text-right text-ink-2 tabular-nums">
                         {qty(exp)}
-                        {l.drifted ? <span className="block text-[11px] text-[#9A4A06] dark:text-warning">now {qty(l.on_hand_now)}</span> : null}
+                        {l.drifted ? <span className="block text-[11px] text-warning-ink dark:text-warning">now {qty(l.on_hand_now)}</span> : null}
                       </span>
                       <span className="w-[80px]">
                         {open && mayAdjust ? (

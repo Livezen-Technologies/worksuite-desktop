@@ -3,10 +3,11 @@ import { useRef, useState } from 'react';
 import { Select } from '../../../components/Select';
 import { Button, ErrorNote, Modal, Spinner } from '../../../components/ui';
 import { toast } from '../../../core/toasts';
-import { PageHead } from '../../hr/parts';
+import { PageHead } from '../../../components/PageKit';
 import { eGet, ePost, errorText, K, labelOf, newKey, refusal, when, type Category, type Course, type CourseCard, type Paged } from '../api';
 import { CourseStatusPill, Field, input, Refusal, useEl } from '../parts';
 import { Checkbox } from '../../../components/Checkbox';
+import { clickOnKey } from '../../../components/press';
 
 const PER = 50;
 
@@ -76,7 +77,7 @@ export default function Courses() {
               </thead>
               <tbody>
                 {data.items.map((c) => (
-                  <tr key={c.id} className="cursor-pointer border-b border-line last:border-0 hover:bg-subtle" onClick={() => el.open.manage(c.id)}>
+                  <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} className="cursor-pointer border-b border-line last:border-0 hover:bg-subtle" onClick={() => el.open.manage(c.id)}>
                     <td className="px-3 py-2">
                       <button type="button" className="text-left font-semibold text-ink hover:text-primary" onClick={() => el.open.manage(c.id)}>
                         {c.title}

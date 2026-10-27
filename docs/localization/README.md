@@ -18,4 +18,8 @@ Run `npm run localization:report` to export missing-si.json and missing-ta.json 
 
 Fluent reviewers must inspect every module, onboarding, preferences, validation, notifications, help and AI in both languages, including long strings and unchanged user text. Record reviewer identity and reviewed commit in review.json and set status to complete only after that review. Run `npm run localization:release-check`; it intentionally fails while catalog gaps or review requirements remain.
 
+## Machine-drafted phrases (audit D-G10, 2026-10-27)
+
+3,920 phrases in each of si.json and ta.json were drafted by machine translation, not by a fluent speaker: the shell, navigation, common actions, Settings, My account, and Home, Mail, Chat, Calendar, Tasks, Files, Meet, Calls, Contacts and Notifications. They take those areas from 19% to 80% of their phrases (whole app: 1,132 to 5,139 of 21,127). Every one of them is listed in review.json under `machineDrafted` (status "needs native review"). A reviewer corrects the phrase in the catalog and removes it from that list; `machineDrafted.count` must equal the list's length. Left in English on purpose: sentence fragments that the code joins around values (they need rewriting as whole sentences with placeholders first), website chat, channels and the image editor.
+
 Current blockers: thousands of untranslated phrases, manual inventory outside the transform, full notification localization, complete layout/input/search verification and fluent review. No translation service or fluent reviewer was available in this task.

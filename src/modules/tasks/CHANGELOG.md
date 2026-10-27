@@ -4,6 +4,24 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.3 — 2026-10-27
+
+**Changed**
+
+- colours from the design tokens, light and dark — the hard-coded hex colours are tokens now (D-G23)
+
+## 1.4.2 — 2026-10-26
+
+**Fixed**
+
+- a description's text is no longer announced as clickable; its links stay links (D-G21)
+
+## 1.4.1 — 2026-10-26
+
+**Fixed**
+
+- a card dropped on another column, or a task completed from the list, the task or Done, stays where it was put; a poll already on its way put the old status back until the next one (#430, #433)
+
 ## 1.4.0 — 2026-10-20
 
 - List view: pick tasks with the box at the start of a row and complete, reopen or move them together; the round tick completes a task at once (#392)

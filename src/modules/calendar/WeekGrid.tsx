@@ -194,8 +194,8 @@ export function WeekGrid({ days, events, today, readOnly, onOpen, onCreate, onMo
                   })}
                   {d === now.ymd ? (
                     <>
-                      <span className="pointer-events-none absolute right-0 left-0 z-10 h-[2px] bg-[#E0522F]" style={{ top: (now.minutes / 60) * HOUR }} />
-                      <span className="pointer-events-none absolute z-10 h-[10px] w-[10px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#E0522F]" style={{ top: (now.minutes / 60) * HOUR + 1, left: 0 }} />
+                      <span className="pointer-events-none absolute right-0 left-0 z-10 h-[2px] bg-red" style={{ top: (now.minutes / 60) * HOUR }} />
+                      <span className="pointer-events-none absolute z-10 h-[10px] w-[10px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-red" style={{ top: (now.minutes / 60) * HOUR + 1, left: 0 }} />
                     </>
                   ) : null}
                 </div>

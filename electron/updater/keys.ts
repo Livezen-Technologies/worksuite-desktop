@@ -7,10 +7,12 @@
  * scripts/release-keygen.mjs. The app no longer reads those manifests: it
  * asks the WorkSuite Update Center, whose keys are in update-center.ts.
  *
- * POLICY_PUBLIC_KEY verifies signed desktop policies from /desktop/v1. The
- * existing WorkSuite API does not sign policies, so it is empty until the
- * server gains a policy-signing key; unsigned policies are then applied as
- * `signed: false` and shown so in Diagnostics.
+ * POLICY_PUBLIC_KEY verifies signed desktop policies from /desktop/v1. It is
+ * set from the WS_POLICY_PUBLIC_KEY secret at build time. With no key here and
+ * none on the account (its trusted `discovery_key`), a release build refuses
+ * every desktop policy and keeps the last valid one (POLICY_UNSIGNED_REFUSED,
+ * audit D-G05); a development build applies it as `signed: false`, shown so in
+ * Diagnostics.
  */
 export const RELEASE_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEALYr1uZg/wxzQFyeAqaaDny7fEl8wuDP3W6N8jiNEGvQ=

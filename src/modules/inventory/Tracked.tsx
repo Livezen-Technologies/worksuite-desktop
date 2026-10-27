@@ -7,10 +7,10 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnSmall, Empty, Facts, input, PageHead, Seg, SidePanel } from '../hr/parts';
+import { btn, btnSmall, Empty, Facts, input, PageHead, Seg, SidePanel } from '../../components/PageKit';
 import { can, cost, qty, stampFull, whole } from './api';
 import { fetchBatches, fetchExpiring, fetchSerials, fetchUnit, KC, scanCode, SERIAL_STATUS, tagsOf, tagUnit } from './control';
-import { minWidth, Pill } from './parts';
+import { minWidth, Pill } from '../../components/ListKit';
 import { pick } from './pickers';
 
 /**
@@ -85,7 +85,7 @@ const rowCls = 'flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 
 function expiry(date: string | null, days: number | null, expired: boolean) {
   if (!date) return <span className="text-ink-3">—</span>;
   return (
-    <span className={cx('tabular-nums', expired ? 'font-bold text-danger' : days !== null && days <= 30 ? 'font-semibold text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
+    <span className={cx('tabular-nums', expired ? 'font-bold text-danger' : days !== null && days <= 30 ? 'font-semibold text-warning-ink dark:text-warning' : 'text-ink-2')}>
       {dateLabel(date)}
       <span className="ml-1 text-[11px]">{expired ? 'expired' : days !== null ? `${days}d` : ''}</span>
     </span>
@@ -211,7 +211,7 @@ function Serials({ org, warehouse, onUnit }: { org: string; warehouse: number | 
         </span>
       </div>
       {why ? (
-        <span role="status" className="rounded-[8px] bg-[#FFF4E0] px-3 py-2 text-[12.5px] font-semibold text-[#9A4A06] dark:bg-warning-bg dark:text-warning">
+        <span role="status" className="rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] font-semibold text-warning-ink dark:bg-warning-bg dark:text-warning">
           {why}
         </span>
       ) : null}
@@ -298,7 +298,7 @@ function ExpiringList({ org, currency, onOpenProduct, onWriteOff }: { org: strin
         <span className="text-[12.5px] text-ink-3">{d ? `Expiring within ${d.window_days} days` : ''}</span>
       </div>
       {d && d.expired ? (
-        <span className="flex items-center gap-2 rounded-[10px] bg-[#FCE9E4] px-3 py-2 text-[12.5px] text-[#8C2A14] dark:bg-danger-bg dark:text-danger">
+        <span className="flex items-center gap-2 rounded-[10px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger-ink dark:bg-danger-bg dark:text-danger">
           <span className="flex-1">
             {d.expired} {d.expired === 1 ? 'batch has' : 'batches have'} expired and still {d.expired === 1 ? 'holds' : 'hold'} stock. Write {d.expired === 1 ? 'it' : 'them'} off with an adjustment reason of “Expired”.
           </span>
@@ -401,7 +401,7 @@ function UnitPanel({ id, onClose, onOpenProduct }: { id: number; onClose: () => 
         <>
           <span className="flex items-center gap-2 text-[12.5px]">
             <Pill tone={SERIAL_STATUS[u.status] ?? 'grey'}>{u.status.replace(/_/g, ' ')}</Pill>
-            <span className={d.sellable ? 'text-[#166534] dark:text-success' : 'text-ink-3'}>{d.sellable ? 'can be sold' : 'not available to sell'}</span>
+            <span className={d.sellable ? 'text-success-ink dark:text-success' : 'text-ink-3'}>{d.sellable ? 'can be sold' : 'not available to sell'}</span>
             <span className="text-ink-3">{[u.warehouse, u.bin].filter(Boolean).join(' · ')}</span>
           </span>
           <section className="flex flex-col gap-1">

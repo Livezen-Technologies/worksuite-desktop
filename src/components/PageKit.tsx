@@ -1,22 +1,26 @@
 import type { ReactNode } from 'react';
-import { Icon } from '../../components/Icon';
-import { cx } from '../../components/ui';
-import { topBarPaddingRight } from '../../core/window-chrome';
+import { Icon } from './Icon';
+import { cx } from './ui';
+import { topBarPaddingRight } from '../core/window-chrome';
+import { StatCard, type StatTone } from './StatCard';
 
 /**
  * The HR designs' shared pieces: the status chip (one colour per meaning,
  * matched on the words the server uses), KPI cards, panels, the segmented
  * control, page headings, table headings and the form controls.
+ *
+ * First drawn for People (it was `hr/parts`), now the page kit of the business modules — Finance, Inventory,
+ * Purchase, Sales, Tenders and the rest — so no module borrows another's parts (audit D-G08).
  */
 const TONES: Array<[RegExp, string]> = [
   // Neutral first: "Non-working day" must not read as "working".
   [/^(non-working|off\b|n\/a|not yet|not scored|nothing to measure)/, 'bg-subtle text-ink-2'],
-  [/^(active|approved|present|complete|completed|accepted|done|verified|live|in force|good|outstanding|strong|saved|sent|returned ok|signed off|cover accepted|on time|paid|submitted ok)/, 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success'],
-  [/(pending|probation|notice|late|waiting|awaiting|draft|review|early|half|needs|missing|no check|on break|fair|attention|cover pending|changes|being corrected|resubmission|submitted)/, 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning'],
-  [/(reject|declin|terminated|absent|suspended|expired|critical|poor|damaged|overdue|cover declined|holds pay|insecure|no key|refused|failed)/, 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger'],
+  [/^(active|approved|present|complete|completed|accepted|done|verified|live|in force|good|outstanding|strong|saved|sent|returned ok|signed off|cover accepted|on time|paid|submitted ok)/, 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success'],
+  [/(pending|probation|notice|late|waiting|awaiting|draft|review|early|half|needs|missing|no check|on break|fair|attention|cover pending|changes|being corrected|resubmission|submitted)/, 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning'],
+  [/(reject|declin|terminated|absent|suspended|expired|critical|poor|damaged|overdue|cover declined|holds pay|insecure|no key|refused|failed)/, 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger'],
   [/(working|in progress|approve$|meets|open)/, 'bg-selection text-primary'],
-  [/(on leave|leave|remote|work from home|contract|intern|holiday|off)/, 'bg-[#F1EAFB] text-[#5B2FA0] dark:bg-[#2A1F45] dark:text-[#C4A8F0]'],
-  [/(permanent|onsite)/, 'bg-[#E3F4F5] text-[#0B6770] dark:bg-[#10343A] dark:text-[#7FD8DF]'],
+  [/(on leave|leave|remote|work from home|contract|intern|holiday|off)/, 'bg-violet-bg text-violet-ink'],
+  [/(permanent|onsite)/, 'bg-teal-bg text-teal-ink'],
 ];
 
 export function toneOf(text: string): string {
@@ -37,18 +41,9 @@ export function humanise(v: string | null | undefined): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function Kpi({ label, value, sub, tone, onClick, className }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'amber' | 'red' | 'green'; onClick?: () => void; className?: string }) {
-  const Tag = onClick ? 'button' : 'div';
-  return (
-    <Tag
-      {...(onClick ? { type: 'button' as const, onClick } : {})}
-      className={cx('flex min-w-0 flex-col gap-0.5 rounded-[12px] border border-line bg-surface px-3.5 py-3 text-left', onClick && 'hover:border-primary/40', className)}
-    >
-      <span className="text-[12px] font-semibold text-ink-3">{label}</span>
-      <b className={cx('text-[21px] leading-tight tabular-nums', tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : tone === 'red' ? 'text-danger' : tone === 'green' ? 'text-success' : 'text-ink')}>{value}</b>
-      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-    </Tag>
-  );
+/** A figure tile, drawn as the shared StatCard. `tone` colours its icon chip. */
+export function Kpi({ label, value, sub, tone, icon, onClick, className }: { label: string; value: ReactNode; sub?: ReactNode; tone?: StatTone; icon?: string; onClick?: () => void; className?: string }) {
+  return <StatCard label={label} value={value} sub={sub} tone={tone} icon={icon} onClick={onClick} className={className} />;
 }
 
 export function Panel({ title, sub, action, children, className, bodyClassName }: { title: ReactNode; sub?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string }) {
@@ -68,7 +63,7 @@ export function Panel({ title, sub, action, children, className, bodyClassName }
 
 export function Seg<T extends string | number>({ options, value, onChange, label }: { options: Array<{ id: T; label: ReactNode }>; value: T; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="tablist" aria-label={label} className="flex shrink-0 gap-1 rounded-[9px] bg-[#E9ECF3] p-[3px] dark:bg-subtle">
+    <div role="tablist" aria-label={label} className="flex shrink-0 gap-1 rounded-[9px] bg-info-bg p-[3px] dark:bg-subtle">
       {options.map((o) => (
         <button
           key={String(o.id)}
@@ -100,8 +95,8 @@ export function PageHead({ title, sub, children }: { title: ReactNode; sub?: Rea
 
 export const btn = 'inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-[8px] border border-line bg-surface px-3 text-[13px] font-semibold whitespace-nowrap text-ink hover:bg-subtle disabled:opacity-50';
 export const btnPrimary = 'inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-[8px] bg-primary px-3.5 text-[13px] font-bold whitespace-nowrap text-white hover:bg-primary-hover disabled:opacity-50';
-export const btnGood = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] bg-[#1F7A4D] px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-white hover:bg-[#1A6841] disabled:opacity-50';
-export const btnBad = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] border border-[#F1B8A8] bg-surface px-2.5 dark:border-danger/40 text-[12.5px] font-semibold whitespace-nowrap text-danger hover:bg-danger-bg disabled:opacity-50';
+export const btnGood = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] bg-success px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-white hover:bg-success disabled:opacity-50';
+export const btnBad = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] border border-danger-line bg-surface px-2.5 dark:border-danger/40 text-[12.5px] font-semibold whitespace-nowrap text-danger hover:bg-danger-bg disabled:opacity-50';
 export const btnSmall = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] border border-line bg-surface px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-ink hover:bg-subtle disabled:opacity-50';
 /** Borderless: the panel's Close beside the actions that matter. */
 export const btnGhost = 'inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-[8px] px-3 text-[13px] font-semibold whitespace-nowrap text-ink-2 hover:bg-subtle hover:text-ink disabled:opacity-50';

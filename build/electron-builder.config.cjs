@@ -2,8 +2,9 @@
  * Packaging (FR-SHL-01/02, §16). One codebase, every platform:
  *
  *   Windows  NSIS .exe (per-user) + .msi (machine-wide, Intune/GPO/RMM)
- *   macOS    .dmg (what the updater installs; one per architecture for releases,
- *            see docs/RELEASING.md) + .pkg (Jamf/MDM) + .zip
+ *   macOS    .dmg (what the updater installs; one universal DMG, published to the
+ *            Update Center as both macos:arm64 and macos:x64, see docs/RELEASING.md)
+ *            + .pkg (Jamf/MDM) + .zip
  *   Linux    .AppImage (self-updating) + .deb + .rpm
  *
  * Signing is driven entirely by environment/CI secrets and never lives in
@@ -13,7 +14,9 @@
  *            or APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID
  *   Windows  WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD, or Azure Trusted Signing
  *            (AZURE_TRUSTED_SIGNING_* — the Q8 default in the SRS)
- *   Linux    GPG signing of packages happens in the repository pipeline. The WorkSuite APT/DNF repositories
+ *   Linux    LINUX_GPG_PRIVATE_KEY (+ LINUX_GPG_PASSPHRASE): CI signs the .rpm (rpmsign) and writes a detached
+ *            .asc for the .deb and AppImage after packaging, when the secret exists (docs/RELEASING.md). The
+ *            APT/DNF repositories' own metadata is signed in the repository pipeline. The WorkSuite APT/DNF repositories
  *            (worksuite-desktop#351) are OFF unless WORKSUITE_LINUX_REPO=1 with WORKSUITE_REPO_GPG_PUBLIC_KEY
  *            (build/linux-repo.cjs, docs/RELEASING.md)
  *
@@ -28,6 +31,9 @@
  * WS_RELEASE_BUILD=1) and warns loudly for any other build.
  */
 const macSigning = require('./mac-signing.cjs');
+
+/** The macOS zip and pkg: wanted on CI and on request, not on every local build. */
+const macExtraTargets = Boolean(process.env.CI) || process.env.WS_MAC_ALL === '1';
 const linuxRepo = require('./linux-repo.cjs');
 const masCleanup = require('./mas-cleanup.cjs');
 // Universal Links (worksuite-desktop#170): with a provisioning profile that grants Associated Domains for
@@ -117,10 +123,13 @@ module.exports = {
     // they are one-arch files carried in both. (These are the lockfile's only darwin-only packages besides
     // @napi-rs, which is left out above.)
     x64ArchFiles: '**/node_modules/{node-llama-cpp,@node-llama-cpp,@reflink}/**',
+    // The DMG is what the Update Center distributes and what a release ships.
+    // The zip and the pkg are other ways of installing the same app; each is
+    // another full copy (~344 MB) and several minutes, so they are built on CI
+    // and when asked for (WS_MAC_ALL=1), not on every local release build.
     target: [
       { target: 'dmg', arch: ['universal'] },
-      { target: 'zip', arch: ['universal'] },
-      { target: 'pkg', arch: ['universal'] },
+      ...(macExtraTargets ? [{ target: 'zip', arch: ['universal'] }, { target: 'pkg', arch: ['universal'] }] : []),
     ],
     // The remote-control input helper is Apple's /usr/bin/osascript, started as a direct child of the app: macOS
     // counts WorkSuite as responsible for it, so WorkSuite's own Accessibility entry covers it and nothing else
@@ -136,7 +145,8 @@ module.exports = {
     extendInfo: {
       NSCameraUsageDescription: 'WorkSuite uses the camera only in video calls and meetings you join.',
       NSMicrophoneUsageDescription: 'WorkSuite uses the microphone only during calls and voice notes you record.',
-      // Remote control types the controller's text through System Events, only while you let them control this Mac.
+      // Remote control posts the controller's typing as key events; only a Mac whose scripting bridge lacks that call
+      // types through System Events instead, which is what this Automation prompt is for.
       NSAppleEventsUsageDescription: 'WorkSuite types text for someone you let control this Mac, and only while control lasts.',
       LSMultipleInstancesProhibited: true,
     },
@@ -157,9 +167,13 @@ module.exports = {
   pkg: { isRelocatable: false, allowAnywhere: false, allowCurrentUserHome: false, installLocation: '/Applications' },
 
   win: {
+    // Both CPUs: the catalog lists windows x64 and windows arm64, and a release
+    // missing either one fails the publish checklist. MSI is built only where
+    // WiX can run — on Windows. Under wine on macOS its candle.exe cannot start,
+    // and that took the whole --win build down with it, NSIS included.
     target: [
-      { target: 'nsis', arch: ['x64'] },
-      { target: 'msi', arch: ['x64'] },
+      { target: 'nsis', arch: ['x64', 'arm64'] },
+      ...(process.platform === 'win32' ? [{ target: 'msi', arch: ['x64'] }] : []),
     ],
     ...(azure ? { azureSignOptions: azure } : {}),
     // Windows 10 22H2+ (NFR-CMP-01).
@@ -191,8 +205,8 @@ module.exports = {
     ],
     executableName: 'worksuite',
     category: 'Office',
-    // Set to the real support mailbox before the first Linux release.
-    maintainer: 'Livezen Technologies <noreply@worksuite.lk>',
+    // The package's Maintainer (deb) / Packager (rpm): the support mailbox people can write to.
+    maintainer: 'Livezen Technologies <support@worksuitecloud.com>',
     vendor: 'Livezen Technologies',
     synopsis: 'The WorkSuite desktop client',
     description: 'WorkSuite Desktop — mail, chat, tasks, files and every WorkSuite app on your desktop.',

@@ -1,5 +1,5 @@
 import type { PdfAnnotView, PdfAttachmentView, PdfEngineCapabilities, PdfLinkView, PdfOutlineNode, PdfPageSize, PdfSearchOptions, PdfSecurityReport } from '@shared/pdf';
-import { EngineError, ENGINE_MESSAGES, type CancelToken, type EngineEditOp, type EngineFile, type EngineOpened, type PDFEngine, type RenderedPixels, type RenderRequest, type SearchProgress, type TextSpan } from './engine';
+import { EngineError, ENGINE_MESSAGES, type CancelToken, type EngineCompose, type EngineEditOp, type EngineFile, type EngineOpened, type PDFEngine, type RenderedPixels, type RenderRequest, type SearchProgress, type TextSpan } from './engine';
 import type { WorkerMessage, WorkerRequest } from './worker-protocol';
 
 /**
@@ -240,6 +240,22 @@ export class WorkerEngine implements PDFEngine {
 
   extract(pages: number[]): Promise<Uint8Array> {
     return this.request<Uint8Array>({ op: 'extract', pages }, this.opts.openTimeoutMs);
+  }
+
+  protect(userPassword: string, ownerPassword: string, permissions: number): Promise<Uint8Array> {
+    return this.request<Uint8Array>({ op: 'protect', userPassword, ownerPassword, permissions }, this.opts.openTimeoutMs);
+  }
+
+  unprotect(): Promise<Uint8Array> {
+    return this.request<Uint8Array>({ op: 'unprotect' }, this.opts.openTimeoutMs);
+  }
+
+  pageText(pages: number[]): Promise<string[]> {
+    return this.request<string[]>({ op: 'pageText', pages }, this.opts.openTimeoutMs);
+  }
+
+  compose(req: EngineCompose): Promise<Uint8Array> {
+    return this.request<Uint8Array>({ op: 'compose', req }, this.opts.openTimeoutMs);
   }
 
   unload(): Promise<void> {

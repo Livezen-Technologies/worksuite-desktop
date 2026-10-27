@@ -6,6 +6,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
 import { BASE, fetchWarehouses, moveStock, type Can, type StockItem } from './api';
 import { Badge, Btn, Card, Field, PageHead, Pills, Table, amt, input, td, tdr, useReadOnly } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Consumables & accessories (D17): on hand against the reorder level (the server's counts and its "low"), the selected
@@ -84,7 +85,7 @@ export default function Stock({ can, active }: { org: number; can: Can; active: 
           {q.isLoading ? <Spinner /> : q.error ? <div className="p-3"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div> : null}
           <Table head={['Item', 'Category', ['On hand', 'r'], ['Reorder', 'r'], '']}>
             {items.map((i) => (
-              <tr key={i.id} onClick={() => setSel(i.id)} className={cx('cursor-default', i.id === cur?.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={i.id} onClick={() => setSel(i.id)} className={cx('cursor-default', i.id === cur?.id ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
                 <td className={td}><b>{i.name}</b> <span className="font-mono text-[11px] text-ink-3">{i.sku}</span></td>
                 <td className={td}>{i.category ?? '—'}</td>
                 <td className={tdr}>{`${i.stock} ${i.unit}`}</td>

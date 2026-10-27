@@ -393,6 +393,8 @@ const api = {
     resolve: call('pdf:resolve'),
     discard: call('pdf:discard'),
     extract: call('pdf:extract'),
+    derive: call('pdf:derive'),
+    compose: call('pdf:compose'),
     tokens: call('pdf:tokens'),
     tokenSign: call('pdf:tokenSign'),
     /** PDFs from a real drop: turned into paths here, into handles in main — as files.registerDropped. */
@@ -751,6 +753,11 @@ const api = {
     set: call('settings:set'),
     launcherDefaults: call('settings:launcherDefaults'),
     appearanceDefaults: call('settings:appearanceDefaults'),
+  },
+  desktopSettings: {
+    get: call('desktopSettings:get'),
+    set: call('desktopSettings:set'),
+    refresh: call('desktopSettings:refresh'),
   },
   status: {
     snapshot: call('status:snapshot'),

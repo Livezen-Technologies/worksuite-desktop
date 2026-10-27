@@ -9,10 +9,36 @@
 | The Office editor: a `WebContentsView` in its own in-memory partition and process, on `wsoffice://editor`, held to the Document Server's origin (see below) | `electron/services/office-editor.ts`, `electron/security/office-policy.ts` |
 | `will-navigate` / `will-redirect` / subframe navigation limited to `app://bundle` (the Office editor's view has its own, stricter rule: `setNavigationRule`) | `hardening.ts` |
 | The UI loads only from `app://bundle` (the asar); remote origins never host shell UI | `electron/protocols/app-protocol.ts` |
-| CSP: `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'none'` — WebAssembly may compile (the built-in Office editor, BetterOffice); `eval` and remote scripts may not | `hardening.ts` |
+| CSP (`contentSecurityPolicy`): `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; connect-src 'self'` plus the server's media and announced media servers; `object-src`, `manifest-src`, `base-uri`, `form-action` and `frame-ancestors` `'none'` — WebAssembly may compile (the built-in Office editor, BetterOffice); `eval`, inline script and remote scripts may not. Why inline styles stay: below | `hardening.ts` |
 | Permission handler: only clipboard write and fullscreen for the shell; camera, microphone, screen capture, geolocation, devices denied | `hardening.ts` |
 | Fuses: RunAsNode off, NODE_OPTIONS off, `--inspect` off, only load from asar, asar integrity on, cookie encryption on | `build/electron-builder.config.cjs` |
 | DevTools off in packaged builds | `manager.ts` |
+
+### Content-Security-Policy: why `style-src` keeps `'unsafe-inline'` (audit D-G17)
+
+Investigated on 2026-10-27, and kept, because removing it would change what people see:
+
+- **Mail and email previews inherit the shell's policy.** A message body (`mail/sanitize.ts` → `MessageView.tsx`), a
+  signature preview, Marketing's email designer and gallery and Billing's send preview are shown in sandboxed `srcdoc`
+  frames. A `srcdoc` (or `blob:`) frame inherits the policy of the page that made it, and a `<meta>` policy inside it
+  can only add to that, never relax it. HTML email is styled almost entirely by its own `<style>` blocks and `style=""`
+  attributes, which carry no nonce and cannot be hashed ahead of time; without `'unsafe-inline'` every such message
+  would show unstyled.
+- **The boot mark** in `src/index.html` is styled inline so it paints before any bundle is parsed (a hash would do for
+  it alone, but not for the frames above).
+- **React's `style={…}`** is not the problem: React sets styles through the CSSOM, which `style-src` does not govern;
+  nor is Tailwind, which builds to a stylesheet from `'self'`.
+
+A nonce does not help either: the frames' content is the sender's, not the app's. Doing it properly means moving
+message rendering out of the shell's document — a separate origin (an `app://mail-view` protocol, say) with its own
+policy that allows the message's styles and nothing else — so the shell itself could drop `'unsafe-inline'`. That is
+a change to how mail is shown, with its own tests, not a CSP edit.
+
+What inline style can do without script is limited (no script runs: `script-src` has no `'unsafe-inline'`, and
+`script-src-attr 'none'` refuses `onclick=""` outright); it is the residual risk accepted here. The rest of the policy
+was tightened at the same time: `script-src-attr 'none'` and `manifest-src 'none'` were added, and
+`tests/unit/electron/csp.test.ts` pins every `'none'` directive, the script sources and the style decision, so
+loosening any of them fails a test.
 
 ## IPC (§3.4, WF-05)
 
@@ -147,8 +173,9 @@ Being controlled is the main process's business, never a page's:
   files wait for unlock.
 - **Input helpers** are the system's own — PowerShell hosting a fixed C#
   class calling SendInput (Windows), osascript posting CGEvents (macOS, needs
-  Accessibility; typed text goes through System Events, so the app declares
-  Apple Events and macOS asks once, as Automation), xdotool (X11) — started
+  Accessibility; typed text is posted as key events carrying its characters,
+  and only a bridge without that call types through System Events, which is
+  why the app still declares Apple Events), xdotool (X11) — started
   only while control is live, with
   fixed scripts. They take numbers, key names from a prototype-free table and
   base64 text; nothing from the controller is put into a command line. One

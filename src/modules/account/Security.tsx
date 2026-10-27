@@ -8,9 +8,9 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Sheet } from '../../components/PageKit';
 import { clientLabel, K, useMfa, usePasskeys, useSessions, useSignIns, useTrustedDevices, type PasswordPolicy, type Passkey, type SessionRow, type SignIn, type TrustedDevice } from './api';
-import { Card, daysAgo, Head, Note, Pill } from './parts';
+import { Card, daysAgo, Head, Note, Pill } from '../../components/CardKit';
 import { BackupCodes, CodeBoxes, TwoFactorSheet } from './TwoFactor';
 
 /**
@@ -121,7 +121,7 @@ export default function Security() {
 }
 
 function Check({ tone, icon, title, sub }: { tone: 'good' | 'warn' | 'plain'; icon: string; title: string; sub: string }) {
-  const t = { good: 'bg-[#E6F6EE] text-[#1F7A4D] dark:bg-success-bg dark:text-success', warn: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning', plain: 'bg-subtle text-ink-2' }[tone];
+  const t = { good: 'bg-success-bg text-success dark:bg-success-bg dark:text-success', warn: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning', plain: 'bg-subtle text-ink-2' }[tone];
   return (
     <div className="flex items-center gap-3 rounded-[14px] border border-line bg-surface px-4 py-3">
       <span className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-full', t)}>

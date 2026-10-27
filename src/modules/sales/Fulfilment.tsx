@@ -7,7 +7,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Panel, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Panel, Sheet } from '../../components/PageKit';
 import { assignees, cancelNote, deliveredNote, dispatchNote, fetchFulfilmentBy, K, raiseDelivery, warehouses, ymd, type BoardNote, type BoardOrder, type Fulfilment as Board } from './api';
 import { OFFLINE_WRITE, useSalesOffline } from './offline';
 import { moneyFull, PriorityPill } from './parts';

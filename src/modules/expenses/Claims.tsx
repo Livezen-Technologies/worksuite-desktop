@@ -7,9 +7,9 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { ConfirmSheet, LoadFailed, Notice, ReasonSheet } from '../finance/parts';
-import { btnBad, btnGood, input, PageHead } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { ConfirmSheet, LoadFailed, Notice, ReasonSheet } from '../../components/RecordKit';
+import { btnBad, btnGood, input, PageHead } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, K, money } from './api';
 import { bulkDecide, CK, clean, fetchCategories, fetchClaims, fetchRelated, KIND_WORD, nextPage, selectionTotal, STATUSES, type ClaimFilters, type ClaimRow, type ClaimScope } from './claim-data';
 import { StatusPill, words } from './parts';
@@ -195,7 +195,7 @@ export default function Claims({ org, orgId, orgs, onGo, scope, openClaim }: Scr
       </div>
 
       {bulk && chosen.length ? (
-        <div className="flex flex-wrap items-center gap-2 self-start rounded-[9px] border border-[#C7D0F5] bg-[#EEF1FC] px-2.5 py-1.5 dark:border-[#2D3A66] dark:bg-[#16203E]" aria-label="Selected claims">
+        <div className="flex flex-wrap items-center gap-2 self-start rounded-[9px] border border-info-line bg-selection px-2.5 py-1.5 dark:border-primary-soft dark:bg-info-soft" aria-label="Selected claims">
           <b className="text-[12.5px] text-primary">
             {chosen.length} selected{chosenTotal ? ` · ${chosenTotal}` : ''}
           </b>
@@ -344,7 +344,7 @@ function Row({ c, person, bulk, checked, open, onCheck, onOpen }: { c: ClaimRow;
             <span className="font-mono text-[12px] text-ink-2">{c.claim_no ?? '—'}</span>
             {c.flagged ? (
               <span title="A policy rule fired on this claim" className="inline-flex">
-                <Icon name="warning" size={13} label="Flagged by a policy rule" className="text-[#E59A2F]" />
+                <Icon name="warning" size={13} label="Flagged by a policy rule" className="text-amber" />
               </span>
             ) : null}
             {c.kind !== 'expense' ? <Pill tone="grey">{KIND_WORD[c.kind]}</Pill> : null}

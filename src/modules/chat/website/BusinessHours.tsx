@@ -5,7 +5,7 @@ import { toast } from '../../../core/toasts';
 import { useTabTitle } from '../../../core/tab-context';
 import { Select } from '../../../components/Select';
 import { Button, Empty, ErrorNote, Spinner } from '../../../components/ui';
-import { Note } from '../../account/parts';
+import { Note } from '../../../components/CardKit';
 import { designOf, hoursOf, saveHours, weekOf, widgetsList, type HoursDay } from './widget/design';
 import { weekProblems, zoneLabel, zoneList } from './widget/hours';
 import { OpenNow, WeekChart, WeekDays } from './widget/HoursWeek';

@@ -9,7 +9,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Caps, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Caps, Field, input, PageHead, Sheet, SidePanel } from '../../components/PageKit';
 import { useOwners } from './Leads';
 import { crmCan } from './parts';
 import { Checkbox } from '../../components/Checkbox';
@@ -52,10 +52,10 @@ interface ImportResult {
 }
 
 const OUTCOME: Record<string, [string, string]> = {
-  created: ['New lead', 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success'],
+  created: ['New lead', 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success'],
   duplicate: ['Already here', 'bg-selection text-primary'],
-  refused: ['Refused', 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger'],
-  failed: ['Failed', 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger'],
+  refused: ['Refused', 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger'],
+  failed: ['Failed', 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger'],
   unknown: ['Unknown', 'bg-subtle text-ink-2'],
 };
 
@@ -397,7 +397,7 @@ function ImportSheet({ orgId, onClose, onDone }: { orgId: string | number | null
         {result ? (
           <div className="flex flex-col gap-2">
             <div className="flex gap-3 text-[13px] font-semibold">
-              <span className="text-[#145C39] dark:text-success">{result.counts.created} new</span>
+              <span className="text-success-ink dark:text-success">{result.counts.created} new</span>
               <span className="text-primary">{result.counts.duplicate} already here</span>
               <span className="text-danger">{result.counts.refused} refused</span>
             </div>
@@ -405,7 +405,7 @@ function ImportSheet({ orgId, onClose, onDone }: { orgId: string | number | null
               {result.preview ? 'Nothing has been written yet. ' : ''}Columns read: {result.columns.join(', ') || '—'}
             </span>
             <div className="max-h-[260px] overflow-y-auto rounded-[10px] border border-line scroll-thin">
-              <div className="flex gap-2 border-b border-line bg-[#F7F8FB] px-2.5 py-1.5 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
+              <div className="flex gap-2 border-b border-line bg-info-soft px-2.5 py-1.5 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
                 <span className="w-[50px]">Line</span>
                 <span className="min-w-0 flex-1">Who</span>
                 <span className="w-[200px]">What happens</span>

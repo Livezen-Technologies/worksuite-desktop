@@ -1,5 +1,5 @@
 import { cx } from '../../components/ui';
-import { StatusChip } from './parts';
+import { StatusChip } from '../../components/PageKit';
 
 /**
  * Resignations' shared shapes and the approval trail (HrResignations
@@ -99,7 +99,7 @@ export function Trail({ round }: { round: Round | undefined }) {
           <span
             className={cx(
               'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[11.5px] font-bold',
-              s.status === 'approved' ? 'bg-[#1F7A4D] text-white' : s.status === 'pending' ? 'bg-primary text-white' : s.status === 'rejected' || s.status === 'returned' ? 'bg-danger text-white' : 'bg-subtle text-ink-3',
+              s.status === 'approved' ? 'bg-success text-white' : s.status === 'pending' ? 'bg-primary text-white' : s.status === 'rejected' || s.status === 'returned' ? 'bg-danger text-white' : 'bg-subtle text-ink-3',
             )}
           >
             {s.position}

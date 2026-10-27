@@ -164,7 +164,7 @@ export function Checklist({ task, editable, onChanged }: { task: Detail; editabl
           }}
           aria-label="Add checklist item"
           placeholder="Add checklist item…"
-          className="h-8 rounded-[8px] border border-dashed border-[#B8C1DA] bg-transparent px-2.5 text-ink outline-none focus:border-solid focus:border-primary dark:border-line"
+          className="h-8 rounded-[8px] border border-dashed border-primary-soft bg-transparent px-2.5 text-ink outline-none focus:border-solid focus:border-primary dark:border-line"
         />
       ) : reason ? (
         <span className="text-[12px] text-ink-3">{reason}</span>

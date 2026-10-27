@@ -223,20 +223,20 @@ function Cart({ state, offered, onPhone, onNotMe }: { state: Extract<DisplayStat
 
   return (
     <>
-      <div className="flex min-h-[72px] items-center justify-between gap-3 border-b border-[#e2e8f0] px-[clamp(16px,2vw,32px)] py-3">
+      <div className="flex min-h-[72px] items-center justify-between gap-3 border-b border-line px-[clamp(16px,2vw,32px)] py-3">
         {state.customer ? (
           <>
             <div className="min-w-0 truncate text-[clamp(18px,2vw,28px)] font-extrabold" data-greeting>
               {t('pos.cd.hello', { name: state.customer })}
             </div>
             {state.kind === 'cart' ? (
-              <button type="button" onClick={onNotMe} className="shrink-0 rounded-full px-4 py-2 text-[clamp(14px,1.3vw,18px)] font-bold text-[#475569] underline">
+              <button type="button" onClick={onNotMe} className="shrink-0 rounded-full px-4 py-2 text-[clamp(14px,1.3vw,18px)] font-bold text-ink-2 underline">
                 {t('pos.cd.notYou')}
               </button>
             ) : null}
           </>
         ) : offered ? (
-          <button type="button" onClick={onPhone} className="flex h-[clamp(52px,5vw,72px)] w-full items-center justify-center gap-3 rounded-[16px] bg-[#0A6CFF] px-5 text-[clamp(17px,1.8vw,26px)] font-extrabold text-white">
+          <button type="button" onClick={onPhone} className="flex h-[clamp(52px,5vw,72px)] w-full items-center justify-center gap-3 rounded-[16px] bg-blue px-5 text-[clamp(17px,1.8vw,26px)] font-extrabold text-white">
             {t('pos.cd.phone.button')}
           </button>
         ) : (
@@ -248,7 +248,7 @@ function Cart({ state, offered, onPhone, onNotMe }: { state: Extract<DisplayStat
           <Line key={i} line={l} money={money} each={(n) => t('pos.cd.each', { n })} />
         ))}
       </ul>
-      <div className="shrink-0 border-t border-[#e2e8f0] bg-[#f8fafc] px-[clamp(16px,2vw,32px)] py-4 text-[clamp(14px,1.4vw,20px)]">
+      <div className="shrink-0 border-t border-line bg-rail px-[clamp(16px,2vw,32px)] py-4 text-[clamp(14px,1.4vw,20px)]">
         <Row label={t('pos.cd.subtotal')} value={money(state.subtotal)} />
         {state.discount ? <Row label={t('pos.cd.discount')} value={`−${money(state.discount)}`} /> : null}
         <Row label={t('pos.cd.tax')} value={money(state.tax)} />
@@ -262,9 +262,9 @@ function Cart({ state, offered, onPhone, onNotMe }: { state: Extract<DisplayStat
           <>
             <Big label={t('pos.cd.youPay')} value={`${state.currency} ${money(state.total)}`} />
             {state.kind === 'cart' && (state.points != null || state.tier) ? (
-              <div className="mt-2 text-[clamp(13px,1.2vw,17px)] text-[#475569]">{[state.tier, state.points != null ? t('pos.cd.points', { n: state.points }) : null].filter(Boolean).join(' · ')}</div>
+              <div className="mt-2 text-[clamp(13px,1.2vw,17px)] text-ink-2">{[state.tier, state.points != null ? t('pos.cd.points', { n: state.points }) : null].filter(Boolean).join(' · ')}</div>
             ) : null}
-            {state.kind === 'cart' && state.provisional ? <div className="mt-1 text-[clamp(12px,1.1vw,15px)] text-[#64748b]">{t('pos.provisional')}</div> : null}
+            {state.kind === 'cart' && state.provisional ? <div className="mt-1 text-[clamp(12px,1.1vw,15px)] text-slate">{t('pos.provisional')}</div> : null}
           </>
         )}
       </div>
@@ -274,11 +274,11 @@ function Cart({ state, offered, onPhone, onNotMe }: { state: Extract<DisplayStat
 
 function Line({ line, money, each }: { line: DisplayLine; money: (n: number) => string; each: (n: string) => string }) {
   return (
-    <li className="flex items-start gap-3 border-b border-[#f1f5f9] py-[clamp(8px,1vw,14px)]">
+    <li className="flex items-start gap-3 border-b border-subtle py-[clamp(8px,1vw,14px)]">
       <span className="w-[3.2em] shrink-0 font-mono text-[clamp(15px,1.5vw,22px)] font-bold tabular-nums">{line.quantity}×</span>
       <span className="min-w-0 flex-1">
         <span className="line-clamp-2 text-[clamp(15px,1.5vw,22px)] font-semibold break-words">{line.name}</span>
-        {line.price != null ? <span className="block font-mono text-[clamp(12px,1.1vw,16px)] text-[#64748b] tabular-nums">{each(money(line.price))}</span> : null}
+        {line.price != null ? <span className="block font-mono text-[clamp(12px,1.1vw,16px)] text-slate tabular-nums">{each(money(line.price))}</span> : null}
       </span>
       <span className="shrink-0 font-mono text-[clamp(15px,1.5vw,22px)] font-bold tabular-nums">{money(line.total)}</span>
     </li>
@@ -287,7 +287,7 @@ function Line({ line, money, each }: { line: DisplayLine; money: (n: number) => 
 
 function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`flex justify-between gap-4 py-0.5 ${strong ? 'font-bold' : 'text-[#475569]'}`}>
+    <div className={`flex justify-between gap-4 py-0.5 ${strong ? 'font-bold' : 'text-ink-2'}`}>
       <span>{label}</span>
       <span className="font-mono tabular-nums">{value}</span>
     </div>
@@ -296,7 +296,7 @@ function Row({ label, value, strong = false }: { label: string; value: string; s
 
 function Big({ label, value, tone }: { label: string; value: string; tone?: 'change' }) {
   return (
-    <div className={`mt-2 flex items-end justify-between gap-4 rounded-[16px] px-4 py-3 ${tone === 'change' ? 'bg-[#7FD8DF]' : 'bg-navy text-white'}`}>
+    <div className={`mt-2 flex items-end justify-between gap-4 rounded-[16px] px-4 py-3 ${tone === 'change' ? 'bg-primary-soft' : 'bg-navy text-white'}`}>
       <span className="text-[clamp(16px,1.7vw,24px)] font-bold">{label}</span>
       <span className="font-mono text-[clamp(30px,3.8vw,60px)] leading-none font-bold tabular-nums" data-total>
         {value}
@@ -311,18 +311,18 @@ function Done({ state }: { state: Extract<DisplayState, { kind: 'paid' }> }) {
     <div className="flex flex-1 flex-col justify-center gap-4 p-[clamp(20px,3vw,48px)]">
       <div className="text-[clamp(32px,4vw,60px)] font-extrabold">{t('pos.cd.thanks')}</div>
       {state.customer ? <div className="text-[clamp(18px,2vw,28px)] font-bold">{t('pos.cd.hello', { name: state.customer })}</div> : null}
-      <div className="text-[clamp(14px,1.5vw,20px)] text-[#64748b]">{t('pos.cd.total', { n: formatMoney(state.total, state.currency) })}</div>
-      <div className="text-[clamp(14px,1.5vw,20px)] text-[#64748b]">{t('pos.cd.paid', { n: formatMoney(state.paid, state.currency) })}</div>
+      <div className="text-[clamp(14px,1.5vw,20px)] text-slate">{t('pos.cd.total', { n: formatMoney(state.total, state.currency) })}</div>
+      <div className="text-[clamp(14px,1.5vw,20px)] text-slate">{t('pos.cd.paid', { n: formatMoney(state.paid, state.currency) })}</div>
       {state.points ? (
         <div className="text-[clamp(14px,1.5vw,20px)] font-bold text-primary">
           {[state.points.earned ? t('pos.cd.earned', { n: state.points.earned }) : null, state.points.balance != null ? t('pos.cd.points', { n: state.points.balance }) : null].filter(Boolean).join(' · ')}
         </div>
       ) : null}
-      <div className="rounded-[16px] bg-[#7FD8DF] px-5 py-4">
+      <div className="rounded-[16px] bg-primary-soft px-5 py-4">
         <div className="text-[clamp(16px,1.7vw,22px)] font-bold">{t('pos.cd.change')}</div>
         <div className="font-mono text-[clamp(36px,4.6vw,72px)] leading-none font-bold tabular-nums">{formatMoney(state.change)}</div>
       </div>
-      <div className="text-[clamp(14px,1.5vw,20px)] text-[#64748b]">{t('pos.cd.comeAgain')}</div>
+      <div className="text-[clamp(14px,1.5vw,20px)] text-slate">{t('pos.cd.comeAgain')}</div>
     </div>
   );
 }
@@ -405,7 +405,7 @@ export function PhoneEntry({
   if (sent) {
     body = <p className="text-center text-[clamp(20px,2.2vw,30px)] font-extrabold">{t('pos.cd.phone.sent')}</p>;
   } else if (asked && !answer) {
-    body = <p className="text-center text-[clamp(18px,2vw,26px)] font-bold text-[#475569]">{t('pos.cd.phone.looking')}</p>;
+    body = <p className="text-center text-[clamp(18px,2vw,26px)] font-bold text-ink-2">{t('pos.cd.phone.looking')}</p>;
   } else if (answer?.kind === 'error') {
     body = (
       <div className="flex flex-col items-center gap-5 text-center">
@@ -435,7 +435,7 @@ export function PhoneEntry({
       <div className="flex flex-col items-stretch gap-4">
         <p className="text-center text-[clamp(18px,2vw,26px)] font-bold">{t(one ? 'pos.cd.phone.isThisYou' : 'pos.cd.phone.pick')}</p>
         {one ? (
-          <div className="rounded-[16px] bg-[#EEF1FB] px-5 py-4 text-center text-[clamp(22px,2.6vw,36px)] font-extrabold" data-masked>
+          <div className="rounded-[16px] bg-selection px-5 py-4 text-center text-[clamp(22px,2.6vw,36px)] font-extrabold" data-masked>
             {one.masked}
           </div>
         ) : (
@@ -451,7 +451,7 @@ export function PhoneEntry({
                   poke();
                   setPicked(m.id);
                 }}
-                className={`rounded-[14px] px-5 py-3 text-[clamp(18px,2vw,28px)] font-extrabold ${picked === m.id ? 'bg-[#0A6CFF] text-white' : 'bg-[#EEF1FB]'}`}
+                className={`rounded-[14px] px-5 py-3 text-[clamp(18px,2vw,28px)] font-extrabold ${picked === m.id ? 'bg-blue text-white' : 'bg-selection'}`}
               >
                 {m.masked}
               </button>
@@ -477,10 +477,10 @@ export function PhoneEntry({
   } else {
     body = (
       <div className="flex flex-col items-stretch gap-3">
-        <div className={`rounded-[14px] border-2 px-4 py-3 text-center font-mono text-[clamp(26px,3vw,44px)] font-bold tracking-wider tabular-nums ${bad ? 'border-[#dc2626]' : 'border-[#cbd5e1]'}`} dir="ltr" aria-live="polite" data-typed>
+        <div className={`rounded-[14px] border-2 px-4 py-3 text-center font-mono text-[clamp(26px,3vw,44px)] font-bold tracking-wider tabular-nums ${bad ? 'border-red' : 'border-slate-line'}`} dir="ltr" aria-live="polite" data-typed>
           {typed || ' '}
         </div>
-        {bad ? <p className="text-center text-[clamp(14px,1.4vw,18px)] font-bold text-[#dc2626]">{t('pos.cd.phone.invalid')}</p> : <p className="text-center text-[clamp(13px,1.3vw,17px)] text-[#64748b]">{t('pos.cd.phone.hint')}</p>}
+        {bad ? <p className="text-center text-[clamp(14px,1.4vw,18px)] font-bold text-red">{t('pos.cd.phone.invalid')}</p> : <p className="text-center text-[clamp(13px,1.3vw,17px)] text-slate">{t('pos.cd.phone.hint')}</p>}
         <div className="grid grid-cols-3 gap-2" dir="ltr">
           {KEYS.map((k) => (
             <button
@@ -492,7 +492,7 @@ export function PhoneEntry({
                 setBad(false);
                 setTyped((v) => typePhone(v, k));
               }}
-              className="h-[clamp(52px,6.5vh,80px)] rounded-[14px] bg-[#EEF1FB] text-[clamp(22px,2.4vw,34px)] font-bold active:bg-[#dbe3f8]"
+              className="h-[clamp(52px,6.5vh,80px)] rounded-[14px] bg-selection text-[clamp(22px,2.4vw,34px)] font-bold active:bg-blue-bg"
             >
               {k === 'clear' ? 'C' : k === 'back' ? '⌫' : k}
             </button>
@@ -522,7 +522,7 @@ function Choice({ children, onClick, primary = false, disabled = false }: { chil
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`h-[clamp(52px,6vh,76px)] flex-1 rounded-[14px] px-4 text-[clamp(16px,1.7vw,24px)] font-extrabold disabled:opacity-40 ${primary ? 'bg-[#0A6CFF] text-white' : 'bg-[#e2e8f0] text-navy'}`}
+      className={`h-[clamp(52px,6vh,76px)] flex-1 rounded-[14px] px-4 text-[clamp(16px,1.7vw,24px)] font-extrabold disabled:opacity-40 ${primary ? 'bg-blue text-white' : 'bg-blue-bg text-navy'}`}
     >
       {children}
     </button>

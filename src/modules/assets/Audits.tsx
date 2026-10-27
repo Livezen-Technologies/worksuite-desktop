@@ -8,6 +8,7 @@ import { refusal, shortDate } from '../finance/api';
 import { BASE, checkAudit, completeAudit, fetchLookups, toCsv, type Audit, type AuditLine, type Can } from './api';
 import { Badge, Btn, Card, Field, Kbd, Note, PageHead, Table, input, td, useReadOnly } from './parts';
 import { call } from '../../core/bridge';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Audits (D18): the list, a new audit, and an audit run — scan each asset where it stands (the scanner works
@@ -155,7 +156,7 @@ function Run({ id, can, active }: { id: number; can: Can; active: boolean }) {
       <Card>
         <Table head={['Asset', 'Expected', 'Outcome', 'Condition', 'By']}>
           {lines.map((l) => (
-            <tr key={l.id} onClick={() => setSel(l.id)} className={cx('cursor-default', l.id === sel ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+            <tr tabIndex={0} onKeyDown={clickOnKey} key={l.id} onClick={() => setSel(l.id)} className={cx('cursor-default', l.id === sel ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
               <td className={td}><span className="font-mono text-[11px]">{l.asset_code}</span> {l.asset}</td>
               <td className={td}>{l.expected_location ?? '—'}</td>
               <td className={td}>{l.found === null ? (l.id === sel && !ro ? <span className="text-[11px] text-ink-3"><Kbd>F</Kbd> found · <Kbd>E</Kbd> elsewhere · <Kbd>M</Kbd> missing</span> : '—') : l.found ? <Badge status="available">{l.outcome === 'elsewhere' || l.note === 'Found elsewhere' ? `Elsewhere${l.actual_location ? ` · ${l.actual_location}` : ''}` : l.outcome === 'unexpected' ? 'Not expected here' : 'Found'}</Badge> : <Badge status="missing">Missing</Badge>}</td>

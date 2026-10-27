@@ -779,7 +779,7 @@ function TicketComposer({
         </div>
       ) : null}
       {rewrite ? (
-        <section aria-label={text('Writing assistant')} className="flex flex-col gap-1.5 rounded-[8px] border border-[#DDD6FE] bg-[#F5F3FF] px-3 py-2 text-[12.5px] dark:border-[#3B2F63] dark:bg-[#1A1530]">
+        <section aria-label={text('Writing assistant')} className="flex flex-col gap-1.5 rounded-[8px] border border-violet-line bg-info-soft px-3 py-2 text-[12.5px] dark:bg-rail">
           <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink-2">
             <AiBadge />
             {text(REWRITE_LABEL[rewrite.mode])}
@@ -821,7 +821,7 @@ function TicketComposer({
         <div
           className={cx(
             'rounded-[8px] border [&_[contenteditable]]:px-3 [&_[contenteditable]]:py-2 [&_[contenteditable]]:text-[13px]',
-            mode === 'note' ? 'border-[#F6D7B0] bg-[#FFFBF3] dark:border-[#5A3B14] dark:bg-[#21180B]' : 'border-line bg-surface',
+            mode === 'note' ? 'border-warning-line bg-rail dark:bg-danger-bg' : 'border-line bg-surface',
           )}
           onSelect={() => setCaret(richCaret(box.current))}
           onKeyUp={() => setCaret(richCaret(box.current))}

@@ -8,7 +8,7 @@ import { app } from '../../core/app-state';
 import { call } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
-import { Ask, type AskField } from '../garage/parts';
+import { Ask, type AskField } from '../../components/FormKit';
 import { codeOf, errorText, K, pPost, type ActionOption } from './api';
 
 /**

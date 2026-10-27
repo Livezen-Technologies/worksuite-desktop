@@ -8,11 +8,11 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { pictureUrl, useMe, UserPicture } from '../../components/UserPicture';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
-import { btn, btnPrimary } from '../hr/parts';
+import { btn, btnPrimary } from '../../components/PageKit';
 import type { OpenEditor } from './AccountPage';
 import { abilities, K, usePictures, useRefreshMe, type Picture } from './api';
 import { BACKGROUNDS, LOOKS } from './avatarArt';
-import { Card, Head, Note, Pill } from './parts';
+import { Card, Head, Note, Pill } from '../../components/CardKit';
 import { VisibilityCards } from './visibility';
 
 /**
@@ -192,7 +192,7 @@ function Tile({ p, src, caption, busy, asking, can, onUse, onSave, onAsk, onDele
       <div className="relative h-24 w-24">
         {src ? <img src={src} alt="" className="h-24 w-24 rounded-full object-cover ring-1 ring-line" /> : <span className="block h-24 w-24 rounded-full bg-subtle" />}
         <div className="absolute inset-0 flex items-center justify-center gap-1 rounded-full bg-[rgba(15,24,48,.55)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          <button type="button" disabled={busy} onClick={onUse} className="h-7 rounded-full bg-white px-2.5 text-[11.5px] font-bold text-[#23349E]">
+          <button type="button" disabled={busy} onClick={onUse} className="h-7 rounded-full bg-white px-2.5 text-[11.5px] font-bold text-primary">
             Use
           </button>
         </div>

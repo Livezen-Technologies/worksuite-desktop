@@ -4,8 +4,9 @@ import { Icon } from '../../components/Icon';
 import { Modal, cx } from '../../components/ui';
 import { call } from '../../core/bridge';
 import { sanitizeHtml } from '../../core/rich';
-import { Pill } from '../inventory/parts';
+import { Pill } from '../../components/ListKit';
 import { minutes, pct, when, type CatalogCard, type CourseCard, type Options } from './api';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /** Where the eLearning tab can go. */
 export type ElView =
@@ -110,21 +111,8 @@ export function Field({ label, hint, children, className }: { label: string; hin
   );
 }
 
-export function Tile({ label, value, hint, onClick }: { label: string; value: string; hint?: string; onClick?: () => void }) {
-  const body = (
-    <>
-      <div className="text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>
-      <div className="mt-1 text-[19px] leading-snug font-extrabold text-ink tabular-nums">{value}</div>
-      {hint ? <div className="text-[11.5px] text-ink-3">{hint}</div> : null}
-    </>
-  );
-  return onClick ? (
-    <button type="button" onClick={onClick} className="rounded-[12px] border border-line bg-surface p-3.5 text-left hover:border-primary/50">
-      {body}
-    </button>
-  ) : (
-    <div className="rounded-[12px] border border-line bg-surface p-3.5">{body}</div>
-  );
+export function Tile({ label, value, hint, onClick, icon, tone }: { label: string; value: string; hint?: string; onClick?: () => void; icon?: string; tone?: StatTone }) {
+  return <StatCard label={label} value={value} sub={hint} onClick={onClick} icon={icon} tone={tone} />;
 }
 
 export const input = 'h-9 w-full rounded-[8px] border border-line bg-surface px-3 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-primary';
@@ -146,7 +134,8 @@ function openLinks(ev: React.MouseEvent) {
 export function Rich({ html, className }: { html: string | null | undefined; className?: string }) {
   const clean = useMemo(() => sanitizeHtml(html ?? '', { profile: 'rich' }), [html]);
   if (!clean.trim()) return null;
-  return <div className={cx(RICH, className)} onClick={openLinks} dangerouslySetInnerHTML={{ __html: clean }} />;
+  // Links are <a> elements: Tab reaches them and Enter's click bubbles here.
+  return <div className={cx(RICH, className)} role="presentation" onClick={openLinks} dangerouslySetInnerHTML={{ __html: clean }} />;
 }
 
 /** A course as a tile: its catalogue facts, and where the learner stands in it. */

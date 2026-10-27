@@ -5,6 +5,7 @@ import { Button, cx } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
 import { addDays, fetchList, K, money, saveCsv, today, toCsv, type Appointment } from './api';
 import { Chips, Head, input, StatusPill, td, th, useDesk, useMove, useNow } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * D05 · Appointments list: queues (Today, Next 7 days, Pending, Late, Deposit due, Cancelled and no-shows), stylist and
@@ -121,7 +122,7 @@ export default function List({ active }: { active: boolean }) {
           </thead>
           <tbody>
             {shown.map((a, i) => (
-              <tr key={a.id} aria-selected={i === cursor} onClick={() => (setCursor(i), desk.open(a.id))} className={cx('cursor-pointer', i === cursor ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={a.id} aria-selected={i === cursor} onClick={() => (setCursor(i), desk.open(a.id))} className={cx('cursor-pointer', i === cursor ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
                 <td className={td}>
                   <Checkbox aria-label={`Select ${a.number}`} checked={picked.has(a.id)} onClick={(e) => e.stopPropagation()} onChange={() => setPicked((p) => { const n = new Set(p); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; })} />
                 </td>

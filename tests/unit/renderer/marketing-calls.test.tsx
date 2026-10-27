@@ -302,7 +302,7 @@ describe('a call campaign — the supervisor’s view (W10)', () => {
     const onQueue = vi.fn();
     show(<CallCampaignView id={3} options={options} onBack={vi.fn()} onQueue={onQueue} />);
     expect(await screen.findByText('In queue')).toBeTruthy();
-    expect(screen.getByText('214', { selector: 'b' })).toBeTruthy();
+    expect(within(screen.getByRole('group', { name: 'In queue' })).getByText('214')).toBeTruthy();
     expect(screen.getByText('Released after 20 min idle')).toBeTruthy();
     expect(screen.getByText('38.8% of calls made')).toBeTruthy();
     expect(screen.getByText('Created as Tasks')).toBeTruthy();

@@ -7,7 +7,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, Panel, row, Sheet, THead } from '../hr/parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, Panel, row, Sheet, THead } from '../../components/PageKit';
 import { useOrgs } from './api';
 import { COUPON_STATE, couponRuns, couponUsed, couponWorth, fetchCoupons, KM, removeCoupon, saveCoupon, type Coupon } from './manage';
 

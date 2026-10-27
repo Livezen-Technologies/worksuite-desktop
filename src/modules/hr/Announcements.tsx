@@ -7,10 +7,11 @@ import { plainText } from '../../core/rich';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { Icon } from '../../components/Icon';
-import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, row, Sheet, SidePanel, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, row, Sheet, SidePanel, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 import { OrgSwitcher } from '../../components/OrgSwitcher';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Announcements (HrAdminSheet "Announcements"; the web's HrAnnouncements):
@@ -206,7 +207,7 @@ export default function Announcements() {
                   <span title={(r.companies ?? []).map((c) => c.name).join(', ') || r.company}>{companiesLabel(r)}</span>
                 </Cell>
                 <Cell w={100} className="!overflow-visible">
-                  <StatusChip className={r.priority === 'urgent' ? '!bg-danger-bg !text-danger' : r.priority === 'important' ? '!bg-warning-bg !text-[#9A4A06] dark:!text-warning' : '!bg-subtle !text-ink-2'}>{text(PRIORITY[r.priority] ?? r.priority)}</StatusChip>
+                  <StatusChip className={r.priority === 'urgent' ? '!bg-danger-bg !text-danger' : r.priority === 'important' ? '!bg-warning-bg !text-warning-ink dark:!text-warning' : '!bg-subtle !text-ink-2'}>{text(PRIORITY[r.priority] ?? r.priority)}</StatusChip>
                 </Cell>
                 <Cell w={120} className="text-ink-2">{r.requires_ack ? 'Required' : 'Not required'}</Cell>
                 <Cell w={110} className="!overflow-visible">
@@ -365,7 +366,7 @@ export function CompanyPicker({ companies, value, onChange }: { companies: Compa
         {value.map((id) => {
           const c = companies.find((x) => x.id === id);
           return c ? (
-            <span key={id} className={cx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold', c.publish === false ? 'bg-warning-bg text-[#9A4A06] dark:text-warning' : 'bg-selection text-primary')} title={c.publish === false ? text('You may write drafts for {name} but not publish to it.', { name: c.name }) : undefined}>
+            <span key={id} className={cx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold', c.publish === false ? 'bg-warning-bg text-warning-ink dark:text-warning' : 'bg-selection text-primary')} title={c.publish === false ? text('You may write drafts for {name} but not publish to it.', { name: c.name }) : undefined}>
               {c.name}
               {c.publish === false ? <span className="font-normal">· {text('draft only')}</span> : null}
               <button type="button" aria-label={text('Remove {name}', { name: c.name })} onClick={() => flip(id)} className="rounded-full hover:bg-primary/10">
@@ -577,11 +578,11 @@ function ReportPanel({ row: r, onClose }: { row: AnnouncementRow; onClose: () =>
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {d ? (
         <>
-          <div className="grid grid-cols-3 gap-2">
-            <Kpi label="Sent to" value={d.stats.notified} />
-            <Kpi label="Read" value={d.stats.read} />
-            <Kpi label="Acknowledged" value={r.requires_ack ? d.stats.acknowledged : '—'} />
-          </div>
+          <StatGrid min={150}>
+            <Kpi icon="send" tone="blue" label="Sent to" value={d.stats.notified} />
+            <Kpi icon="eye" tone="violet" label="Read" value={d.stats.read} />
+            <Kpi icon="check-check" tone="green" label="Acknowledged" value={r.requires_ack ? d.stats.acknowledged : '—'} />
+          </StatGrid>
           <div className="flex flex-col">
             {d.people.map((p) => (
               <div key={p.id} className="flex items-center gap-2 border-b border-line/70 py-2 text-[12.5px] last:border-b-0">

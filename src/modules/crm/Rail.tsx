@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../../core/api';
 import { call } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
@@ -81,7 +81,7 @@ export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: 
         title={web ? `${i.label} — opens in your browser` : i.label}
         aria-current={on ? 'page' : undefined}
         onClick={() => (web ? void call('app:openInBrowser', { path: '/crm' }) : onPick(i.id))}
-        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
       >
         <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
         <Icon name={i.icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
@@ -96,7 +96,7 @@ export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: 
   };
 
   return (
-    <nav aria-label="CRM" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="CRM" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         <PrimaryActionButton data-guide="crm.new-lead" label="New lead" onClick={onNewLead} />
         <CrmSearch onOpen={onOpenHit} params={scope.params} orgKey={scope.orgId ?? 0} />
@@ -133,9 +133,17 @@ export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: 
 }
 
 /** Search the CRM (W10): leads, deals, accounts, contacts and quotes as you type, grouped; each opens its record. */
-function CrmSearch({ onOpen, params, orgKey }: { onOpen: (hit: Hit) => void; params: Record<string, number>; orgKey: number }) {
+export function CrmSearch({ onOpen, params, orgKey }: { onOpen: (hit: Hit) => void; params: Record<string, number>; orgKey: number }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
+  // The list closes a moment after the box loses focus (a click on a result lands first). The timer is cleared when
+  // the search goes, so it never sets state on an unmounted rail — the bug fixed in Mail's @mentions (audit D-G15).
+  const leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(leaving.current), []);
+  const leave = () => {
+    clearTimeout(leaving.current);
+    leaving.current = setTimeout(() => setOpen(false), 150);
+  };
   const needle = q.trim();
   const res = useQuery({
     queryKey: ['crm', 'search', needle, orgKey],
@@ -152,7 +160,7 @@ function CrmSearch({ onOpen, params, orgKey }: { onOpen: (hit: Hit) => void; par
           value={q}
           onChange={(e) => (setQ(e.target.value), setOpen(true))}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onBlur={leave}
           onKeyDown={(e) => e.key === 'Escape' && (setQ(''), setOpen(false))}
           placeholder="Search the CRM"
           aria-label="Search the CRM"

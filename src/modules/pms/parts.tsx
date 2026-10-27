@@ -1,7 +1,7 @@
 import { createContext, useContext, type CSSProperties, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
-import { Pill } from '../inventory/parts';
+import { Pill } from '../../components/ListKit';
 import { money, type Badge, type Options, type Property } from './api';
 import type { PmsView, Screen } from './routes';
 

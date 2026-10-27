@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Seg, Sheet, SidePanel } from '../../components/PageKit';
 import { cost, num, qty, stampWords, type Warehouse } from './api';
 import {
   BOM_LABEL,
@@ -36,7 +36,7 @@ import {
   type NewJobDraft,
   type RunDraft,
 } from './making';
-import { minWidth, Pill } from './parts';
+import { minWidth, Pill } from '../../components/ListKit';
 import { pick, ProductPick, WarehousePick } from './pickers';
 
 /**
@@ -195,7 +195,7 @@ function Jobs({ org, warehouse, canCost, openId, onOpen, initialStatus }: { org:
             const made = num(a.produced_qty) ?? 0;
             const scrap = num(a.scrapped_qty) ?? 0;
             return (
-              <button key={a.id} type="button" data-job={a.id} onClick={() => onOpen(Number(a.id))} className={cx(rowCls, openId === Number(a.id) && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+              <button key={a.id} type="button" data-job={a.id} onClick={() => onOpen(Number(a.id))} className={cx(rowCls, openId === Number(a.id) && 'bg-info-soft dark:bg-selection/40')}>
                 <b className="min-w-0 flex-1 truncate text-ink">{a.reference}</b>
                 <span className="flex shrink-0 flex-col" style={{ width: W.makes }}>
                   <span className="truncate text-ink">{a.product_name}</span>
@@ -211,7 +211,7 @@ function Jobs({ org, warehouse, canCost, openId, onOpen, initialStatus }: { org:
                   {qty(num(a.quantity) ?? 0)}
                   {a.unit ? ` ${a.unit}` : ''}
                 </span>
-                <span className={cx('shrink-0 text-right tabular-nums', made > 0 ? 'text-[#166534] dark:text-success' : 'text-ink-3')} style={{ width: W.made }}>
+                <span className={cx('shrink-0 text-right tabular-nums', made > 0 ? 'text-success-ink dark:text-success' : 'text-ink-3')} style={{ width: W.made }}>
                   {qty(made)}
                   {scrap > 0 ? <span className="text-danger"> · {qty(scrap)} scrap</span> : null}
                 </span>
@@ -321,7 +321,7 @@ function JobPanel({ id, currency, canCost, canMake, onClose, onRecipe }: { id: n
               {a.completed_at ? <span className="text-ink-3"> · completed {stampWords(a.completed_at)}</span> : null}
             </span>
             {short.length && !['completed', 'cancelled'].includes(a.status) ? (
-              <span role="status" className="rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-[#9A4A06] dark:text-warning">
+              <span role="status" className="rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning-ink dark:text-warning">
                 Short of {short.map((s) => `${s.code ?? s.component_name} (${qty(num(s.short) ?? 0)})`).join(', ')}. A run can use only what is here.
               </span>
             ) : null}
@@ -347,7 +347,7 @@ function JobPanel({ id, currency, canCost, canMake, onClose, onRecipe }: { id: n
                         {l.unit ? ` ${l.unit}` : ''}
                       </span>
                       <span className="w-[66px] text-right text-ink-2 tabular-nums">{qty(num(l.consumed_qty) ?? 0)}</span>
-                      <span className={cx('w-[76px] text-right tabular-nums', sh ? 'font-bold text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>{qty(num(l.available) ?? 0)}</span>
+                      <span className={cx('w-[76px] text-right tabular-nums', sh ? 'font-bold text-warning-ink dark:text-warning' : 'text-ink-2')}>{qty(num(l.available) ?? 0)}</span>
                       {canCost ? <span className="w-[84px] text-right text-ink-2 tabular-nums">{(num(l.consumed_qty) ?? 0) > 0 ? cost(l.cost_value) : '—'}</span> : null}
                     </div>
                   );
@@ -522,7 +522,7 @@ function Boms({ org, openId, onOpen }: { org: string; openId: number | null; onO
           <ErrorNote error={list.error} onRetry={() => void list.refetch()} />
         ) : rows.length ? (
           rows.map((b) => (
-            <button key={b.id} type="button" data-bom={b.id} onClick={() => onOpen(Number(b.id))} className={cx(rowCls, openId === Number(b.id) && 'bg-[#F4F6FE] dark:bg-selection/40')}>
+            <button key={b.id} type="button" data-bom={b.id} onClick={() => onOpen(Number(b.id))} className={cx(rowCls, openId === Number(b.id) && 'bg-info-soft dark:bg-selection/40')}>
               <span className="flex min-w-0 flex-1 flex-col">
                 <b className="truncate text-ink">{b.product_name}</b>
                 {b.code ? <span className="truncate text-[11px] text-ink-3">{b.code}</span> : null}

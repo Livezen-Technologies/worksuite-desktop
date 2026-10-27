@@ -6,7 +6,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, PageHead, Panel, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, PageHead, Panel, Sheet } from '../../components/PageKit';
 import Printers from './Printers';
 import { lookupProducts } from './api';
 import { allChecked, askRates, bookAndPrint, BOXES, deskReducer, EMPTY, isNoteCode, parseWeight, type DeskLine } from './desk';

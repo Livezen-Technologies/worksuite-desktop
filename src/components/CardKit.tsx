@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { cx } from '../../components/ui';
+import { cx } from './ui';
 
 /**
  * My account's building blocks, in the designs' form: white cards with a
  * 14.5 px heading, round pills, and label-and-value grids. Buttons, fields
- * and sheets are People's (hr/parts), so the two areas look the same.
+ * and sheets are the page kit's (PageKit), so the two areas look the same. It was
+ * `account/parts`; Chat and Notifications draw the same cards (audit D-G08).
  */
 
 export function Card({ title, action, children, className, icon }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; icon?: ReactNode }) {
@@ -23,11 +24,11 @@ export function Card({ title, action, children, className, icon }: { title?: Rea
 }
 
 const PILL = {
-  green: 'bg-[#E6F6EE] text-[#1F7A4D] dark:bg-success-bg dark:text-success',
-  indigo: 'bg-[#EEF1FC] text-[#23349E] dark:bg-selection dark:text-primary',
-  grey: 'bg-[#F1F3F8] text-[#3A4158] dark:bg-subtle dark:text-ink-2',
-  amber: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
-  red: 'bg-[#FDF0EE] text-[#B42318] dark:bg-danger-bg dark:text-danger',
+  green: 'bg-success-bg text-success dark:bg-success-bg dark:text-success',
+  indigo: 'bg-selection text-primary dark:bg-selection dark:text-primary',
+  grey: 'bg-slate-bg text-slate-ink dark:bg-subtle dark:text-ink-2',
+  amber: 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning',
+  red: 'bg-danger-bg text-danger dark:bg-danger-bg dark:text-danger',
 } as const;
 
 export function Pill({ children, tone = 'grey', dot, className }: { children: ReactNode; tone?: keyof typeof PILL; dot?: string; className?: string }) {
@@ -80,10 +81,10 @@ export function SettingRow({ label, hint, children, className }: { label: ReactN
 
 export function Note({ children, tone = 'indigo', className }: { children: ReactNode; tone?: 'indigo' | 'amber' | 'red' | 'green'; className?: string }) {
   const t = {
-    indigo: 'bg-[#EEF1FC] text-[#23349E] dark:bg-selection dark:text-primary',
-    amber: 'bg-[#FFF8E6] text-[#8A4B00] dark:bg-warning-bg dark:text-warning',
-    red: 'bg-[#FDF0EE] text-[#B42318] dark:bg-danger-bg dark:text-danger',
-    green: 'bg-[#E6F6EE] text-[#1F7A4D] dark:bg-success-bg dark:text-success',
+    indigo: 'bg-selection text-primary dark:bg-selection dark:text-primary',
+    amber: 'bg-warning-bg text-yellow-ink dark:bg-warning-bg dark:text-warning',
+    red: 'bg-danger-bg text-danger dark:bg-danger-bg dark:text-danger',
+    green: 'bg-success-bg text-success dark:bg-success-bg dark:text-success',
   }[tone];
   return <div className={cx('rounded-[10px] px-3 py-2.5 text-[12.5px] leading-[1.5]', t, className)}>{children}</div>;
 }

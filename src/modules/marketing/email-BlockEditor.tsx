@@ -52,7 +52,7 @@ const IN_FOOTER = new Set(['unsubscribe_url', 'preferences_url']);
  * white paper. These are the email's colours, not the app's, in either theme.
  */
 const PAPER = cx(
-  'text-[16px] leading-[1.6] [&_a]:text-[#1d4ed8] [&_a]:underline [&_blockquote]:border-l-[3px] [&_blockquote]:border-[#e5e7eb] [&_blockquote]:pl-3',
+  'text-[16px] leading-[1.6] [&_a]:text-brand-soft [&_a]:underline [&_blockquote]:border-l-[3px] [&_blockquote]:border-line [&_blockquote]:pl-3',
   '[&_h1]:my-[0.67em] [&_h1]:text-[2em] [&_h1]:leading-tight [&_h1]:font-bold [&_h2]:my-[0.83em] [&_h2]:text-[1.5em] [&_h2]:leading-tight [&_h2]:font-bold',
   '[&_h3]:my-[1em] [&_h3]:text-[1.17em] [&_h3]:font-bold [&_li]:my-0.5 [&_ol]:my-[1em] [&_ol]:list-decimal [&_ol]:pl-[1.5em] [&_p]:my-[1em]',
   '[&_ul]:my-[1em] [&_ul]:list-disc [&_ul]:pl-[1.5em] [&_img]:max-w-full [&_table]:border-collapse',
@@ -531,7 +531,7 @@ function MergeTags({ tags, html, alsoText, readOnly, onInsert }: { tags: Pair[];
               </li>
             ))}
             {[...used.entries()].filter(([t]) => !unknown.includes(t)).map(([t, safe]) => (
-              <li key={t} className={cx('flex items-start gap-1.5', safe || IN_FOOTER.has(t) ? 'text-ink-2' : 'text-[#9A4A06] dark:text-warning')}>
+              <li key={t} className={cx('flex items-start gap-1.5', safe || IN_FOOTER.has(t) ? 'text-ink-2' : 'text-warning-ink dark:text-warning')}>
                 <Icon name={safe || IN_FOOTER.has(t) ? 'check' : 'warning'} size={14} className="mt-0.5 shrink-0" />
                 <span>
                   <code className="font-mono">{`{{${t}}}`}</code> {safe ? 'has a fallback' : IN_FOOTER.has(t) ? 'is filled in for everyone' : 'has no fallback: anyone without one sees nothing there'}
@@ -552,7 +552,7 @@ function NoneChosen({ blocks }: { blocks: Block[] }) {
       <h3 className="m-0 text-[15px] font-bold text-ink">Properties</h3>
       <p className="m-0 text-[12.5px] text-ink-3">Choose a block in the email to change it, or add one from the left. Text is typed where it shows; on a chosen block, Alt+↑ and Alt+↓ move it and Delete removes it.</p>
       {noAlt > 0 ? (
-        <p className="m-0 rounded-[8px] bg-warning-bg px-2.5 py-2 text-[12px] text-[#9A4A06] dark:text-warning">
+        <p className="m-0 rounded-[8px] bg-warning-bg px-2.5 py-2 text-[12px] text-warning-ink dark:text-warning">
           {noAlt === 1 ? 'A picture has' : `${noAlt} pictures have`} no alt text. The pre-send check warns about it: a screen reader cannot say what it shows, and nobody sees it while pictures are off.
         </p>
       ) : null}
@@ -658,7 +658,7 @@ function fileName(src: string): string {
 
 function Warn({ id, children }: { id?: string; children: ReactNode }) {
   return (
-    <p id={id} className="m-0 flex gap-1.5 text-[11.5px] text-[#9A4A06] dark:text-warning">
+    <p id={id} className="m-0 flex gap-1.5 text-[11.5px] text-warning-ink dark:text-warning">
       <Icon name="warning" size={13} className="mt-0.5 shrink-0" />
       <span>{children}</span>
     </p>

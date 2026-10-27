@@ -8,10 +8,11 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btnPrimary, Caps, Field, input, PageHead } from '../hr/parts';
+import { btnPrimary, Field, input } from '../../components/PageKit';
 import type { CrmSettings } from './api';
 import { crmCan } from './parts';
 import { PipelinesEditor } from './Pipelines';
+import { SectionHeader, SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * CRM settings (CrmAdminSheet · General): quote numbering, the default
@@ -58,19 +59,23 @@ export default function Settings() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto scroll-thin">
-      <PageHead title="CRM settings" sub={canEdit ? 'For the whole installation' : 'Read-only — somebody with CRM settings can change these'}>
-        {canEdit ? (
-          <button type="button" className={btnPrimary} disabled={!draft || busy} onClick={() => void save()}>
-            Save
-          </button>
-        ) : null}
-      </PageHead>
+      <SectionHeader
+        level={1}
+        title="CRM settings"
+        hint={canEdit ? 'For the whole installation' : 'Read-only — somebody with CRM settings can change these'}
+        actions={
+          canEdit ? (
+            <button type="button" className={btnPrimary} disabled={!draft || busy} onClick={() => void save()}>
+              Save
+            </button>
+          ) : null
+        }
+      />
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {s ? (
-        <div className="flex max-w-[760px] flex-col gap-5 rounded-[12px] border border-line bg-surface p-5">
-          <section className="flex flex-col gap-3">
-            <Caps>Quotes</Caps>
-            <div className="grid grid-cols-3 gap-3">
+        <div className="flex max-w-[760px] flex-col">
+          <SettingsGroup title="Quotes">
+            <div className="grid grid-cols-3 gap-3 px-[18px] py-3.5">
               {text('quote_prefix', 'Quote prefix', 'Letters and digits')}
               {num('number_pad', 'Number padding', 1, 8, `${s.quote_prefix || 'QUO'}-${'1'.padStart(s.number_pad || 4, '0')}`)}
               <Field label="Default currency">
@@ -79,9 +84,9 @@ export default function Settings() {
               {num('quote_valid_days', 'Quote valid days', 1, 365)}
               {num('stale_deal_days', 'Stale deal days', 1, 365, 'A deal with no stage change this long counts as stalled')}
             </div>
-          </section>
-          <section className="flex flex-col gap-3">
-            <Caps>Company on quotes</Caps>
+          </SettingsGroup>
+          <SettingsGroup title="Company on quotes">
+            <div className="flex flex-col gap-3 px-[18px] py-3.5">
             <div className="grid grid-cols-2 gap-3">
               {text('company_name', 'Company name')}
               {text('company_tax_no', 'Tax no.')}
@@ -89,23 +94,27 @@ export default function Settings() {
               {text('company_phone', 'Phone')}
               {text('company_email', 'Email')}
             </div>
-            <span className={cx('flex items-center gap-1.5 text-[12px]', s.letterhead_configured ? 'text-[#145C39] dark:text-success' : 'text-ink-3')}>
+            <span className={cx('flex items-center gap-1.5 text-[12px]', s.letterhead_configured ? 'text-success' : 'text-ink-3')}>
               <Icon name={s.letterhead_configured ? 'check' : 'info'} size={13} />
               {s.letterhead_configured ? 'Quotes print with this letterhead.' : 'Quotes print without a letterhead until a company name is set.'}
             </span>
-          </section>
-          <section className="flex flex-col gap-3">
-            <Caps>Terms</Caps>
+            </div>
+          </SettingsGroup>
+          <SettingsGroup title="Terms">
+            <div className="px-[18px] py-3.5">
             <Field label="Quote terms" hint="Printed on quotes that have none of their own">
               <textarea value={s.quote_terms} disabled={!canEdit} onChange={(e) => set('quote_terms', e.target.value)} rows={4} aria-label="Quote terms" className={cx(input, 'h-auto py-2')} />
             </Field>
-          </section>
+            </div>
+          </SettingsGroup>
         </div>
       ) : null}
       {q.data || q.error ? (
-        <div className="flex max-w-[760px] flex-col gap-3 rounded-[12px] border border-line bg-surface p-5">
+        <SettingsGroup className="max-w-[760px]">
+          <div className="px-[18px] py-3.5 flex flex-col gap-3">
           <PipelinesEditor canEdit={canEdit} />
-        </div>
+          </div>
+        </SettingsGroup>
       ) : null}
     </div>
   );
@@ -129,16 +138,17 @@ export function Access() {
   const q = useQuery({ queryKey: ['crm', 'access'], queryFn: ({ signal }) => apiGet<ModuleAccess>('/api/access/module/Crm', undefined, signal) });
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto scroll-thin">
-      <PageHead title="My access · CRM" sub="Read-only. Ask an administrator to change what you can do." />
+      <SectionHeader level={1} title="My access · CRM" hint="Read-only. Ask an administrator to change what you can do." />
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.data ? (
-        <div className="flex max-w-[640px] flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
+        <SettingsGroup className="max-w-[640px]">
+          <div className="flex flex-col">
           {q.data.why ? <p className="m-0 border-b border-line px-4 py-3 text-[12.5px] text-ink-2">{q.data.why}</p> : null}
           {q.data.permissions.map((p) => {
             const has = crmCan(perms, p.slug);
             return (
               <div key={p.slug} className="flex items-center gap-3 border-b border-line/60 px-4 py-2.5 text-[13px] last:border-b-0">
-                <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full', has ? 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-3')}>
+                <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full', has ? 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success' : 'bg-subtle text-ink-3')}>
                   <Icon name={has ? 'check' : 'minus'} size={13} />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
@@ -149,7 +159,8 @@ export function Access() {
               </div>
             );
           })}
-        </div>
+          </div>
+        </SettingsGroup>
       ) : null}
     </div>
   );

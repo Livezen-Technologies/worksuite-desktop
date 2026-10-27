@@ -116,7 +116,7 @@ export function DiscountEditor({
               onChange={(e) => setReason(e.target.value)}
               placeholder={t('pos.disc.reasonHint')}
               aria-label={t('pos.disc.reason')}
-              className="h-touch rounded-[10px] bg-pos-panel px-3 text-[14px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none"
+              className="h-touch rounded-[10px] bg-pos-panel px-3 text-[14px] shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none"
             />
           </label>
           <PosButton tone="danger" className="h-touch-md" onClick={() => setValue('')}>
@@ -218,7 +218,7 @@ export function CouponDialog({
               void apply();
             }
           }}
-          className="h-touch-md min-w-0 flex-1 rounded-[12px] bg-pos-panel px-3.5 font-mono text-[16px] text-ink shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+          className="h-touch-md min-w-0 flex-1 rounded-[12px] bg-pos-panel px-3.5 font-mono text-[16px] text-ink shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
         />
         <PosButton tone="primary" className="h-touch-md px-6 text-[15px]" disabled={!ready} onClick={() => void apply()}>
           {busy ? <Icon name="spinner" size={16} className="animate-spin" /> : null}

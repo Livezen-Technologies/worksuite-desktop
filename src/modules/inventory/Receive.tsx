@@ -5,7 +5,7 @@ import { useWedge } from '../../core/scanner';
 import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, input, PageHead } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, input, PageHead } from '../../components/PageKit';
 import { fetchOrderFull, OFFLINE_WRITE, refreshPurchase, usePurchaseCan, usePurchaseOffline } from '../purchase/api';
 import { fetchOrders, fetchReceipt, orderAct, postReceipt, type PurchaseOrder } from '../purchase/buying';
 import { approvalOf, refusalText } from '../purchase/chain';
@@ -13,7 +13,8 @@ import { EMPTY, isOrderCode, lineDone, postLines, rcvReducer, receiveBody, total
 import { num, qty } from './api';
 import { labelsToPrint, leftWords, knownSerialText, knownUnit, progress, serialLineFor } from './receiving';
 import { printLabels } from './labels';
-import { Pill } from './parts';
+import { Pill } from '../../components/ListKit';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Receiving with a scanner (the "Desktop receiving" design): scan the purchase order, then each item — or each unit's
@@ -211,7 +212,7 @@ export default function Receive({ org, orderId, onOrder, onReceipt, onOpenOrder 
           ) : null}
         </PageHead>
 
-        <div className="flex min-h-[60px] items-center gap-3.5 rounded-[12px] bg-[#0f172a] px-[18px] py-2 text-white dark:bg-[#0b1222]">
+        <div className="flex min-h-[60px] items-center gap-3.5 rounded-[12px] bg-primary px-[18px] py-2 text-white dark:bg-ground">
           <label htmlFor="receive-scan" className="shrink-0 text-[14px] font-bold">
             {!s.order ? 'Scan the order' : serialMode ? 'Scan serials' : 'Scan'}
           </label>
@@ -229,15 +230,15 @@ export default function Receive({ org, orderId, onOrder, onReceipt, onOpenOrder 
             placeholder={s.order ? 'An item, or a unit’s serial' : 'PO number'}
             autoComplete="off"
             spellCheck={false}
-            className="h-9 w-[240px] rounded-[8px] border border-white/20 bg-white/10 px-3 font-mono text-[14px] text-white outline-none placeholder:text-[#94a3b8] focus:border-[#60a5fa]"
+            className="h-9 w-[240px] rounded-[8px] border border-white/20 bg-white/10 px-3 font-mono text-[14px] text-white outline-none placeholder:text-ink-4 focus:border-indigo-bright"
           />
           <div className="flex min-w-0 flex-1 flex-col" role="status" aria-live="polite">
-            <span className={cx('truncate text-[14px] font-semibold', s.message && !s.message.ok && 'text-[#fca5a5]')}>{s.message?.text ?? (s.order ? 'Ready — scan the first item.' : 'Ready for a scan.')}</span>
-            <span className="truncate text-[12.5px] text-[#cbd5e1]">
+            <span className={cx('truncate text-[14px] font-semibold', s.message && !s.message.ok && 'text-stage-danger')}>{s.message?.text ?? (s.order ? 'Ready — scan the first item.' : 'Ready for a scan.')}</span>
+            <span className="truncate text-[12.5px] text-stage-gray-ink">
               {s.order ? [active ? `Line: ${active.name}` : null, `${t.accepted + t.rejected} of ${t.expected} counted`, t.rejected ? `${t.rejected} turned away` : null, t.held ? `${t.held} on hold` : null].filter(Boolean).join(' · ') : 'A scanner works wherever the focus is.'}
             </span>
           </div>
-          <span className="hidden shrink-0 text-[12.5px] text-[#cbd5e1] xl:inline">F2 damaged · F3 quality hold</span>
+          <span className="hidden shrink-0 text-[12.5px] text-stage-gray-ink xl:inline">F2 damaged · F3 quality hold</span>
         </div>
 
         {orderId && order.isLoading ? <Spinner /> : null}
@@ -267,7 +268,7 @@ export default function Receive({ org, orderId, onOrder, onReceipt, onOpenOrder 
                     const on = s.active === l.lineId;
                     const done = lineDone(l);
                     return (
-                      <tr key={l.lineId} data-line={l.lineId} onClick={() => dispatch({ type: 'focus', lineId: l.lineId })} className={cx('cursor-default border-b border-line/60 last:border-b-0', on && 'bg-[#eff6ff] dark:bg-selection/40')}>
+                      <tr tabIndex={0} onKeyDown={clickOnKey} key={l.lineId} data-line={l.lineId} onClick={() => dispatch({ type: 'focus', lineId: l.lineId })} className={cx('cursor-default border-b border-line/60 last:border-b-0', on && 'bg-info-soft dark:bg-selection/40')}>
                         <td className="px-3 py-2">
                           <span className="flex items-center gap-2">
                             <b className="text-ink">{l.name}</b>
@@ -275,7 +276,7 @@ export default function Receive({ org, orderId, onOrder, onReceipt, onOpenOrder 
                             {l.rejected ? <Pill tone="red">{l.rejected} turned away</Pill> : null}
                           </span>
                           <span className="mt-1.5 block h-1.5 w-[160px] overflow-hidden rounded-full bg-subtle" role="progressbar" aria-label={`${l.name} received`} aria-valuenow={progress(l)} aria-valuemin={0} aria-valuemax={100}>
-                            <span className={cx('block h-full', l.hold ? 'bg-[#d97706]' : done ? 'bg-[#16a34a]' : 'bg-primary')} style={{ width: `${progress(l)}%` }} />
+                            <span className={cx('block h-full', l.hold ? 'bg-amber-strong' : done ? 'bg-green' : 'bg-primary')} style={{ width: `${progress(l)}%` }} />
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right text-ink-2 tabular-nums">{qty(l.expected, l.unit)}</td>
@@ -302,7 +303,7 @@ export default function Receive({ org, orderId, onOrder, onReceipt, onOpenOrder 
                     <span className="w-[64px] text-ink-3 tabular-nums">{x.at}</span>
                     <span className="w-[140px] truncate font-mono text-ink">{x.code}</span>
                     <span className="min-w-0 flex-1 truncate text-ink-2">{x.name ?? ''}</span>
-                    <span className={cx('shrink-0', x.outcome === 'refused' || x.outcome === 'rejected' ? 'text-danger' : x.outcome === 'held' ? 'text-warning-ink' : 'text-[#166534] dark:text-success')}>{x.outcome === 'refused' ? 'refused' : x.text}</span>
+                    <span className={cx('shrink-0', x.outcome === 'refused' || x.outcome === 'rejected' ? 'text-danger' : x.outcome === 'held' ? 'text-warning-ink' : 'text-success-ink dark:text-success')}>{x.outcome === 'refused' ? 'refused' : x.text}</span>
                   </span>
                 ))}
               </section>

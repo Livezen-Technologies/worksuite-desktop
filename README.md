@@ -30,6 +30,7 @@ accept `http://localhost:<port>`; packaged builds accept HTTPS only.
 | `npm run typecheck` | TypeScript (strict) for the main process and the renderer |
 | `npm run lint` | ESLint, including React Compiler rules |
 | `npm test` | Unit tests (Vitest, run under Electron's own Node 24) |
+| `npm run test:coverage` | The unit tests with line coverage (v8): `coverage/index.html`, and a table by module from `node scripts/coverage-summary.mjs`; CI holds it to the floors in `vitest.config.ts` |
 | `npm run e2e` | End-to-end smoke test against a real server (see below) |
 | `npm run build` | Production bundles in `out/` |
 | `npm run dist:dir` | An unpacked app for this machine in `release/` |
@@ -49,6 +50,18 @@ diagnostics, the lock screen, sign-out — checks the security boundaries
 (no Node in the renderer, forged IPC refused, CSP enforced, IPC refused while
 locked, no token in the diagnostic bundle) and saves a screenshot of each
 screen to `test-results/e2e/`.
+
+**In CI** (`.github/workflows/e2e.yml`): the Connection & Startup e2e
+(`tests/e2e/accounts.mjs`) runs on every pull request, on `main` and nightly
+against servers on the runner — `tests/e2e/mock-cloud.mjs` and an enterprise
+stand-in — so it needs no secrets; a check it skips fails the job. The smoke
+above needs a real server, so it runs nightly and by hand, and only with the
+`WS_E2E_SERVER`, `WS_E2E_EMAIL` and `WS_E2E_PASSWORD` secrets (a test account);
+without them the run says so in a notice and reports nothing as passed. Locally:
+
+```bash
+npm run build && WS_E2E_ACCOUNTS=1 ELECTRON_RUN_AS_NODE=1 xvfb-run -a npx electron tests/e2e/accounts.mjs
+```
 
 ### Display scaling
 

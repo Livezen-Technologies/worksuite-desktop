@@ -4,8 +4,9 @@ import { apiGet, apiPost, apiPut } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnBad, btnPrimary, btnSmall, Empty, Facts, Field, input, Kpi, PageHead, Panel, Seg, Sheet, StatusChip } from './parts';
+import { btn, btnBad, btnPrimary, btnSmall, Empty, Facts, Field, input, Kpi, PageHead, Panel, Seg, Sheet, StatusChip } from '../../components/PageKit';
 import { ago } from './Devices';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * HR › Attendance › Devices on the desktop: the attendance device framework (the web's DeviceCenter) —
@@ -129,18 +130,18 @@ function Dashboard({ onGo }: { onGo: (v: DeviceView) => void }) {
           <b>{line}</b> — punches from device users not linked to an employee. Link them and their history is applied.
         </button>
       ) : null}
-      <div className="grid grid-cols-5 gap-2">
-        <Kpi label="Devices" value={d.total} onClick={() => onGo('devices')} />
-        <Kpi label="Online" value={d.online} tone="green" />
-        <Kpi label="Offline" value={d.offline} tone={d.offline ? 'red' : undefined} />
-        <Kpi label="Warnings" value={d.warning + d.drift} tone={d.warning + d.drift ? 'amber' : undefined} />
-        <Kpi label="Sync errors" value={d.errors} tone={d.errors ? 'red' : undefined} onClick={() => onGo('sync')} />
-        <Kpi label="Punches today" value={d.punches_today} onClick={() => onGo('live')} />
-        <Kpi label="Jobs queued" value={d.jobs_queued} onClick={() => onGo('sync')} />
-        <Kpi label="Jobs failed" value={d.jobs_failed} tone={d.jobs_failed ? 'red' : undefined} onClick={() => onGo('sync')} />
-        <Kpi label="Needs review" value={d.needs_review} />
-        <Kpi label="Gateways online" value={d.gateways_online} onClick={() => onGo('gateways')} />
-      </div>
+      <StatGrid min={180}>
+        <Kpi icon="fingerprint" tone="blue" label="Devices" value={d.total} onClick={() => onGo('devices')} />
+        <Kpi icon="wifi" label="Online" value={d.online} tone="green" />
+        <Kpi icon="wifi-off" label="Offline" value={d.offline} tone={d.offline ? 'red' : undefined} />
+        <Kpi icon="warning" label="Warnings" value={d.warning + d.drift} tone={d.warning + d.drift ? 'amber' : undefined} />
+        <Kpi icon="refresh" label="Sync errors" value={d.errors} tone={d.errors ? 'red' : undefined} onClick={() => onGo('sync')} />
+        <Kpi icon="hand" tone="violet" label="Punches today" value={d.punches_today} onClick={() => onGo('live')} />
+        <Kpi icon="list-todo" tone="cyan" label="Jobs queued" value={d.jobs_queued} onClick={() => onGo('sync')} />
+        <Kpi icon="x-circle" label="Jobs failed" value={d.jobs_failed} tone={d.jobs_failed ? 'red' : undefined} onClick={() => onGo('sync')} />
+        <Kpi icon="eye" tone="amber" label="Needs review" value={d.needs_review} />
+        <Kpi icon="server" tone="blue" label="Gateways online" value={d.gateways_online} onClick={() => onGo('gateways')} />
+      </StatGrid>
     </div>
   );
 }

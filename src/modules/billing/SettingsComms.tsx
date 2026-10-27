@@ -7,9 +7,10 @@ import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Panel, Seg, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Seg, Sheet } from '../../components/PageKit';
 import { offsetLabel } from './actions';
 import { fetchReminderLog, fetchReminders, fetchTemplates, KA, PLACEHOLDERS, removeTemplate, saveReminders, saveTemplate, sortSteps, TEMPLATE_KINDS, type Channel, type MessageTemplate, type ReminderSettings, type TemplateKind } from './admin';
+import { SettingsGroup } from '../../components/SettingsKit';
 
 /**
  * Payment reminders (dunning, W13) and the message templates they and the
@@ -47,10 +48,7 @@ export function Reminders({ may, org }: { may: boolean; org: string }) {
   };
   return (
     <>
-      <Panel
-        title="Payment reminders"
-        sub="Remind customers automatically, before and after an invoice falls due."
-        action={
+      <SettingsGroup title="Payment reminders" description="Remind customers automatically, before and after an invoice falls due." actions={
           may ? (
             <span className="flex gap-1.5">
               {draft ? (
@@ -63,9 +61,8 @@ export function Reminders({ may, org }: { may: boolean; org: string }) {
               </button>
             </span>
           ) : null
-        }
-        bodyClassName="flex flex-col gap-2 px-3.5 py-3"
-      >
+        } className="!mb-0">
+        <div className="min-h-0 flex-1 flex flex-col gap-2 px-3.5 py-3">
         <label className="flex items-center gap-2 font-semibold text-ink">
           <Checkbox checked={s.enabled} disabled={!may} onChange={(e) => edit({ enabled: e.target.checked })} />
           Send reminders on this schedule
@@ -76,7 +73,7 @@ export function Reminders({ may, org }: { may: boolean; org: string }) {
               <span
                 className={cx(
                   'flex h-7 w-11 shrink-0 items-center justify-center rounded-[8px] font-bold tabular-nums',
-                  x.offset_days < 0 ? 'bg-selection text-primary' : x.offset_days >= 30 ? 'bg-danger-bg text-danger' : x.offset_days > 0 ? 'bg-warning-bg text-[#9A4A06] dark:text-warning' : 'bg-selection text-primary',
+                  x.offset_days < 0 ? 'bg-selection text-primary' : x.offset_days >= 30 ? 'bg-danger-bg text-danger' : x.offset_days > 0 ? 'bg-warning-bg text-warning-ink dark:text-warning' : 'bg-selection text-primary',
                 )}
               >
                 {x.offset_days === 0 ? '0' : offsetLabel(x.offset_days)}
@@ -148,8 +145,10 @@ export function Reminders({ may, org }: { may: boolean; org: string }) {
           <Checkbox checked={s.stop_on_dispute} disabled={!may} onChange={(e) => edit({ stop_on_dispute: e.target.checked })} />
           Pause while a dispute is open on the invoice
         </label>
-      </Panel>
-      <Panel title="Sent lately" bodyClassName="flex flex-col">
+        </div>
+      </SettingsGroup>
+      <SettingsGroup title="Sent lately" className="!mb-0">
+        <div className="min-h-0 flex-1 flex flex-col">
         {log.isLoading ? <Spinner /> : null}
         {(log.data ?? []).slice(0, 30).map((r, i) => (
           <div key={r.id ?? `next-${i}`} className="flex items-center gap-2.5 border-b border-line/60 px-3.5 py-1.5 text-[12.5px] last:border-b-0">
@@ -164,7 +163,8 @@ export function Reminders({ may, org }: { may: boolean; org: string }) {
           </div>
         ))}
         {!log.isLoading && !(log.data ?? []).length ? <Empty text={log.error ? errorMessage(log.error) : 'No reminder has been sent yet.'} /> : null}
-      </Panel>
+        </div>
+      </SettingsGroup>
     </>
   );
 }
@@ -189,18 +189,14 @@ export function Templates({ may, org }: { may: boolean; org: string }) {
     }
   };
   return (
-    <Panel
-      title="Message templates"
-      sub="The words of invoices, reminders, statements and receipts sent to customers."
-      action={
+    <SettingsGroup title="Message templates" description="The words of invoices, reminders, statements and receipts sent to customers." actions={
         may ? (
           <button type="button" className={btnSmall} onClick={() => setEditing({ kind, name: '', subject: '', body: '', ...(/^\d+$/.test(org) ? { org_id: Number(org) } : {}) })}>
             + New template
           </button>
         ) : null
-      }
-      bodyClassName="flex flex-col"
-    >
+      } className="!mb-0">
+      <div className="min-h-0 flex-1 flex flex-col">
       <div className="border-b border-line px-3.5 py-2.5">
         <Seg<TemplateKind> label="Kind of message" value={kind} onChange={setKind} options={TEMPLATE_KINDS.map((k) => ({ id: k.id, label: k.label }))} />
       </div>
@@ -276,6 +272,7 @@ export function Templates({ may, org }: { may: boolean; org: string }) {
           </label>
         </Sheet>
       ) : null}
-    </Panel>
+      </div>
+    </SettingsGroup>
   );
 }

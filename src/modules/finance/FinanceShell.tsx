@@ -4,13 +4,15 @@ import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { Spinner } from '../../components/ui';
-import { btnPrimary } from '../hr/parts';
+import { btnPrimary } from '../../components/PageKit';
 import type { ModuleProps } from '../registry';
 import { fetchCompanies, fetchDashboard, K, type Company } from './api';
-import { LoadFailed } from './parts';
+import { LoadFailed } from '../../components/RecordKit';
 import { FinanceRail, TITLES, VIEWS, type FinanceView } from './Rail';
 import { SidePanel } from '../../components/SidePanel';
 import { recallOrgChoice, rememberOrgChoice } from '../../core/org-prefs';
+import { useOfflineReadOnly } from '../../core/offline-read';
+import { OfflineReadOnlyBanner } from '../../components/OfflineReadOnly';
 
 /**
  * Finance: the rail, and the screen it points at. Addressed as
@@ -80,6 +82,8 @@ export function resolveCompany(companies: Company[], fromRoute: number | null, f
 
 export default function FinanceShell(_props: ModuleProps) {
   const { query, go } = useTab();
+  // Offline (D-G14): read-only from this computer's copy; a new journal waits for the connection.
+  const { readOnly } = useOfflineReadOnly('finance');
   const qc = useQueryClient();
   const uid = useStore(app, (s) => s.auth?.user?.id ?? '');
   const asked = query.get('tab') as FinanceView | null;
@@ -147,7 +151,7 @@ export default function FinanceShell(_props: ModuleProps) {
         key={company.id}
         company={company}
         openId={num(query.get('open'))}
-        making={query.get('make') === 'journal'}
+        making={query.get('make') === 'journal' && !readOnly}
         onOpen={(id) => go(route('journals', company.id, id ? `&open=${id}` : ''))}
         onMake={(on) => go(route('journals', company.id, on ? '&make=journal' : ''))}
       />
@@ -179,8 +183,11 @@ export default function FinanceShell(_props: ModuleProps) {
       <SidePanel id="finance" label="the Finance menu">
         <FinanceRail view={view} onPick={pick} company={company} companies={companies} onCompany={choose} badges={badges} />
       </SidePanel>
-      <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Finance · ${TITLES[view]}`}>
-        <Suspense fallback={<Spinner />}>{body}</Suspense>
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-ground" aria-label={`Finance · ${TITLES[view]}`}>
+        <OfflineReadOnlyBanner module="finance" />
+        <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
+          <Suspense fallback={<Spinner />}>{body}</Suspense>
+        </div>
       </main>
     </div>
   );

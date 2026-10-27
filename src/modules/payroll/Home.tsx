@@ -7,6 +7,7 @@ import { shortDate } from '../finance/api';
 import { fetchRuns, K, STATUS_LABEL, runTitle, type Dashboard } from './api';
 import { Badge, Card, Kbd, NotYet, Table, amt, td, tdr, useReadOnly } from './parts';
 import type { PayView } from './Rail';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Payroll home (D01): the period, the current run's figures, what needs attention, this period's runs with the next
@@ -31,7 +32,7 @@ export default function Home({ data, figures, onNew, onGo, onRun }: { data: UseQ
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-2.5">
         <div className="min-w-0 flex-1">
-          {period ? <div className="text-[11px] font-bold tracking-[.8px] text-[#23349E] uppercase dark:text-primary">{`${period.name} · period open`}</div> : null}
+          {period ? <div className="text-[11px] font-bold tracking-[.8px] text-primary uppercase dark:text-primary">{`${period.name} · period open`}</div> : null}
           <h1 className="m-0 mt-0.5 text-[21px] font-extrabold tracking-[-.3px] text-ink">{hello}</h1>
           {period?.payment_date ? <div className="mt-0.5 text-[12px] text-ink-2">{`Next pay date ${shortDate(period.payment_date)}${period.days_to_cutoff != null && period.days_to_cutoff >= 0 ? ` · cut-off in ${period.days_to_cutoff} ${period.days_to_cutoff === 1 ? 'day' : 'days'}` : ''}`}</div> : null}
         </div>
@@ -47,12 +48,12 @@ export default function Home({ data, figures, onNew, onGo, onRun }: { data: UseQ
       {data.data === null ? <Card><NotYet what="The payroll home" /></Card> : null}
 
       {d ? (
-        <div className="grid grid-cols-4 gap-2.5">
-          <Tile label="Current run · net pay" value={figures ? amt(d.current_run?.net_total) : '—'} sub={d.current_run ? `${d.current_run.employee_count} people · ${STATUS_LABEL[d.current_run.status] ?? d.current_run.status}` : 'No run yet'} onClick={d.current_run ? () => onRun(d.current_run!.id) : undefined} />
-          <Tile label="Waiting for approval" value={String(d.pending_approvals)} sub="Runs in review" onClick={() => onGo('runs')} />
-          <Tile label="Unposted" value={String(d.unposted.runs + d.unposted.payments)} sub={`${d.unposted.runs} runs · ${d.unposted.payments} payments`} />
-          <Tile label="Blocking issues" value={String(d.open_exceptions)} sub={d.open_exceptions ? 'Fix before approval' : 'None open'} bad={d.open_exceptions > 0} onClick={d.current_run ? () => onRun(d.current_run!.id) : undefined} />
-        </div>
+        <StatGrid>
+          <Tile icon="banknote" tone="blue" label="Current run · net pay" value={figures ? amt(d.current_run?.net_total) : '—'} sub={d.current_run ? `${d.current_run.employee_count} people · ${STATUS_LABEL[d.current_run.status] ?? d.current_run.status}` : 'No run yet'} onClick={d.current_run ? () => onRun(d.current_run!.id) : undefined} />
+          <Tile icon="hourglass" tone="amber" label="Waiting for approval" value={String(d.pending_approvals)} sub="Runs in review" onClick={() => onGo('runs')} />
+          <Tile icon="file-clock" tone="violet" label="Unposted" value={String(d.unposted.runs + d.unposted.payments)} sub={`${d.unposted.runs} runs · ${d.unposted.payments} payments`} />
+          <Tile icon="shield-alert" label="Blocking issues" value={String(d.open_exceptions)} sub={d.open_exceptions ? 'Fix before approval' : 'None open'} bad={d.open_exceptions > 0} onClick={d.current_run ? () => onRun(d.current_run!.id) : undefined} />
+        </StatGrid>
       ) : null}
 
       <div className="grid grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-2.5">
@@ -107,7 +108,7 @@ export default function Home({ data, figures, onNew, onGo, onRun }: { data: UseQ
           <Card title="Gross pay, last 12 months">
             <div role="img" aria-label={`Gross pay for the last ${trend.length} periods`} className="mx-3.5 mt-1 flex h-[150px] items-end gap-2 border-b border-line pb-0.5">
               {trend.map((t, i) => (
-                <div key={t.period} title={`${t.period}: ${amt(t.gross)}`} className={cx('flex-1 rounded-t-[3px]', i === trend.length - 1 ? 'bg-[#23349E] dark:bg-primary' : 'bg-[#C2CBF2] dark:bg-primary/40')} style={{ height: `${Math.max(2, (Number(t.gross ?? 0) / peak) * 100)}%` }} />
+                <div key={t.period} title={`${t.period}: ${amt(t.gross)}`} className={cx('flex-1 rounded-t-[3px]', i === trend.length - 1 ? 'bg-stage-primary dark:bg-primary' : 'bg-stage-accent dark:bg-primary/40')} style={{ height: `${Math.max(2, (Number(t.gross ?? 0) / peak) * 100)}%` }} />
               ))}
             </div>
             <div className="mx-3.5 mt-1 mb-3 flex gap-2 text-center text-[10.5px] text-ink-2">
@@ -129,29 +130,15 @@ export default function Home({ data, figures, onNew, onGo, onRun }: { data: UseQ
   );
 }
 
-function Tile({ label, value, sub, bad, onClick }: { label: string; value: string; sub: string; bad?: boolean; onClick?: () => void }) {
-  const body = (
-    <>
-      <div className="text-[11px] font-semibold text-ink-2">{label}</div>
-      <div className={cx('mt-0.5 text-[20px] font-extrabold tabular-nums', bad ? 'text-danger' : 'text-ink')}>{value}</div>
-      <div className={cx('text-[11px]', bad ? 'font-semibold text-danger' : 'text-ink-2')}>{sub}</div>
-    </>
-  );
-  const cls = cx('rounded-[10px] border bg-surface px-3.5 py-[11px] text-left', bad ? 'border-[#F2C4BE] dark:border-danger/40' : 'border-line');
-  return onClick ? (
-    <button type="button" className={cx(cls, 'hover:bg-subtle')} onClick={onClick}>
-      {body}
-    </button>
-  ) : (
-    <div className={cls}>{body}</div>
-  );
+function Tile({ label, value, sub, bad, onClick, icon, tone }: { label: string; value: string; sub: string; bad?: boolean; onClick?: () => void; icon?: string; tone?: StatTone }) {
+  return <StatCard label={label} value={value} sub={bad ? <span className="font-semibold text-danger">{sub}</span> : sub} onClick={onClick} icon={icon} tone={bad ? 'red' : tone} data-bad={bad ? '' : undefined} />;
 }
 
 function Attn({ tone, show, text, onClick }: { tone: 'red' | 'amber'; show: boolean; text: string; onClick?: () => void }) {
   if (!show) return null;
   return (
     <button type="button" onClick={onClick} disabled={!onClick} className="flex gap-2 text-left text-ink enabled:hover:underline">
-      <span aria-hidden className={cx('mt-[5px] size-[7px] shrink-0 rounded-full', tone === 'red' ? 'bg-[#D92D20]' : 'bg-[#D97706]')} />
+      <span aria-hidden className={cx('mt-[5px] size-[7px] shrink-0 rounded-full', tone === 'red' ? 'bg-orange' : 'bg-amber-strong')} />
       <span>{text}</span>
     </button>
   );
@@ -160,7 +147,7 @@ function Attn({ tone, show, text, onClick }: { tone: 'red' | 'amber'; show: bool
 function Cal({ day, text, strong }: { day: string; text: string; strong?: boolean }) {
   return (
     <div className="flex gap-2.5">
-      <b className={cx('w-[52px] shrink-0', strong ? 'text-[#23349E] dark:text-primary' : 'text-ink-2')}>{shortDate(day).replace(/ \d{4}$/, '')}</b>
+      <b className={cx('w-[52px] shrink-0', strong ? 'text-primary dark:text-primary' : 'text-ink-2')}>{shortDate(day).replace(/ \d{4}$/, '')}</b>
       <span className={strong ? 'font-bold' : ''}>{text}</span>
     </div>
   );

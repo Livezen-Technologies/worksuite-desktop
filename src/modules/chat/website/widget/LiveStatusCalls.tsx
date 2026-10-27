@@ -6,7 +6,7 @@ import { text } from '../../../../core/i18n';
 import { toast } from '../../../../core/toasts';
 import { Select } from '../../../../components/Select';
 import { Empty, ErrorNote, Spinner, Switch } from '../../../../components/ui';
-import { Note, Pill, SettingRow } from '../../../account/parts';
+import { Note, Pill, SettingRow } from '../../../../components/CardKit';
 import { VOICE_OFFERS, callSettingsOf, changedFields, saveCallSettings, waitOptions, type CallSettings, type CallSettingsPayload } from './callSettings';
 import { Group, SaveBar } from './parts';
 

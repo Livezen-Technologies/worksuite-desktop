@@ -5,10 +5,10 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Cell, PageHead, row, THead } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, Cell, PageHead, row, THead } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, K, money, refusal } from './api';
-import { LoadFailed, Notice } from './parts';
+import { LoadFailed, Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { fetchAssetAccounts, forbiddenWhy, KS, mappingChanges, sameId, saveAssetAccounts } from './setup';
 
@@ -154,12 +154,12 @@ export default function AssetAccounts({ company, onGo }: ScreenProps) {
                         className={cx('h-[30px] w-full rounded-[7px] border px-2 text-[12.5px]', moved && 'bg-selection')}
                       />
                     ) : (
-                      <span className={cx('text-[12.5px]', now === null ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>{nameOf(now) ?? 'Not mapped'}</span>
+                      <span className={cx('text-[12.5px]', now === null ? 'text-warning-ink dark:text-warning' : 'text-ink-2')}>{nameOf(now) ?? 'Not mapped'}</span>
                     )}
                   </span>
                 </div>
                 {moved && c.capitalised > 0 ? (
-                  <p className="m-0 px-3.5 pb-2 text-[12px] text-[#9A4A06] dark:text-warning">
+                  <p className="m-0 px-3.5 pb-2 text-[12px] text-warning-ink dark:text-warning">
                     {c.capitalised} of its assets are already in the books under {nameOf(c.account_id) ?? 'the old account'}. Saving this sends the rest to {nameOf(now) ?? 'no account'}, so the category will sit across two accounts.
                   </p>
                 ) : null}

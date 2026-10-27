@@ -6,6 +6,8 @@ import { NETWORKS, networkInfo } from '../../lib/networks';
 import { logStamp } from '../../lib/time';
 import { compact, delta, full, Kpi, NativeSelect, NetChip, NotOffered, OptionalView, Panel, Pill, Table, TD, TR } from '../../parts';
 import { cx } from '../../../../components/ui';
+import { StatGrid } from '../../../../components/StatCard';
+import { clickOnKey } from '../../../../components/press';
 
 /**
  * W07's other tabs: Posts (SMM-ANL-003), Audience and Inbox & response (SMM-ANL-004), Campaigns (SMM-CPG-003).
@@ -50,7 +52,7 @@ export function PostsTab({ query }: { query: AnalyticsQuery }) {
           rows.length ? (
             <Table head={['Post', 'Published', 'Reach', 'Engagements', 'Clicks']} minWidth={640}>
               {rows.map((p) => (
-                <tr key={p.target_id} className={ROW} onClick={() => go(`/social-media/posts/${p.post_id}`)}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={p.target_id} className={ROW} onClick={() => go(`/social-media/posts/${p.post_id}`)}>
                   <td className={TD}>
                     <button type="button" className="flex min-w-0 items-center gap-2 text-left">
                       <NetChip network={p.network} />
@@ -117,11 +119,11 @@ export function InboxTab({ query }: { query: AnalyticsQuery }) {
     <OptionalView q={q} what="Inbox metrics" compact>
       {(m) => (
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Kpi label="Conversations" value={full(m.volume)} />
-            <Kpi label="Median first reply" value={minutes(m.median_first_reply_minutes)} />
-            <Kpi label="Median resolution" value={minutes(m.median_resolution_minutes)} />
-          </div>
+          <StatGrid min={200}>
+            <Kpi icon="messages" accent="blue" label="Conversations" value={full(m.volume)} />
+            <Kpi icon="reply" accent="violet" label="Median first reply" value={minutes(m.median_first_reply_minutes)} />
+            <Kpi icon="check-circle" accent="cyan" label="Median resolution" value={minutes(m.median_resolution_minutes)} />
+          </StatGrid>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Panel title="By agent">
               <Table head={['Agent', 'Replies', 'Median first reply']}>
@@ -165,7 +167,7 @@ export function CampaignsTab({ brandId }: { brandId: number | null }) {
               {rows.map((c) => {
                 const s = CAMPAIGN_STATUS[c.status] ?? { label: c.status, tone: 'muted' as const };
                 return (
-                  <tr key={c.id} className={ROW} onClick={() => go(`/social-media/campaigns/${c.id}`)}>
+                  <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} className={ROW} onClick={() => go(`/social-media/campaigns/${c.id}`)}>
                     <td className={TD}>
                       <button type="button" className="text-left font-semibold text-ink">
                         {c.name}

@@ -11,6 +11,240 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased
+
+### Added (Mac App Store)
+
+- **A Mac App Store build for TestFlight.** `npm run dist:mas` builds a sandboxed universal app signed for the App
+  Store and writes a `.pkg` to upload with Transporter (docs/TESTFLIGHT.md). That build has no Login Helper (the app
+  itself is the login item) and no self-updates, because the App Store updates it. The direct-download builds are
+  unchanged.
+
+### Added (quality round)
+
+- **Line coverage, measured on every build.** `npm run test:coverage` runs the unit tests with v8 coverage; CI runs
+  it in place of `npm test`, writes a table by module to the job summary (`scripts/coverage-summary.mjs`) and keeps the
+  HTML report as the `coverage` artifact. The floors are today's figures rounded down — lines 63 %, statements 63 %,
+  functions 57 %, branches 77 % — so coverage cannot fall without the build saying so. (D-G07)
+- **Tests for the five modules with the fewest for their size** (test cases per thousand lines): Label Studio, Cheque
+  Manager, Events, Payroll and Appointments — their API clients and normalisers, 59 tests. Lines covered: Label
+  0 → 7.6 %, Cheque 11.5 → 14.9 %, Events 31.7 → 32.5 %, Payroll 13.8 → 14.7 %, Appointments 6.0 → 7.7 % (their
+  `api.ts` files 77–100 %), each with its own floor. (D-G07)
+- **A pull request template** with the checks, module versions, the changelog and the TRACEABILITY row. (D-G11)
+
+### Changed (quality round)
+
+- **TRACEABILITY re-baselined.** The rows the shipped work had overtaken now say what is built — the mail composer
+  (rich text, attachments), chat's voice notes and reactions, drag and drop into twenty-odd apps, the call window,
+  Linux repositories, PDF Studio's D2 and on-device tools, and the self-update rule for unsigned builds — and the work
+  merged on 26–27 October has its own section: Hosting, desktop settings, the launcher, stat cards, the release
+  pipeline, offline caches and PDF Studio. (D-G11)
+
+### Security (quality round)
+
+- **The shell's CSP, tightened and its inline styles explained.** `script-src-attr 'none'` and `manifest-src 'none'`
+  were added, and a test pins every `'none'` directive and the script sources. `style-src` keeps `'unsafe-inline'`:
+  mail bodies, signatures, email designs and billing previews are shown in `srcdoc` frames that inherit the shell's
+  policy, and an email's own styles carry no nonce. SECURITY.md says why, and what moving mail to its own origin would
+  take. (D-G17)
+
+### Changed (localization round)
+
+- **Sinhala and Tamil cover far more of the app — as drafts.** 3,920 phrases were added to each of
+  `shared/locales/si.json` and `ta.json`: the shell and navigation, common actions, Settings, My account, and Home,
+  Mail, Chat, Calendar, Tasks, Files, Meet, Calls, Contacts and Notifications. Across those areas coverage rose from
+  19% (1,270 of 6,806 phrases) to 80% (5,465); across the whole app from 1,132 to 5,139 of 21,127 phrases (5% to
+  24%). The new phrases are machine-drafted: `docs/localization/review.json` lists every one of them under
+  `machineDrafted` as "needs native review", and the languages stay in preview until a fluent speaker has been
+  through them. Sentence fragments the code glues together, website chat, channels and the image editor were left
+  in English rather than guessed at. The checked-in coverage report (`docs/localization/coverage.json`), which still
+  showed 256 of 11,743, is regenerated. (D-G10)
+
+## 0.2.283 — 2026-10-27
+
+Needs the server with **Core 1.32.0** (`/api/capabilities`), **SocialMedia 1.0.0** for Social Media, and **Voip 2.0.1** for company-scoped Phone; on an older server those screens stay hidden or fall back.
+
+The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G19, D-G21, D-G22, D-G24, D-G25), and
+its release and CI round (D-G01, D-G02, D-G06, D-G20), and its UX round (D-G09, D-G12, D-G14, D-G23).
+
+### Changed (structure round)
+
+Nothing a person sees changes: the same screens, the same behaviour. (D-G08, D-G13)
+
+- **Modules no longer borrow each other's parts.** The shared pieces that lived inside modules moved to
+  `src/components`: the page kit (was `hr/parts`, used by 20 modules), the list, record, form, card, call, console
+  and report kits (were `inventory/parts`, `finance/parts`, `garage/parts`, `account/parts`, `calls/parts`,
+  `assets/parts` and `crm/parts`). Imports from one module into another fell from 792 (119 module pairs) to 376
+  (93 pairs). A lint rule now refuses a module importing another module's files; the pairs that remain — an API
+  client or a whole screen of another module — are a reviewed allow-list, each with why, that may only shrink.
+- **The largest files are split by area.** The main process's composition root (`electron/main/index.ts`, 4,457
+  lines) hands navigation, status, presence, the tray, website-chat ringing, the Live desk, Quick Ask, Marketing,
+  access, the session, IPC, accounts side by side and the lifecycle to their own files in `electron/main/wiring/`
+  (now 1,588 lines, which create the services and accounts); Settings is one file
+  per section (`SettingsPage.tsx` 2,267 → 212 lines); the IPC contract (2,236 → 711), the shared types (1,976 → 644)
+  and the transfer queue (1,865 → 539, with the queue, uploads and helpers beside it) are split the same way. Every
+  import path still works.
+
+### Added (UX round)
+
+- **PDF Studio tools on this computer.** With the PDF engine the app already ships: a PDF from pictures or blank
+  pages; PDFs combined with page ranges and a bookmark per file; pages duplicated and split into files; every page as a
+  PNG and the text as a .txt; a protected copy (AES-256, passwords and permissions) and an unlocked copy; true
+  redaction of what the search found (the text taken out of the page, not covered); Bates numbers, headers, footers and
+  watermarks stamped on the pages. What needs the server or WorkSuite Office now says so ("Needs the WorkSuite server",
+  with the Pro panel for Drive PDFs; "Needs WorkSuite Office") instead of showing a button that never works; Standards,
+  Print production and Measure, with nothing working yet, are not listed. (D-G12)
+- **Finance, Expenses, Marketing, Cheque Manager and Recruitment read offline.** What was last read opens from this
+  computer's encrypted copy under an "Offline · read-only" banner with its "as of" time; every change waits for the
+  connection and is refused before it is sent. Share links, exports, files, receipts, cards, webhooks, credentials and
+  one-time print checks are never kept. Cheque Manager opens offline to read; nothing prints. Board's manifest now
+  declares its offline vault. (D-G14)
+
+### Changed (UX round)
+
+- **One Settings kit everywhere.** The Settings kit moved to `src/components/SettingsKit.tsx`, so modules can use it:
+  the eleven Settings screens that drew their own (accounts, Admin Center, ringing, connection health, the custom
+  timeout, the launcher, license, links, the ring check, the sidebar, updates) and the module settings screens — Mail's
+  eight, Chat's Messenger, Instagram and WhatsApp settings and returning visitors, CRM, Finance, Payroll, Phone admin,
+  Projects, Social Media admin, Notifications, Contacts accounts, Drive, Assets, Billing's reminders, templates and
+  payments, Appointments' desk, Meet recording, the guest profile's backup and My account › Preferences — now draw
+  the same headers, cards and rows. POS's till settings keep the till's touch design. (D-G09)
+- **Colours from the design tokens, light and dark.** About 3,100 hard-coded hex colours in classes became tokens:
+  colour families with a dark value each (so the ~900 that had none now follow the dark theme), and stage tokens for
+  surfaces dark in both themes (calls, meetings, ring cards, media viewers, editors, the lock screen). A lint rule
+  refuses a raw hex in a class or a style, outside a reviewed allow-list (other companies' marks, the website widget
+  preview, email content, a QR code). (D-G23)
+
+### Security
+
+- **A link from a message opens only as clicked.** The window's "confirmed" is believed only for an address the app
+  itself handed that window when the link was clicked (within 15 minutes); for any other address WorkSuite asks first,
+  from the app rather than the page, showing the real address. A link from a message still opens without a question
+  when its checks find nothing wrong. (D-G16)
+- **Release builds refuse unsigned desktop policies.** A packaged build with no policy key built in, and no
+  `discovery_key` on the account, no longer applies an organisation's desktop policy it cannot check: it keeps the
+  last one it accepted (or the defaults) and logs `POLICY_UNSIGNED_REFUSED`. Development builds apply it as before,
+  marked unsigned. A CI build without `WS_POLICY_PUBLIC_KEY` now says so in a warning. (D-G05)
+
+### Changed
+
+- **Phone follows the server's Telephony app.** Phone (and its ringing, notifications and tray) shows for whoever has
+  the server's `telephony` application, as on the web — everybody by default. Needs **Voip 1.2.0 / Core 1.17.0** on
+  the server; an older one does not send `telephony`, so Phone is hidden there for everyone but a super-admin. (D-G24)
+- **More headline figures are stat cards.** Finance's Overview (the year's result, the ledger's cash without a
+  statement, what is owed to us and by us) and Reconcile's difference, and the member counts of Marketing's lists and
+  segments, use the shared stat card. (D-G22)
+- **The keyboard reaches what the mouse clicks.** About sixty table rows and list cards that opened a record on a click
+  — Assets, Payroll, PMS, Hosting, eLearning, Events, Garage, Appointments, Projects, Social Media, Marketing, Phone,
+  Tenders, CRM, Expenses, Files, PDF pages and more — are now reached with Tab and opened with Enter or Space; a
+  Commission number is a button; the file preview's zoom and the photo strips' thumbnails have a name. A lint rule
+  (`build-tools/eslint-a11y.mjs`) keeps new clicks keyboard-usable and every picture with an `alt`. (D-G21)
+- **Linux packages name a real maintainer** — `Livezen Technologies <support@worksuitecloud.com>` — and CI GPG-signs
+  the `.rpm` and writes a detached `.asc` for the `.deb` and AppImage when the `LINUX_GPG_PRIVATE_KEY` secret is set
+  (docs/RELEASING.md "Signing Linux packages"). (D-G18)
+- **CI on Node 24 actions.** `actions/checkout@v5`, `setup-node@v5`, `upload-artifact@v6`, `download-artifact@v7`;
+  the check job, the Linux packages and the Linux OS checks run on `ubuntu-24.04` rather than `ubuntu-latest`. (D-G25)
+- **RELEASING.md on the Mac DMG:** one universal DMG is built and is published to the Update Center twice, as
+  `macos:arm64` and `macos:x64`; the "pattern is too long" merge failure it described is gone. (D-G19)
+- **A pushed tag is the release.** Pushing `vX.Y.Z` builds, signs and publishes it: the tag must be `package.json`'s
+  version (the run stops otherwise), and the Build workflow's new `publish` job sends the Windows x64 installer, the
+  universal DMG (as `macos:arm64` and `macos:x64`) and the Linux x64 AppImage, `.deb` and `.rpm` to the WorkSuite
+  Update Center with `publish-release.mjs` — BETA by default, build number the patch number, notes from this
+  changelog — and stops at READY_FOR_TEST for people to approve. A manual run picks the channel. Without the
+  `UC_CI_TOKEN`, `UC_CI_KEY` and `UC_SCRIPT_TOKEN` secrets it warns and publishes nothing. The `manifest` job, which
+  signed a self-hosted manifest the app stopped reading when it moved to the Update Center, is gone. (D-G01)
+- **Release builds fail unsigned.** A tag build or a STABLE run stops before building when the macOS Developer ID and
+  notarization secrets or the Windows signing secrets are missing (STABLE also needs Linux GPG), and a release's
+  Windows installers are checked for a valid Authenticode signature. Branch builds still package unsigned, with a
+  warning. The App Store Connect key is now written to the file notarization reads, rather than passed as a path it
+  is not. (D-G02)
+- **End-to-end checks in CI.** A new E2E workflow runs Connection & Startup against servers on the runner (the mock
+  Cloud and an enterprise stand-in) on every pull request, on `main` and nightly; a skipped check fails it. The smoke
+  against a real server runs nightly and by hand when `WS_E2E_SERVER`, `WS_E2E_EMAIL` and `WS_E2E_PASSWORD` are set,
+  and says it did not run when they are not. (D-G06)
+- **Module versions are tagged by CI.** Each push to `main` creates and pushes the `<module>/vX.Y.Z` tags origin is
+  missing, as `npm run module -- tag --create` does; tags already there are left alone. (D-G20)
+
+### Fixed
+
+- **Remote control on a Mac types what was typed.** Text went through System Events, which can only type what is on
+  the keyboard layout and sent key code 0 for anything else, so "Olá 😀" arrived as "Ola aa". It is now posted as key
+  events carrying the characters themselves, one UTF-16 unit each (an emoji as its two halves; Return and Tab as
+  their keys). Which window a click would reach is now the window server's own hit test: the window list put the
+  Dock's full-screen window (which clicks pass through) above every app, so WorkSuite held back every click on a
+  shared window. The macOS helper check on CI had failed on these two since 19 October.
+- **Two more timing-dependent tests made exact.** The mail-merge test waited for "1 of 2 sent.", which shows after
+  the first message and before the second's failure, so it could check the end of the run too early; it now waits for
+  that failure. The slides viewer test pressed ⌘= as soon as the slide showed, which could be before React had added
+  the key listener; it now lets React finish first. Both failed once in CI on this branch's run, not in the app.
+- **Search the CRM leaves no timer behind.** Like Mail's @mentions below, its list closed with a timer nothing
+  cancelled; leaving the CRM in that moment set state on an unmounted rail. It is cleared now.
+
+- **A flaky test run ("window is not defined").** Mail's @mention list closed itself 150 ms after the editor lost
+  focus with a timer nothing cancelled, so closing the composer in that moment set state on an unmounted editor — in
+  CI, after the test's page was gone. The timer is now cleared with the editor. (D-G15)
+
+### Added
+
+- **Documents, Forms, Rental and Diagrams in the launcher.** The server's own apps with no desktop module yet are now in
+  the app launcher and search, marked *opens in your browser*: **Documents** (`/documents`,
+  with `docs.view`), **Forms** (`/forms`, with `forms.view`), **Rental** (`/rental`, with `rental.access`) and
+  **Diagrams** (`/diagrams`). Each shows only to people the server gives that app (its `docs`, `forms`, `rental` or
+  `diagram` app) and the permission its screens need — exactly where the web shows it — and a link into one of them
+  (a notification, a chat card) opens it in the browser.
+
+## 0.2.282 — 2026-10-26
+
+Needs the server with **Hosting 1.1.0** (Hosting & Domains) and **Desktop 1.13.0** (desktop settings) for those screens; on an older server they stay hidden or show "needs a server update".
+
+### Added
+
+- **Features & apps, and the startup screen.** Settings has a new **Features & apps** section: search in the app
+  launcher, the keys that open WorkSuite from other apps, opening WorkSuite links in the app, editing in WorkSuite
+  Office, Drive sync and offline files can each be turned off, and so can every app. An app you turn off is gone from the launcher, the sidebar, search,
+  links, shortcuts, the command palette and the tray until you turn it on again; its data stays on the server.
+  **Desktop & startup** says what WorkSuite opens on — Home, where you left off, an app or a page — (Home unless you choose), and has the start
+  and close switches that were under Preferences. Your theme, language, start and tray choices, notification
+  settings, spell check and hardware acceleration follow you too. On a personal account everything is on until you turn it off. In an
+  organisation, IT can set any of this: what it manages is shown with a **Managed by your organization** lock (hover
+  it for why) and cannot be changed; what it only suggests is marked as your organization's default and is yours to
+  change. Your choices follow you to your other computers; offline, WorkSuite uses the settings as of the last sync
+  and says so, and sends your changes when it is back. The first time, the preferences you already had on this
+  computer go up with them — unless your organization manages them or another computer already chose. A WorkSuite
+  server without desktop settings keeps all of this on this computer. (desktop module settings 1.44.0)
+- **Hosting & Domains on the desktop.** A new **Hosting** app (Business, a cyan globe) built to the desktop boards D-01–D-08 of the Hosting & Domains SRS v1.0 (HDM-DSK-01…05) over the server's `/api/hosting`, with its own 88 px rail: **Overview** (domains, expiring in 30 days, certificates at risk, servers, monitors down, cost a month; renewals in the next 90 days; what needs attention; Sync all ⌘⇧S, Add domain ⌘N); **Domains** and **Expiring** — a list you drive from the keyboard (↑↓, ↵ open, ⌘↵ new tab, ⌘⇧↵ its own window) with the selected domain beside it; a **domain in its own tab or window** with Overview, DNS, Certificates, Monitors, Costs and Activity, and renew, auto-renew, lock and the transfer code, each confirmed first; the **DNS editor** — Add record ⌘N, Re-read ⌘R, Export zone as a BIND file, and a record form that checks each type, keeps a CNAME alone on its host and offers your servers' addresses for A and AAAA (⌘S saves, Esc cancels); **Certificates** with the detail panel, Check now ⌘R and **Explain with AI** where the server offers it (the button is not shown where it does not); **Servers** as a grid, one server in its own tab or window with its graphs and snapshots, and power off only after you type the server's name; **Monitors** with the last checks, uptime and incidents to acknowledge; **Costs**; **Accounts** with Test, Sync and the sync schedule — keys never leave the server — and **Sync history**. Alt+1…0 move along the rail and every screen is in the command palette. The tray badge and a Hosting line in the tray menu count monitors down and what expires within 7 days, and each raises a notification with the tab closed. Offline the register is shown read-only from the encrypted cache, saying as of when, with every change off. Screens whose server routes are new in the SRS say they need a server update on an older server. (desktop module hosting 1.0.0)
+- **Hosting & Domains: register, import, reports, bulk changes and more.** **Register a domain** searches every connected registrar that can (Dynadot, Namecheap, Porkbun), says whether the name is free and what it costs at each, and registers with the one you pick after showing the price and asking you to confirm it is you. **Import** domains or servers from a CSV: the server guesses which column is which (change it), shows the dry run — what would be added, updated or skipped and why, and the rows with errors — and nothing is saved until **Apply**; the error rows can be saved as a CSV. **Reports**: the renewal calendar for the next 30 to 365 days with **Export** (CSV or Excel) and **Print**, cost by customer, provider spend and uptime; Domains, Certificates and Servers export the list as filtered. Tick rows (Space, ⌘-click or the checkboxes) to link a customer or project, change tags or the responsible person, or remove them together — or to check certificates again; anything the server refuses says why and the rest goes ahead. **Right-click** a domain for Re-read DNS, Watch certificate, Add monitor, Edit links and Create renewal task (and a certificate or a server card for its own). The DNS editor's **Look up live** shows what public resolvers answer now beside the copy. **Add server** and **Edit** a server (a synced server's provider fields are shown, not edited), and edit a domain's customer, project, server, responsible person, tags and notes from its own company's lists. Renew, the transfer code, register and power off ask you to confirm it is you when WorkSuite asks for it. Hosting's count — monitors down and what expires within 7 days — is now on the macOS Dock badge too. (desktop module hosting 1.1.0)
+
+### Changed
+
+- **Settings, redone.** Every settings screen now looks the same: the sections on the left with a search that finds a
+  setting in any of them (and marks it when you open the section), settings grouped in cards, each row with its name,
+  what it does and its control on the right, switches, menus and cards to pick from, and Reset to default beside a
+  choice you changed. Light and dark alike. (desktop module settings 1.44.0)
+- **The figure cards, redrawn in every module** (light and dark): the KPI, stat and summary cards at the top of a dashboard or a report — CRM, Sales, Projects, HR and My HR, Payroll, Billing, Purchasing, Inventory, Assets, Expense, Finance, Tenders, Marketing, Social Media, Phone, Helpdesk's wallboard, website chat, Meetings, Events, Cheque Manager, Garage, AMC, Appointments, Salon, PMS, E-learning, Hosting (Overview, Costs, the import preview), Home and Settings › Updates (drawn as the new Settings cards) — are now one shared card (`StatCard`) laid out by one grid (`StatGrid`). No more thick coloured bar down the left and neon number: each card is compact (16px in, at least 96px tall, 12px round, a 1px border on the surface), with a small tinted icon chip in the card's colour and the label beside it, the figure large and calm in the text colour with tabular digits, and a muted line under it. A zero or an empty figure is drawn muted. A card that opens a list is a button with a focus ring and a soft lift on hover (none with reduced motion). Where a figure moved, a pill says which way and whether that is good news with an arrow, the change and its colour (Finance's overview and budget against actual). The cards sit as many across as fit, at least 220px wide, 12px apart. While a figure loads the card keeps its label and shows a placeholder. What a card means is said by its label and icon, never by colour alone; a screen reader reads the label with the figure. The figures and what each card opens are unchanged. (desktop modules account 1.4.1, amc 1.0.1, appointments 1.1.1, assets 1.1.1, billing 1.3.1, chat 2.0.5, cheque 1.1.1, crm 1.2.2, elearning 1.1.2, events 1.0.4, expenses 1.2.1, finance 1.1.1, garage 1.1.1, home 1.8.2, hosting 1.1.1, hr 1.6.1, inventory 1.4.1, mail 1.34.3, marketing 1.1.1, meetings 1.6.2, payroll 1.1.1, phone 1.1.1, pms 1.0.3, projects 1.6.3, purchase 1.0.1, sales 1.3.1, salon 2.0.1, settings 1.44.1, social-media 1.0.2, support 1.8.1, tenders 1.9.1)
+- **The app launcher, redrawn** (light and dark): the popover is one 16px-rounded card over the dimmed, blurred app. The search has a focus ring and the launcher's shortcut at its end, with a square close button beside it. Pinned and Recent are chips with each app's icon. The categories are pills with their counts, **All** first, the one shown solid in the primary colour. Under All, the apps are listed category by category, each under its name in capitals and its count, and the grid then uses all the room the popover has (at most 640px), at one height whichever category you pick. Compact tiles have 48px icons. A pinned app has a star at its top left; click the star on any tile, shown when you point at it or select it, to pin or unpin the app. The footer lists the keys (arrows move, ↵ opens, Tab changes the category, Esc closes) and says how to pin and reorder. The launcher's settings button is now at the footer's right end. ⌘↵ / Ctrl+↵ still opens an app in a new window, and the tile's menu still has it. The menu key, or Shift+F10, opens the selected tile's menu with its first item focused. Full screen and the bottom sheet keep their layout, and get the stars too.
+
+### Fixed
+
+- **Hosting & Domains reads what the server really sends.** The first pass guessed the answers' shapes; every screen now reads `/api/hosting` as the server writes it, so the overview's counts, renewals and what needs attention, a domain's registrar, links and what its registrar can do, the DNS copy and whether you may change or re-read it, certificates' problems and warnings, servers' status and monthly cost, monitors' state and uptime, accounts' Test and Sync (a failed sync was shown as done) and the sync history all show. A DNS change now sends the record as it was seen, so a change made meanwhile at the provider is not overwritten — it is shown instead. Explain says when the explanation is WorkSuite's own rather than AI's. Renew, auto-renew, lock and the transfer code are offered only where the registrar's API has them, and power actions only where the provider's has them. Watch host, Add monitor and Add domain say which company. Export zone saves (it was refused by the save dialog). The tray's and the alerts' monitors-down count follows the server's. (desktop module hosting 1.1.0)
+- Sign out of an account: the Sign out button was drawn white on white, so the dialog seemed to offer only Cancel. It is now the dialog's primary button, next to Cancel.
+
+## 0.2.281 — 2026-10-26
+### Added
+- **Preferred name** (#432): Profile settings has a field for an additional name you go by. Your name stays as it is; the preferred name is saved with your profile and shown under it ("Goes by …"). Empty means you go by your name alone. It needs a server with Users 1.5.0; an older server does not offer it. (desktop module account 1.4.0)
+
+### Fixed
+- **Dragging a task card** (#430): a card dropped on another column of the Tasks board or a project board could jump back to its old column for a moment, or until the next refresh, when the page's regular refresh was already on its way. That refresh is now stopped first, so the card stays where you drop it. (desktop modules tasks 1.4.1, projects 1.6.2)
+- **Completing a task** (#433): ticking a task, Mark complete, or Complete in the task could leave it showing as open for the same reason. It now shows as completed at once, in your tasks and in the shared ones. (desktop module tasks 1.4.1)
+- **Call back** (#431): the Call back and Call again buttons on a call card in chat were pale green on pale green, or a bare outline, and read as a label. They are now filled buttons with the call's icon. (desktop module chat 2.0.4)
+
+## 0.2.280 — 2026-10-26
+### Fixed
+- **Mail list layout** (#428): nothing in the message list reaches into the reading pane any more. The quick filters (Unread, Has files, Starred, Last 7 days) stay on one row and, when the list is too narrow, the ones that do not fit go into a **More filters** menu that says how many of them are on; "Date · Newest" keeps its own line and shortens with an ellipsis; a date band keeps its label at the left and its count at the right. The shared mailbox's Assigned to me / Unassigned / Snoozed filters and its Open / Pending / Done tabs behave the same way. The reading pane keeps at least 280 px beside a list you widened, and the width you set is still remembered. Every folder, shared mailbox and the combined inbox use the same list, so all of them get it. (desktop module mail 1.34.2)
+
+### Changed
+- **The build makes what a release needs.** Windows now builds the NSIS installer for both x64 and arm64 — the download centre lists both, and a release missing either one is refused — and the MSI is built only on Windows, where WiX can run: under wine on macOS its `candle.exe` cannot start and took the whole Windows build down with it. macOS builds the DMG a release ships; the zip and the pkg, another ~700 MB and several minutes for files nothing uploads, are built on CI and on request (`WS_MAC_ALL=1`).
+
 ## 0.2.279 — 2026-10-26
 ### Added
 - WorkSuite Office **Local AI policy from your organisation**: once signed in, the app writes your company's Office Local AI policy (set in the Admin Center › AI › On-device AI; needs server Ai 1.19.0) where WorkSuite Office's local AI service reads it — macOS user defaults `lk.worksuite.office` (`AI*` keys), Windows `HKCU\Software\Policies\WorkSuite\Office\AI`, Linux `~/.config/worksuite/office/policy.json`. Office then hides or locks what the company switched off. A policy your IT deployed through MDM or Group Policy is never overwritten; signing out removes what the app wrote. An older server without the policy changes nothing. (desktop module office 1.5.0)
@@ -24,7 +258,6 @@ person who has to live with the change — what it does, and where it bites.
 ### Security
 - Mail's message parser (`postal-mime`) is updated to 4.1.4: a mail header made of many encoded words could keep the app busy decoding it for a long time (GHSA-f2hq-32vh-53cc).
 ### Fixed
-- **Mail list layout** (#428): nothing in the message list reaches into the reading pane any more. The quick filters (Unread, Has files, Starred, Last 7 days) stay on one row and, when the list is too narrow, the ones that do not fit go into a **More filters** menu that says how many of them are on; "Date · Newest" keeps its own line and shortens with an ellipsis; a date band keeps its label at the left and its count at the right. The shared mailbox's Assigned to me / Unassigned / Snoozed filters and its Open / Pending / Done tabs behave the same way. The reading pane keeps at least 280 px beside a list you widened, and the width you set is still remembered. Every folder, shared mailbox and the combined inbox use the same list, so all of them get it. (desktop module mail 1.34.2)
 - **macOS title bars** (#424): the traffic lights sat 18 px down in every window, centred for the main window's 52 px bar but low in the 40 px bar of a meeting, a shared screen, a record or a chat window, with the title close behind them. They are now centred in the bar each window has, the bar's content starts a fixed gap after them (given back in full screen, where macOS hides them), and a secondary window's title is centred as macOS centres its own. The geometry is one shared definition (`shared/window-chrome.ts`) used by the main process and the bars.
 - **Mail's quick filters and sort** (#423): in a narrow message list the chips and "Date · Newest" ran past the list's edge, the sort label could not shorten and sat out of line with the chips. The chips now wrap, the sort control moves to its own line when there is no room, is as tall as the chips and shortens its label with an ellipsis. (desktop module mail 1.34.1)
 - **Resizing a panel** (#415): the system tooltip "Drag to resize · double-click to reset" opened over the text beside the divider of every resizable panel (Mail's message list, My Day, the side panel) and followed the pointer while dragging. The divider no longer shows it; the resize cursor and highlight say what it does, and screen readers still read the hint.

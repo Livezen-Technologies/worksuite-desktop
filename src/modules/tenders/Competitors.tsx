@@ -5,8 +5,8 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { createCompetitor, deleteCompetitor, fieldErrors, fetchCompetitors, K, KC, lowestBid, money, updateCompetitor, type Competitor, type CompetitorDraft } from './api';
 
 /**

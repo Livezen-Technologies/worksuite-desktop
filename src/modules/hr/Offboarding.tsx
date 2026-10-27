@@ -7,7 +7,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { dayLong, dayShort } from './dates';
 import { ProgressBar } from './onboardingParts';
 import { EVENT_WORDS, FOLLOWS, stamp, type ExitInterview, type HandoverItem, type OffCase, type OffDepartment, type OffItem, type OffListItem } from './offboardingParts';
-import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, Panel, row, Seg, Sheet, SidePanel, StatusChip, THead } from './parts';
+import { btn, btnPrimary, Cell, Empty, Field, input, PageHead, Panel, row, Seg, Sheet, SidePanel, StatusChip, THead } from '../../components/PageKit';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 
@@ -198,7 +198,7 @@ function OffboardingCase({ caseId, onBack }: { caseId: number; onBack: () => voi
                 <b className="min-w-0 flex-1 truncate text-ink">{d.name}</b>
                 <span className="text-[12px] text-ink-3 tabular-nums">{pct}%</span>
               </span>
-              <ProgressBar percent={pct} className={d.status === 'cleared' ? '[&>span]:!bg-[#1F7A4D]' : undefined} />
+              <ProgressBar percent={pct} className={d.status === 'cleared' ? '[&>span]:!bg-success' : undefined} />
               <span className="flex items-center gap-2 text-[11.5px]">
                 <span className="min-w-0 flex-1 truncate text-ink-3">{d.status === 'cleared' ? `Signed off${d.cleared_by?.name ? ` by ${d.cleared_by.name}` : ''}` : d.approvers.length ? d.approvers.map((a) => a.name).join(', ') : (d.fallback ?? 'HR')}</span>
                 {act && open ? (
@@ -226,7 +226,7 @@ function OffboardingCase({ caseId, onBack }: { caseId: number; onBack: () => voi
             const done = it.status !== 'open';
             return (
               <div key={it.id} className="flex items-start gap-2.5 border-b border-line/70 px-3.5 py-2.5 last:border-b-0">
-                <span className={cx('mt-px flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold', done ? 'bg-[#1F7A4D] text-white' : 'border-[1.5px] border-[#C9CFDD] dark:border-line')}>{done ? '✓' : ''}</span>
+                <span className={cx('mt-px flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold', done ? 'bg-success text-white' : 'border-[1.5px] border-slate-line dark:border-line')}>{done ? '✓' : ''}</span>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className={cx('font-semibold', done ? 'text-ink-3 line-through' : 'text-ink')}>{it.title}</span>
                   <span className="text-[11.5px] text-ink-3">

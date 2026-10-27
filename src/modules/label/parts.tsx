@@ -29,17 +29,17 @@ export function LabelRail({ view, counts, onPick, onWeb }: { view: LabelView; co
         type="button"
         aria-current={on ? 'page' : undefined}
         onClick={(e: MouseEvent) => onPick(id, e.metaKey || e.ctrlKey)}
-        className={cx('flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left', on ? 'bg-[#EEF1FD] font-bold text-[#3B5BDB] dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
+        className={cx('flex h-[32px] shrink-0 items-center gap-[9px] rounded-[7px] pr-2 pl-2.5 text-left', on ? 'bg-selection font-bold text-brand-soft dark:bg-selection dark:text-primary' : 'font-medium text-ink-2 hover:bg-subtle')}
       >
         <Icon name={icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {n ? <span className="shrink-0 rounded-[9px] bg-[#FDECEA] px-1.5 text-[11px] font-bold text-[#B42318] tabular-nums dark:bg-danger/15 dark:text-danger">{n}</span> : null}
+        {n ? <span className="shrink-0 rounded-[9px] bg-danger-bg px-1.5 text-[11px] font-bold text-danger tabular-nums dark:bg-danger/15 dark:text-danger">{n}</span> : null}
       </button>
     );
   };
   const head = (label: string) => <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>;
   return (
-    <nav aria-label="Label Studio" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="Label Studio" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="px-4 pt-3.5 pb-1">
         <div className="text-[15px] font-extrabold">Label Studio</div>
         <div className="truncate text-[11.5px] text-ink-3">On this computer</div>
@@ -71,11 +71,11 @@ const TONE: Record<string, string> = {
   paused: 'wa', waiting_printer: 'wa', offline: 'wa', QUEUED: 'in', SENDING: 'in', PRINTING: 'in', COMPLETED: 'ok', PAUSED: 'wa', PENDING_APPROVAL: 'wa', PARTIAL: 'er', FAILED: 'er', CANCELLED: 'ne', interrupted: 'er', paper_out: 'er', ribbon_out: 'er', head_open: 'er', error: 'er', failed: 'er', revoked: 'er',
 };
 const PILL: Record<string, string> = {
-  ok: 'bg-[#E7F6EE] text-[#13734A] dark:bg-success/15 dark:text-success',
-  wa: 'bg-[#FFF4DB] text-[#8A5200] dark:bg-warning/15 dark:text-warning',
-  er: 'bg-[#FDECEA] text-[#B42318] dark:bg-danger/15 dark:text-danger',
-  in: 'bg-[#EAEDFB] text-[#23349E] dark:bg-primary/15 dark:text-primary',
-  ne: 'bg-[#EEF0F6] text-[#4A5068] dark:bg-subtle dark:text-ink-2',
+  ok: 'bg-success-bg text-success dark:bg-success/15 dark:text-success',
+  wa: 'bg-warning-bg text-yellow-ink dark:bg-warning/15 dark:text-warning',
+  er: 'bg-danger-bg text-danger dark:bg-danger/15 dark:text-danger',
+  in: 'bg-info-bg text-primary dark:bg-primary/15 dark:text-primary',
+  ne: 'bg-subtle text-ink-2 dark:bg-subtle dark:text-ink-2',
 };
 
 export function StatePill({ state, children }: { state: string; children?: ReactNode }) {

@@ -28,12 +28,12 @@ const TONE: Record<string, string> = {
   open: 'wa', ready: 'ok', active: 'ok', settled: 'ne', blocked: 'er', waiting: 'wa', done: 'ok', waived: 'ne', sent: 'in', filed: 'ok',
 };
 const PILL: Record<string, string> = {
-  ok: 'bg-[#E7F6EE] text-[#13734A] dark:bg-success/15 dark:text-success',
-  wa: 'bg-[#FFF4DB] text-[#8A5200] dark:bg-warning/15 dark:text-warning',
-  er: 'bg-[#FDECEA] text-[#B42318] dark:bg-danger/15 dark:text-danger',
-  in: 'bg-[#EAEDFB] text-[#23349E] dark:bg-primary/15 dark:text-primary',
-  vi: 'bg-[#F2EEFD] text-[#5B3FB5] dark:bg-[#5B3FB5]/20 dark:text-[#B9A7F0]',
-  ne: 'bg-[#EEF0F6] text-[#4A5068] dark:bg-subtle dark:text-ink-2',
+  ok: 'bg-success-bg text-success dark:bg-success/15 dark:text-success',
+  wa: 'bg-warning-bg text-yellow-ink dark:bg-warning/15 dark:text-warning',
+  er: 'bg-danger-bg text-danger dark:bg-danger/15 dark:text-danger',
+  in: 'bg-info-bg text-primary dark:bg-primary/15 dark:text-primary',
+  vi: 'bg-selection text-violet-ink dark:bg-violet/20',
+  ne: 'bg-subtle text-ink-2 dark:bg-subtle dark:text-ink-2',
 };
 
 export function Badge({ status, children }: { status: string; children?: ReactNode }) {
@@ -44,7 +44,7 @@ export function Pills<T extends string>({ value, onChange, options, label }: { v
   return (
     <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1.5">
       {options.map((o) => (
-        <button key={o.id} type="button" aria-pressed={o.id === value} onClick={() => onChange(o.id)} className={cx('h-[28px] rounded-[14px] border px-2.5 text-[12px] font-semibold', o.id === value ? 'border-primary bg-[#EAEDFB] text-[#23349E] dark:bg-selection dark:text-primary' : 'border-line bg-surface text-ink-2 hover:bg-subtle')}>
+        <button key={o.id} type="button" aria-pressed={o.id === value} onClick={() => onChange(o.id)} className={cx('h-[28px] rounded-[14px] border px-2.5 text-[12px] font-semibold', o.id === value ? 'border-primary bg-info-bg text-primary dark:bg-selection dark:text-primary' : 'border-line bg-surface text-ink-2 hover:bg-subtle')}>
           {o.label}
         </button>
       ))}

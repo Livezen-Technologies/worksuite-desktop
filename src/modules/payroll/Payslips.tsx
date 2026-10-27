@@ -9,6 +9,7 @@ import { groupLines, lineLabel, unsigned } from '../hr/pay';
 import type { PayLine } from '../hr/api';
 import { fetchRun, fetchRuns, runTitle, STATUS_LABEL } from './api';
 import { Card, Kbd, Table, amt, td, tdr } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * The payslip centre (D08): one approved run's payslips, a preview of the one selected (Space shows or hides it),
@@ -78,7 +79,7 @@ export default function Payslips({ runId, figures, onTemplate, onRun }: { runId:
             <div tabIndex={0} role="grid" aria-label="Payslips" onKeyDown={onKey} className="outline-none">
               <Table head={['Employee', ['Net', 'r'], '']}>
                 {slips.map((p) => (
-                  <tr key={p.id} onClick={() => setSel(p.id)} aria-selected={p.id === pick?.id} className={cx('cursor-default', p.id === pick?.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+                  <tr tabIndex={0} onKeyDown={clickOnKey} key={p.id} onClick={() => setSel(p.id)} aria-selected={p.id === pick?.id} className={cx('cursor-default', p.id === pick?.id ? 'bg-selection dark:bg-selection' : 'hover:bg-subtle')}>
                     <td className={td}><b>{p.employee_name}</b> <span className="text-ink-2">{p.employee_no}</span></td>
                     <td className={tdr}>{figures ? amt(p.net) : '—'}</td>
                     <td className={tdr}>{figures ? <button type="button" className="font-semibold text-primary hover:underline" onClick={() => void pdf(p.id, p.employee_no ?? String(p.id), true)}>PDF</button> : null}</td>

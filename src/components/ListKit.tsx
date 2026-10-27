@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
-import { Icon } from '../../components/Icon';
-import { cx } from '../../components/ui';
-import { Empty, Panel } from '../hr/parts';
+import { Icon } from './Icon';
+import { cx } from './ui';
+import { Empty, Panel } from './PageKit';
+
+/** List panels, lines, links and pills first drawn for Inventory (it was `inventory/parts`), shared by Purchase, Finance,
+ * Garage and the hotel desk (audit D-G08). */
 
 /** A dashboard panel of rows, or a line saying there are none. */
 export function ListPanel({ title, empty, action, children }: { title: string; empty: string; action?: ReactNode; children: ReactNode[] }) {
@@ -39,21 +42,21 @@ export function HeadLink({ children, onClick, web }: { children: ReactNode; onCl
 
 /** A signed quantity, green in and red out. */
 export function Signed({ value, text }: { value: number; text: string }) {
-  return <span className={cx('font-bold tabular-nums', value > 0 ? 'text-[#166534] dark:text-success' : value < 0 ? 'text-danger' : 'text-ink-3')}>{text}</span>;
+  return <span className={cx('font-bold tabular-nums', value > 0 ? 'text-success-ink dark:text-success' : value < 0 ? 'text-danger' : 'text-ink-3')}>{text}</span>;
 }
 
 /** A pill: the tracking kind, a status. */
 export function Pill({ children, tone }: { children: ReactNode; tone?: 'blue' | 'amber' | 'red' | 'green' | 'grey' }) {
   const c =
     tone === 'blue'
-      ? 'bg-[#EEF1FC] text-[#23349E] dark:bg-selection dark:text-primary'
+      ? 'bg-selection text-primary dark:bg-selection dark:text-primary'
       : tone === 'amber'
-        ? 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning'
+        ? 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning'
         : tone === 'red'
-          ? 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger'
+          ? 'bg-danger-bg text-danger-ink dark:bg-danger-bg dark:text-danger'
           : tone === 'green'
-            ? 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success'
-            : 'bg-[#F1F2F6] text-[#4A5168] dark:bg-subtle dark:text-ink-2';
+            ? 'bg-success-bg text-success-ink dark:bg-success-bg dark:text-success'
+            : 'bg-subtle text-ink-2 dark:bg-subtle dark:text-ink-2';
   return <span className={cx('inline-flex h-[20px] items-center rounded-[10px] px-2 text-[11px] font-bold whitespace-nowrap', c)}>{children}</span>;
 }
 

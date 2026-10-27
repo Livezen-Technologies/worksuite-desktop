@@ -4,7 +4,7 @@ import { timeLabel, todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, Empty, input, PageHead } from '../hr/parts';
+import { btn, Empty, input, PageHead } from '../../components/PageKit';
 import { byDay, eventName, eventTone, fetchActivity, KM } from './manage';
 
 /**

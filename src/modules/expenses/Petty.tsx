@@ -7,9 +7,9 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { Caps, ConfirmSheet, LoadFailed, Notice } from '../finance/parts';
-import { btn, btnPrimary, btnSmall, Field, input, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { Caps, ConfirmSheet, LoadFailed, Notice } from '../../components/RecordKit';
+import { btn, btnPrimary, btnSmall, Field, input, PageHead, Seg, Sheet, SidePanel } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, money } from './api';
 import {
   atLeast,
@@ -177,7 +177,7 @@ function FundPanel({ orgId, id, may, onClose }: { orgId: number; id: number; may
       {q.error ? refusedSentence(q.error) ? <Notice tone="amber">{refusedSentence(q.error)}</Notice> : <LoadFailed what="That fund" onRetry={() => void q.refetch()} /> : null}
       {f ? (
         <>
-          <section aria-label="Balance" className={cx('rounded-[12px] border px-4 py-3.5', f.float.low ? 'border-[#F1B8A8] bg-[#FDF1EE] dark:border-danger/40 dark:bg-danger-bg' : 'border-line bg-ground')}>
+          <section aria-label="Balance" className={cx('rounded-[12px] border px-4 py-3.5', f.float.low ? 'border-danger-line bg-danger-bg dark:border-danger/40 dark:bg-danger-bg' : 'border-line bg-ground')}>
             <div className="flex items-center gap-2 text-[12px] text-ink-3">
               Current balance
               {f.float.low ? <Pill tone="red">below minimum</Pill> : null}
@@ -219,7 +219,7 @@ function FundPanel({ orgId, id, may, onClose }: { orgId: number; id: number; may
                 const out = t.txn_type === 'out';
                 return (
                   <div key={t.id} className="flex items-center gap-3 border-b border-line/60 px-3 py-2 text-[12.5px] last:border-b-0">
-                    <span className={cx('w-[110px] shrink-0 font-semibold tabular-nums', out ? 'text-danger' : 'text-[#166534] dark:text-success')}>
+                    <span className={cx('w-[110px] shrink-0 font-semibold tabular-nums', out ? 'text-danger' : 'text-success-ink dark:text-success')}>
                       {out ? '−' : '+'}
                       {money(t.amount)}
                     </span>

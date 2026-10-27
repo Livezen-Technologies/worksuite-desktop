@@ -6,7 +6,7 @@ import { text } from '../../../../core/i18n';
 import { toast } from '../../../../core/toasts';
 import { Select } from '../../../../components/Select';
 import { Button, Empty, ErrorNote, Spinner, TextField, cx } from '../../../../components/ui';
-import { Note } from '../../../account/parts';
+import { Note } from '../../../../components/CardKit';
 import {
   AUTO,
   REPLIES,
@@ -161,7 +161,7 @@ export function ChatbotTab({ id, c }: { id: number; c: ChatbotState }) {
             />
           </div>
 
-          <Note tone="amber" className="rounded-[12px] border border-[#f0d08f] px-3.5 py-3 dark:border-warning/40">
+          <Note tone="amber" className="rounded-[12px] border border-warning-line px-3.5 py-3 dark:border-warning/40">
             When staff are online the hand-off rings them like any new chat. Outside hours the assistant takes the visitor's email instead.
           </Note>
         </fieldset>

@@ -6,9 +6,9 @@ import { monthWords, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Cell, Empty, input, PageHead, Panel, row, Sheet, THead } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Cell, Empty, input, PageHead, Panel, row, Sheet, THead } from '../../components/PageKit';
 import { can, fromCents, K, money, problemsOf, refusal, shortDate, type Company } from './api';
-import { ConfirmSheet, Notice } from './parts';
+import { ConfirmSheet, Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { chargeMonth, fetchDepreciation, forbiddenWhy, KS, openingSplit, previousMonth, sameId, saveOpeningDepreciation, type Opening } from './setup';
 
@@ -142,7 +142,7 @@ export default function Depreciation({ company, onGo }: ScreenProps) {
         {reasons.length ? (
           <ul className="mt-2 mb-0 flex list-none flex-col gap-1.5 p-0">
             {reasons.map(([why, n]) => (
-              <li key={why} className="flex gap-2 text-[12px] text-[#9A4A06] dark:text-warning">
+              <li key={why} className="flex gap-2 text-[12px] text-warning-ink dark:text-warning">
                 <span className="shrink-0 rounded-[5px] bg-warning-bg px-1.5 font-bold tabular-nums">{n}</span>
                 <span>{why}</span>
               </li>

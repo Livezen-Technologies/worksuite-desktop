@@ -421,9 +421,9 @@ export function HandQueue() {
   if (!hands.length) return null;
   const manages = meet.canManage;
   return (
-    <section aria-label={t('act.hands', { n: hands.length })} className="flex flex-col gap-2 rounded-[10px] border border-[#F1D9B5] bg-[#FFF9EC] p-2.5 dark:bg-warning-bg">
+    <section aria-label={t('act.hands', { n: hands.length })} className="flex flex-col gap-2 rounded-[10px] border border-warning-line bg-warning-bg p-2.5 dark:bg-warning-bg">
       <div className="flex items-center gap-2">
-        <Icon name="hand" size={14} className="text-[#9A5B00]" />
+        <Icon name="hand" size={14} className="text-warning-ink" />
         <b className="flex-1 text-ink">{t('act.hands', { n: hands.length })}</b>
         {manages ? (
           <button type="button" className="text-[12px] font-semibold text-primary hover:underline" onClick={() => void meet.lowerAllHands()}>

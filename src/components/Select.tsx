@@ -285,12 +285,12 @@ export function Select<T = string>(props: SelectProps<T>) {
           'bare-focus flex max-w-full min-w-0 cursor-pointer items-center gap-2 border text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-default disabled:opacity-50',
           look.size === 'sm' ? 'h-[30px] rounded-[7px] px-2 text-[12.5px]' : 'h-[34px] rounded-[8px] px-2.5 text-[13px]',
           look.dark
-            ? 'border-[#2A3A66] bg-[#16254F] text-white hover:border-[#3B4E85]'
+            ? 'border-stage-4 bg-navy-2 text-white hover:border-stage-4'
             : look.active
               ? 'border-primary bg-selection font-semibold text-primary'
               : open
                 ? 'border-primary bg-surface text-ink ring-2 ring-primary/20'
-                : 'border-line bg-surface text-ink hover:border-[#C2C9DA] focus-visible:border-primary dark:hover:border-ink-3/60',
+                : 'border-line bg-surface text-ink hover:border-primary-soft focus-visible:border-primary dark:hover:border-ink-3/60',
           look.layout,
         ].join(' ')}
       >

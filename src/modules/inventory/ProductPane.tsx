@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { cx } from '../../components/ui';
-import { btn, btnPrimary } from '../hr/parts';
+import { btn, btnPrimary } from '../../components/PageKit';
 import { costingLabel, fetchProduct, K, pictureSrc, trackingLabel, type Product } from './api';
 import { printLabels } from './labels';
 import { ProductContent } from './ProductDrawer';

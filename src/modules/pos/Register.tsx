@@ -667,7 +667,7 @@ function CouponField() {
         maxLength={40}
         onChange={(e) => cartActions.coupon(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 40))}
         placeholder={t('pos.couponHint')}
-        className="h-touch min-w-0 flex-1 rounded-[10px] bg-pos-panel px-3 font-mono text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none"
+        className="h-touch min-w-0 flex-1 rounded-[10px] bg-pos-panel px-3 font-mono text-[15px] shadow-[inset_0_0_0_1px_var(--ws-slate-line)] outline-none"
       />
     </label>
   );

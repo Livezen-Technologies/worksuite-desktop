@@ -11,6 +11,7 @@ import { ConfirmButton, Field, INPUT, Mono, PageBody, PageHeader, Panel, Pills, 
 import { useDepartments, usePeople } from './lookups';
 import { SecretOnce } from './SecretOnce';
 import { Checkbox } from '../../../components/Checkbox';
+import { clickOnKey } from '../../../components/press';
 
 /**
  * A02 · Extensions (VOIP-EXT-01…10). Every extension with its person, department, switch, device type, registration
@@ -180,7 +181,7 @@ export default function Extensions() {
             ) : (
               <Table head={['Ext', 'Person', 'Department', 'PBX', 'Device', 'Registration', 'Recording']}>
                 {list.map((e) => (
-                  <tr key={e.id} className={cx(TR, 'cursor-pointer', selected === e.id && 'bg-selection')} onClick={() => setSelected(e.id)}>
+                  <tr tabIndex={0} onKeyDown={clickOnKey} key={e.id} className={cx(TR, 'cursor-pointer', selected === e.id && 'bg-selection')} onClick={() => setSelected(e.id)}>
                     <td className={TD}>
                       <Mono className="font-bold">{e.extension}</Mono>
                     </td>

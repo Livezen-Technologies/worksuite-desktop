@@ -11,7 +11,7 @@ import { markdownLine } from '../../../../core/markdown';
 import { useStore } from '../../../../core/store';
 import { parseTs, timeLabel } from '../../../../core/time';
 import { toast } from '../../../../core/toasts';
-import { useNow } from '../../../calls/parts';
+import { useNow } from '../../../../components/CallKit';
 import { useWebsiteInbox, WEBSITE, type Section } from '../api';
 import { PaneNotice, RetryButton, useSlow } from '../ThreadPlaceholder';
 import { findCountry, flagOf } from './countries';
@@ -24,6 +24,7 @@ import { agoWords, type LiveData } from './liveData';
 import { MapLegend } from './MapLegend';
 import { OnSiteNow } from './OnSiteNow';
 import { BrandMark } from '../../../../components/BrandMark';
+import { StatCard, StatGrid, type StatTone } from '../../../../components/StatCard';
 
 /*
  * The Live dashboard (worksuite-desktop C-00; the web's LiveDashboard, WS-WCHAT MAP-UI-01…03): who is on the sites right
@@ -342,7 +343,7 @@ function LivePill({ updated, snapshot = null }: { updated: number | null; snapsh
   if (updated === null) {
     return (
       <span role="status" className="flex h-[22px] items-center gap-1.5 rounded-full bg-subtle px-[9px] text-[11.5px] font-bold whitespace-nowrap text-ink-2">
-        <span className="h-[7px] w-[7px] rounded-full bg-[#c9ccd8] motion-safe:animate-pulse" aria-hidden />
+        <span className="h-[7px] w-[7px] rounded-full bg-primary-soft motion-safe:animate-pulse" aria-hidden />
         {snapshot !== null ? text('Updated {ago} ago · refreshing', { ago: agoWords(snapshot) }) : text('Refreshing…')}
       </span>
     );
@@ -350,8 +351,8 @@ function LivePill({ updated, snapshot = null }: { updated: number | null; snapsh
   // Amber after thirty seconds without an answer (MAP-03): the figures may be stale.
   const stale = updated !== null && updated > STALE_AFTER;
   return (
-    <span className={cx('flex h-[22px] items-center gap-1.5 rounded-full px-[9px] text-[11.5px] font-bold whitespace-nowrap', stale ? 'bg-[#fdf6e7] text-[#9a5b10] dark:bg-warning-bg dark:text-warning' : 'bg-[#e9f6ee] text-[#1f6b40] dark:bg-success-bg dark:text-success')}>
-      <span className={cx('h-[7px] w-[7px] rounded-full', stale ? 'bg-[#d9922e]' : 'bg-[#2f9e67] shadow-[0_0_0_3px_#cdebd8] dark:shadow-none')} aria-hidden />
+    <span className={cx('flex h-[22px] items-center gap-1.5 rounded-full px-[9px] text-[11.5px] font-bold whitespace-nowrap', stale ? 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning' : 'bg-success-bg text-success dark:bg-success-bg dark:text-success')}>
+      <span className={cx('h-[7px] w-[7px] rounded-full', stale ? 'bg-amber' : 'bg-green shadow-[0_0_0_3px_var(--ws-success-line)] dark:shadow-none')} aria-hidden />
       {updated === null ? text('Live') : text('Live · updated {n} s ago', { n: updated })}
     </span>
   );
@@ -428,45 +429,46 @@ function Tiles({ d, online, here, now, skew, onSection }: { d: Dashboard; online
   const waited = longestWait(d, here, now, skew);
   const calls = d.now.on_call?.count ?? 0;
   const call = calls ? since(d.now.on_call?.since, now, skew) : null;
-  const tiles: Array<{ label: string; value: string; sub: string; tone: Tone; live?: boolean; go: 'visitors' | Section; action: string }> = [
+  const tiles: Array<{ label: string; value: string; sub: string; tone: Tone; live?: boolean; go: 'visitors' | Section; action: string; icon: string; accent?: StatTone }> = [
     // Counted as the visitor list counts them once it is in, so this, the list's header and the sidebar agree (#248).
-    { label: 'On the site now', value: String(online ?? d.now.visitors_online), sub: d.now.arrived_10m ? text('+{n} in 10 min', { n: d.now.arrived_10m }) : text('seen in {n} min', { n: Math.round(d.now.window_seconds / 60) }), tone: 'plain', live: true, go: 'visitors', action: 'see who' },
-    { label: 'Waiting on us', value: String(d.now.waiting_on_us), sub: waited !== null ? text('longest {time}', { time: waitWords(waited) }) : text('visitor spoke last'), tone: d.now.waiting_on_us ? 'amber' : 'plain', go: 'awaiting', action: 'open those chats' },
-    { label: 'At risk', value: String(d.now.at_risk), sub: d.now.at_risk_after ? text('past {time}', { time: clock(d.now.at_risk_after) }) : text('nobody answered in time'), tone: d.now.at_risk ? 'red' : 'plain', go: 'awaiting', action: 'open those chats' },
-    { label: 'Open chats', value: String(d.now.open + d.now.pending), sub: text('{n} staff', { n: d.now.staff_in_chats ?? 0 }), tone: 'plain', go: 'inbox', action: 'open the inbox' },
-    { label: 'On a call', value: String(calls), sub: call !== null ? callClock(call) : text('no calls on'), tone: calls ? 'green' : 'plain', go: 'inbox', action: 'open the inbox' },
-    { label: 'First reply', value: d.today.first_response_median === null ? '—' : clock(d.today.first_response_median), sub: text('median today'), tone: 'plain', go: 'missed', action: 'open missed chats' },
+    { label: 'On the site now', icon: 'globe', accent: 'blue', value: String(online ?? d.now.visitors_online), sub: d.now.arrived_10m ? text('+{n} in 10 min', { n: d.now.arrived_10m }) : text('seen in {n} min', { n: Math.round(d.now.window_seconds / 60) }), tone: 'plain', live: true, go: 'visitors', action: 'see who' },
+    { label: 'Waiting on us', icon: 'hourglass', value: String(d.now.waiting_on_us), sub: waited !== null ? text('longest {time}', { time: waitWords(waited) }) : text('visitor spoke last'), tone: d.now.waiting_on_us ? 'amber' : 'plain', go: 'awaiting', action: 'open those chats' },
+    { label: 'At risk', icon: 'warning', value: String(d.now.at_risk), sub: d.now.at_risk_after ? text('past {time}', { time: clock(d.now.at_risk_after) }) : text('nobody answered in time'), tone: d.now.at_risk ? 'red' : 'plain', go: 'awaiting', action: 'open those chats' },
+    { label: 'Open chats', icon: 'messages', accent: 'violet', value: String(d.now.open + d.now.pending), sub: text('{n} staff', { n: d.now.staff_in_chats ?? 0 }), tone: 'plain', go: 'inbox', action: 'open the inbox' },
+    { label: 'On a call', icon: 'phone-call', value: String(calls), sub: call !== null ? callClock(call) : text('no calls on'), tone: calls ? 'green' : 'plain', go: 'inbox', action: 'open the inbox' },
+    { label: 'First reply', icon: 'reply', accent: 'cyan', value: d.today.first_response_median === null ? '—' : clock(d.today.first_response_median), sub: text('median today'), tone: 'plain', go: 'missed', action: 'open missed chats' },
   ];
   return (
-    <div className="grid grid-cols-6 gap-2.5" role="list" aria-label={text('Right now')}>
+    <StatGrid min={170} role="list" label={text('Right now')}>
       {tiles.map((t) => (
         <Tile key={t.label} {...t} onClick={() => onSection(t.go)} />
       ))}
-    </div>
+    </StatGrid>
   );
 }
 
 const TILE: Record<Tone, { box: string; value: string }> = {
   plain: { box: 'border-line bg-surface', value: 'text-ink' },
-  amber: { box: 'border-[#f0d08f] bg-[#fffaf0] dark:border-line dark:bg-warning-bg', value: 'text-[#9a5b10] dark:text-warning' },
-  red: { box: 'border-[#f3c1bb] bg-[#fff6f5] dark:border-line dark:bg-danger-bg', value: 'text-[#c2392d] dark:text-danger' },
-  green: { box: 'border-line bg-surface', value: 'text-[#2b7a4b] dark:text-success' },
+  amber: { box: 'border-warning-line bg-rail dark:border-line dark:bg-warning-bg', value: 'text-warning-ink dark:text-warning' },
+  red: { box: 'border-danger-line bg-rail dark:border-line dark:bg-danger-bg', value: 'text-orange dark:text-danger' },
+  green: { box: 'border-line bg-surface', value: 'text-success dark:text-success' },
 };
 
 /** The line under a figure: plain, better than before (green), or worse — and Missed's share (red) — as Insights draws them (L-07). */
 export type SubTone = 'plain' | 'good' | 'bad';
-const SUB: Record<SubTone, string> = { plain: 'text-ink-3', good: 'text-[#2b7a4b] dark:text-success', bad: 'text-[#a63224] dark:text-danger' };
+const SUB: Record<SubTone, string> = { plain: 'text-ink-3', good: 'text-success dark:text-success', bad: 'text-orange-ink dark:text-danger' };
 
 /** The wall's figures (MAP-UI-03): white on navy, amber and red values where somebody waits or is at risk. */
-const WALL: Record<Tone, string> = { plain: 'text-[#f1f4fb]', amber: 'text-[#f3c77e]', red: 'text-[#ff8a7a]', green: 'text-[#8fe0b5]' };
+const WALL: Record<Tone, string> = { plain: 'text-stage-ink', amber: 'text-stage-danger', red: 'text-stage-danger', green: 'text-stage-success' };
 
 /**
- * One figure (C-00's six, the wall's; V-01's call tiles): its name, the number, and a line under it when there is one.
- * `wall` draws it for the dark wall screen, readable across a room (MAP-UI-03); `compact`, the four small figures of the
- * Live map window and the tray's mini-dashboard (MAP-UI-04/05); `stack`, the line under the number rather than beside
- * it, coloured by `subTone` — Insights' change against the previous period (L-07, UX-INS-01).
+ * One figure (C-00's six, the wall's; V-01's call tiles): its name, the number, and a line under it when there is one,
+ * coloured by `subTone` — Insights' change against the previous period (L-07, UX-INS-01). On the desk it is the shared
+ * StatCard: `icon` in a chip coloured by `tone`, or by `accent` when the tone is plain. `wall` draws it for the dark
+ * wall screen, readable across a room (MAP-UI-03); `compact`, the four small figures of the Live map window and the
+ * tray's mini-dashboard (MAP-UI-04/05). `stack` is kept for the callers: the line is always under the number now.
  */
-export function Tile({ label, value, sub, tone, live, big, wall, compact, stack, subTone, action, onClick }: { label: string; value: string; sub?: string; tone: Tone; live?: boolean; big?: boolean; wall?: boolean; compact?: boolean; stack?: boolean; subTone?: SubTone; action?: string; onClick?: () => void }) {
+export function Tile({ label, value, sub, tone, live, big, wall, compact, stack: _stack, subTone, action, onClick, icon, accent }: { label: string; value: string; sub?: string; tone: Tone; live?: boolean; big?: boolean; wall?: boolean; compact?: boolean; stack?: boolean; subTone?: SubTone; action?: string; onClick?: () => void; icon?: string; accent?: StatTone }) {
   if (compact) {
     return (
       <div role="listitem" aria-label={`${text(label)}: ${value}`} className={cx('flex min-w-0 flex-1 flex-col rounded-[10px] border px-2.5 py-[7px]', TILE[tone].box)}>
@@ -475,21 +477,42 @@ export function Tile({ label, value, sub, tone, live, big, wall, compact, stack,
       </div>
     );
   }
-  const body = (
-    <>
-      <span className={cx('flex items-center gap-1.5 font-bold whitespace-nowrap uppercase', wall ? 'text-[12px] tracking-[1.2px] text-[#9aa3c4]' : 'text-[10.5px] tracking-[0.8px] text-ink-3')}>
-        {live ? <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#2f9e67] shadow-[0_0_0_3px_#2f9e6733]" aria-hidden /> : null}
+  if (!wall) {
+    // The desk's figures are the shared StatCard (#modern-cards): the tone colours the chip, `accent` a plain one.
+    const label_ = (
+      <span className="inline-flex items-center gap-1.5">
+        {live ? <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-green shadow-[0_0_0_3px_color-mix(in_srgb,var(--ws-green)_20%,transparent)]" aria-hidden /> : null}
         {text(label)}
       </span>
-      <span className={cx('flex whitespace-nowrap', stack ? 'flex-col' : 'items-baseline', wall ? 'gap-2.5' : stack ? 'gap-0' : 'gap-2')}>
-        <span className={cx('font-bold tabular-nums', wall ? 'text-[44px] leading-[1.1]' : big ? 'text-[44px] leading-[1.15]' : 'text-[26px] leading-[1.15]', wall ? WALL[tone] : TILE[tone].value)}>{value}</span>
-        {sub ? <span className={cx('truncate', wall ? 'text-[13px] text-[#9aa3c4]' : cx('text-[11.5px]', SUB[subTone ?? 'plain']))}>{sub}</span> : null}
+    );
+    return (
+      <StatCard
+        role="listitem"
+        label={label_}
+        value={value}
+        sub={sub ? <span className={SUB[subTone ?? 'plain']}>{sub}</span> : undefined}
+        icon={icon}
+        tone={tone === 'plain' ? (accent ?? 'neutral') : tone}
+        size={big ? 'lg' : 'md'}
+        onClick={onClick}
+        ariaLabel={onClick ? `${text(label)}: ${value} — ${text(action ?? '')}` : undefined}
+      />
+    );
+  }
+  // The wall (MAP-UI-03) keeps its own TV look: white on navy, big figures, coloured where somebody waits.
+  const body = (
+    <>
+      <span className="flex items-center gap-1.5 text-[12px] font-bold tracking-[1.2px] whitespace-nowrap text-ink-4 uppercase">
+        {live ? <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-green shadow-[0_0_0_3px_color-mix(in_srgb,var(--ws-green)_20%,transparent)]" aria-hidden /> : null}
+        {text(label)}
+      </span>
+      <span className="flex items-baseline gap-2.5 whitespace-nowrap">
+        <span className={cx('text-[44px] leading-[1.1] font-bold tabular-nums', WALL[tone])}>{value}</span>
+        {sub ? <span className="truncate text-[13px] text-ink-4">{sub}</span> : null}
       </span>
     </>
   );
-  const box = wall
-    ? 'flex min-w-0 flex-col rounded-[14px] border border-[#22306a] bg-[#111b3b] px-[18px] py-3.5 text-left'
-    : cx('flex min-w-0 flex-col gap-0.5 rounded-[12px] border px-3.5 py-2.5 text-left', TILE[tone].box);
+  const box = 'flex min-w-0 flex-col rounded-[14px] border border-navy-3 bg-stage-2 px-[18px] py-3.5 text-left';
   return onClick ? (
     <button type="button" role="listitem" aria-label={`${text(label)}: ${value} — ${text(action ?? '')}`} onClick={onClick} className={cx(box, 'hover:border-primary focus-visible:outline-2 focus-visible:outline-primary')}>
       {body}
@@ -577,7 +600,7 @@ export function Segmented<T extends string>({ label, value, onChange, options }:
         <button key={k} type="button" role="radio" aria-checked={value === k} onClick={() => onChange(k)} className={cx(SEG, 'gap-1.5', value === k ? SEG_ON : SEG_OFF)}>
           {text(l)}
           {n ? ' ' : null}
-          {n ? <span className="rounded-[8px] bg-warning-bg px-1.5 text-[10.5px] font-bold text-[#9a5b10] dark:text-warning">{n}</span> : null}
+          {n ? <span className="rounded-[8px] bg-warning-bg px-1.5 text-[10.5px] font-bold text-warning-ink dark:text-warning">{n}</span> : null}
         </button>
       ))}
     </div>
@@ -613,7 +636,7 @@ function CountryRows({ rows }: { rows: Array<{ name: string; count: number }> })
             <span className="w-[18px] text-center" aria-hidden>{c ? flagOf(c.code) : '🌐'}</span>
             <span className="w-[120px] truncate text-ink-2">{c?.name ?? r.name}</span>
             <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-subtle" aria-hidden>
-              <span className="block h-1.5 rounded-full bg-[#4a63e8]" style={{ width: `${Math.round((r.count / max) * 100)}%` }} />
+              <span className="block h-1.5 rounded-full bg-blue" style={{ width: `${Math.round((r.count / max) * 100)}%` }} />
             </span>
             <span className="w-[22px] text-right font-semibold text-ink-2 tabular-nums">{r.count}</span>
           </li>
@@ -794,7 +817,7 @@ function SelectedPlace({ place, visitors, today, when, list, onClose }: { place:
           {when === 'now' ? text('{n} on the site now', { n: place.visitors.length }) : text('{n} today', { n: place.count })}
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-          <span className="rounded-[8px] bg-[#eff1fc] px-2 py-[3px] font-semibold text-[#273498] dark:bg-selection dark:text-primary">{badge}</span>
+          <span className="rounded-[8px] bg-selection px-2 py-[3px] font-semibold text-primary dark:bg-selection dark:text-primary">{badge}</span>
           {when === 'now' && todayN > 0 ? (
             <span className="rounded-[8px] bg-subtle px-2 py-[3px] text-ink-2">
               {chatsWord ? text('Today: {visitors} · {chats}', { visitors: visitorsWord, chats: chatsWord }) : text('Today: {visitors}', { visitors: visitorsWord })}
@@ -896,19 +919,19 @@ function WallMode({ d, online, visitors, here, sites, now, skew, updated, onClos
   const stale = updated !== null && updated > STALE_AFTER;
   return (
     // Dark whichever theme the app is in, its map and legend too: inside it the theme's variables are the dark ones (#284).
-    <div role="dialog" aria-modal="true" aria-label={text('Website chats — live, wall mode')} data-theme="dark" className="fixed inset-0 z-[120] flex flex-col gap-4 overflow-auto bg-[#0b1430] px-7 py-[22px] text-[#f1f4fb]">
+    <div role="dialog" aria-modal="true" aria-label={text('Website chats — live, wall mode')} data-theme="dark" className="fixed inset-0 z-[120] flex flex-col gap-4 overflow-auto bg-stage px-7 py-[22px] text-stage-ink">
       <div className="flex flex-wrap items-center gap-3">
         <BrandMark size={34} />
         <span className="text-[20px] font-bold">{text('Website chats — live')}</span>
-        <span className={cx('flex h-[26px] items-center gap-[7px] rounded-full px-[11px] text-[13px] font-bold', stale ? 'bg-[#3a2a10] text-[#f3c77e]' : 'bg-[#123a2a] text-[#8fe0b5]')}>
-          <span className={cx('h-2 w-2 rounded-full', stale ? 'bg-[#d9922e]' : 'bg-[#2f9e67] shadow-[0_0_0_4px_rgba(47,158,103,0.3)]')} aria-hidden />
+        <span className={cx('flex h-[26px] items-center gap-[7px] rounded-full px-[11px] text-[13px] font-bold', stale ? 'bg-stage-gray-2 text-stage-danger' : 'bg-stage-gray-2 text-stage-success')}>
+          <span className={cx('h-2 w-2 rounded-full', stale ? 'bg-amber' : 'bg-green shadow-[0_0_0_4px_rgba(47,158,103,0.3)]')} aria-hidden />
           {stale ? text('Reconnecting…') : text('Live')}
         </span>
-        <span className="min-w-0 truncate text-[14px] text-[#9aa3c4]">{!sites.length && shown.length > 1 ? text('All sites · {sites}', { sites: names }) : names}</span>
+        <span className="min-w-0 truncate text-[14px] text-ink-4">{!sites.length && shown.length > 1 ? text('All sites · {sites}', { sites: names }) : names}</span>
         <span className="flex-1" />
-        <span className="text-[13px] text-[#9aa3c4]">{text('Names hidden on this screen')}</span>
+        <span className="text-[13px] text-ink-4">{text('Names hidden on this screen')}</span>
         <span className="font-mono text-[26px] font-medium tabular-nums">{new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-        <button type="button" onClick={onClose} className="rounded-[6px] border border-[#2a3870] px-2 py-1 text-[12px] text-[#8b93ad] hover:text-[#f1f4fb]">
+        <button type="button" onClick={onClose} className="rounded-[6px] border border-stage-4 px-2 py-1 text-[12px] text-stage-ink-3 hover:text-stage-ink">
           {text('Esc to exit')}
         </button>
       </div>
@@ -922,30 +945,30 @@ function WallMode({ d, online, visitors, here, sites, now, skew, updated, onClos
       </div>
       <div className="grid min-h-0 flex-1 gap-[18px] [grid-template-columns:minmax(0,1fr)_minmax(320px,26%)]">
         {/* The dashboard's map in its dark colours, its dots a step brighter (`data-map-wall`) and larger, names larger. */}
-        <div data-map-wall className="relative min-h-[360px] overflow-hidden rounded-[16px] border border-[#1c2858]">
+        <div data-map-wall className="relative min-h-[360px] overflow-hidden rounded-[16px] border border-primary">
           <LiveMap places={places} box={box} wall edges={false} label="Map of visitors on the site now" className="absolute inset-0" />
-          <div className="absolute bottom-3.5 left-3.5 rounded-[10px] border border-[#22306a] bg-[rgba(11,20,48,0.85)] px-3 py-2">
+          <div className="absolute bottom-3.5 left-3.5 rounded-[10px] border border-primary bg-[rgba(11,20,48,0.85)] px-3 py-2">
             <MapLegend />
           </div>
         </div>
         <div className="flex min-h-0 flex-col">
-          <p className="pb-1 text-[12px] font-bold tracking-[1.2px] text-[#9aa3c4] uppercase">{text('Just now')}</p>
+          <p className="pb-1 text-[12px] font-bold tracking-[1.2px] text-ink-4 uppercase">{text('Just now')}</p>
           <ul className="flex flex-col" aria-label={text('Just now')}>
             {justNow(d, visitors, now, skew).map((e, i) => (
-              <li key={i} className="flex items-start gap-2.5 border-b border-[#1c2858] py-2.5">
+              <li key={i} className="flex items-start gap-2.5 border-b border-primary py-2.5">
                 <span className="mt-1.5 h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: e.dot }} aria-hidden />
-                <span className={cx('min-w-0 flex-1 text-[15px]', e.strong ? 'font-bold text-white' : 'font-medium text-[#dfe3f0]')}>{e.text}</span>
-                <span className="shrink-0 font-mono text-[12px] whitespace-nowrap text-[#8b93ad] tabular-nums">{e.at}</span>
+                <span className={cx('min-w-0 flex-1 text-[15px]', e.strong ? 'font-bold text-white' : 'font-medium text-stage-ink')}>{e.text}</span>
+                <span className="shrink-0 font-mono text-[12px] whitespace-nowrap text-ink-4 tabular-nums">{e.at}</span>
               </li>
             ))}
           </ul>
           <div className="mt-auto flex flex-col gap-2 pt-4">
-            <p className="text-[12px] font-bold tracking-[1.2px] text-[#9aa3c4] uppercase">{text('Sites')}</p>
+            <p className="text-[12px] font-bold tracking-[1.2px] text-ink-4 uppercase">{text('Sites')}</p>
             <ul className="flex flex-col gap-2" aria-label={text('Sites')}>
               {shown.map((w) => (
-                <li key={w.id} className={cx('flex justify-between gap-2 text-[14px]', w.open_now === false && 'text-[#9aa3c4]')}>
+                <li key={w.id} className={cx('flex justify-between gap-2 text-[14px]', w.open_now === false && 'text-ink-4')}>
                   <span className="min-w-0 truncate">
-                    <span className={w.open_now === false ? 'text-[#5a6386]' : 'text-[#2f9e67]'} aria-hidden>●</span> {w.name}
+                    <span className={w.open_now === false ? 'text-ink-3' : 'text-green'} aria-hidden>●</span> {w.name}
                     {w.open_now === false ? ` · ${text('closed')}` : ''}
                   </span>
                   <span className="tabular-nums">{w.online}</span>

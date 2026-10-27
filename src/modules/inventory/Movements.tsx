@@ -2,9 +2,9 @@ import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { Empty, input, PageHead } from '../hr/parts';
+import { Empty, input, PageHead } from '../../components/PageKit';
 import { fetchMovements, K, MOVE_LABEL, moveWhat, num, PER_PAGE, qty, signed, stampFull, whole, type Movement, type MovementFilters, type Warehouse } from './api';
-import { minWidth, Signed } from './parts';
+import { minWidth, Signed } from '../../components/ListKit';
 
 /**
  * Movements (InvMovements): every change to stock, newest first — when, what,

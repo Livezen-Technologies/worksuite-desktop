@@ -63,11 +63,16 @@ export const GUIDE_KEYS: Readonly<Record<string, string | null>> = {
   // Apps that open in the browser.
   social: 'social',
   subscriptions: 'subscriptions',
+  docs: 'docs',
+  forms: 'forms',
+  diagram: 'diagram',
+  rental: 'rental',
   payroll: 'payroll',
   // Cheque Manager: no guide of its own yet.
   cheque: null,
   appointments: 'appointments',
   assets: 'assets',
+  hosting: 'hosting',
   admin: 'admin',
   ai: 'ai',
 };

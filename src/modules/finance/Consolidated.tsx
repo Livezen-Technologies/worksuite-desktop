@@ -6,11 +6,11 @@ import { todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
-import { btnSmall, Cell, Empty, Field, PageHead, THead, row } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btnSmall, Cell, Empty, Field, PageHead, THead, row } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { can, money, shortDate } from './api';
 import { companyRow, CONSOLIDATED_FIGURES, decimalsOf, fetchConsolidated, IK, missingSlugs, rangeProblem, SCREEN_SLUGS, type Consolidated as ConsolidatedData } from './insight';
-import { Notice } from './parts';
+import { Notice } from '../../components/RecordKit';
 import type { ScreenProps } from './Rail';
 import { NotGranted, RangeFields, ReadFailed } from './ReportBar';
 
@@ -165,7 +165,7 @@ function Body({ data, onRates }: { data: ConsolidatedData; onRates?: () => void 
                     <Cell w={null}>
                       <span className="flex min-w-0 flex-col">
                         <b className="truncate text-ink">{r.company.name}</b>
-                        <span className={cx('truncate text-[11.5px]', v.counted ? 'text-ink-3' : 'text-[#9A4A06] dark:text-warning')}>{v.notes.join(' · ')}</span>
+                        <span className={cx('truncate text-[11.5px]', v.counted ? 'text-ink-3' : 'text-warning-ink dark:text-warning')}>{v.notes.join(' · ')}</span>
                       </span>
                     </Cell>
                     {CONSOLIDATED_FIGURES.map(([k]) => (

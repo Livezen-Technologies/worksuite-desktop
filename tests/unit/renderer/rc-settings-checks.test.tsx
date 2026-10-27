@@ -110,7 +110,7 @@ describe('the two rows the organisation decides', () => {
     mount();
 
     expect(await screen.findByText('Their input waits 1.5 seconds')).toBeTruthy();
-    expect(screen.getAllByText('Set by your organization').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Managed by your organization').length).toBeGreaterThan(0);
   });
 
   it('says what the clipboard policy allows', async () => {
@@ -158,7 +158,7 @@ describe('the emergency stop', () => {
 
     expect(await screen.findByText('Ctrl+Alt+F9')).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: 'Emergency stop' })).toBeNull();
-    expect(screen.getAllByText('Set by your organization').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Managed by your organization').length).toBeGreaterThan(0);
   });
 
   it('says it cannot be turned off, only changed', async () => {

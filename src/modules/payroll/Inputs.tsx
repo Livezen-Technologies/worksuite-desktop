@@ -6,8 +6,8 @@ import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal } from '../finance/api';
-import { ReasonSheet } from '../finance/parts';
-import { humanise } from '../hr/parts';
+import { ReasonSheet } from '../../components/RecordKit';
+import { humanise } from '../../components/PageKit';
 import { ATTACHMENT_MAX, attachmentName, ATTACHMENT_TYPES, cancelInput, csvRows, fetchClaimable, fetchGroups, fetchInputs, fetchPeriods, importInputs, sendExpenses, uploadInputAttachment, type ImportResult } from './api';
 import { Badge, Card, NotYet, Table, amt, td, tdr, useReadOnly } from './parts';
 
@@ -110,7 +110,7 @@ export default function Inputs({ periodId }: { periodId: number | null }) {
       </Card>
 
       {over ? (
-        <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[12px] border-2 border-dashed border-primary bg-[#EAEDFB]/80 text-[14px] font-bold text-[#23349E] dark:bg-selection/80 dark:text-primary">
+        <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[12px] border-2 border-dashed border-primary bg-info-bg/80 text-[14px] font-bold text-primary dark:bg-selection/80 dark:text-primary">
           Drop to check the CSV · nothing is saved until you review the rows
         </div>
       ) : null}

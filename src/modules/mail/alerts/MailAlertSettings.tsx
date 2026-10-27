@@ -7,6 +7,7 @@ import { useStore } from '../../../core/store';
 import { toast } from '../../../core/toasts';
 import { Checkbox } from '../../../components/Checkbox';
 import { cx } from '../../../components/ui';
+import { SettingRowFrame, SettingsGroup } from '../../../components/SettingsKit';
 
 /**
  * Settings › Mail › New-mail alerts on this computer (ENH-MAIL-05): what an alert may show (MNA-PRV-01, with the
@@ -62,7 +63,8 @@ export function MailAlertSettings() {
       .catch((e) => toast('error', errorMessage(e)));
 
   return (
-    <div className="flex flex-col gap-3" aria-label={text('New-mail alerts')}>
+    <SettingsGroup title={text('New-mail alerts')} description={text('What an alert on this computer shows, its sound, and pausing alerts.')}>
+      <SettingRowFrame>
       <fieldset className="flex flex-col gap-1.5">
         <legend className="mb-1 text-[13px] font-semibold text-ink">{text('Alerts show')}</legend>
         {LEVELS.map((l) => {
@@ -80,11 +82,14 @@ export function MailAlertSettings() {
         {min ? <p className="text-[12px] text-ink-3">{min === 'hidden' ? text('Your organization hides what new-mail alerts show.') : text('Your organization shows at most the sender in new-mail alerts.')}</p> : null}
         <p className="text-[12px] text-ink-3">{state?.sharing ? text('Your screen is being shared: previews are hidden until sharing stops.') : text('While your screen is shared, previews are hidden. Confidential messages never show a preview.')}</p>
       </fieldset>
+      </SettingRowFrame>
+      <SettingRowFrame>
       <label className="flex items-center gap-2.5">
         <Checkbox checked={prefs.mailAlertSound !== false} onChange={(e) => setSound(e.target.checked)} />
         {text('Mail sound')}
       </label>
-      <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+      </SettingRowFrame>
+      <SettingRowFrame className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-3">
           <span className="font-semibold">{state?.pause ? text('Mail alerts: {state}', { state: state.pauseLabel ?? text('Paused') }) : text('Pause mail alerts')}</span>
           {state?.pause ? (
@@ -103,7 +108,7 @@ export function MailAlertSettings() {
         </div>
         {state?.hoursNote ? <p className="text-[12px] text-ink-3">{text(state.hoursNote)}</p> : null}
         <p className="text-[12px] text-ink-3">{text('Mail still syncs. Unread counts keep updating; only pop-ups and sounds stop.')}</p>
-      </div>
-    </div>
+      </SettingRowFrame>
+    </SettingsGroup>
   );
 }

@@ -9,7 +9,7 @@ import { Icon } from '../../components/Icon';
 import { ModuleSettingsForm } from '../../components/ModuleSettingsForm';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Panel, Sheet } from '../hr/parts';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Panel, Sheet } from '../../components/PageKit';
 import { can, K, METHODS, useBillingOrgs } from './api';
 import {
   addRate,
@@ -92,7 +92,7 @@ export default function BillSettings({ org }: { org: string }) {
                 aria-current={on ? 'page' : undefined}
                 title={n.native ? n.label : `${n.label} — opens in your browser`}
                 onClick={() => (n.native ? setSection(n.id as Section) : void call('app:openInBrowser', { path: '/billing' }))}
-                className={cx('flex h-8 items-center gap-2 rounded-[8px] px-2.5 text-left text-[13px]', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+                className={cx('flex h-8 items-center gap-2 rounded-[8px] px-2.5 text-left text-[13px]', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
               >
                 <span className="min-w-0 flex-1 truncate">{n.label}</span>
                 {n.native ? null : <Icon name="external" size={12} className="shrink-0 text-ink-3" />}
@@ -592,7 +592,7 @@ function Access() {
   return (
     <>
       {a.why ? <p className="m-0 text-[13px] text-ink-2">{a.why}</p> : null}
-      {a.boundary_note ? <p className="m-0 rounded-[10px] border border-[#F5D48A] bg-[#FFF8E6] px-3.5 py-2.5 text-[12.5px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">{a.boundary_note}</p> : null}
+      {a.boundary_note ? <p className="m-0 rounded-[10px] border border-warning-line bg-warning-bg px-3.5 py-2.5 text-[12.5px] text-warning-strong dark:border-warning/40 dark:bg-warning-bg dark:text-warning">{a.boundary_note}</p> : null}
       <div className="grid grid-cols-2 gap-3">
         <Panel title="Narrowed by the company picker" bodyClassName="flex flex-col gap-1 px-3.5 py-3">
           {a.scoped.map((x) => (

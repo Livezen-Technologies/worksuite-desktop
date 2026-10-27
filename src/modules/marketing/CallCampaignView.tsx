@@ -14,6 +14,7 @@ import { agentState, CALL_PILL, Caption, ConfirmSheet, FieldError, outcomesOf, u
 import { ScriptSheet } from './calls-scripts';
 import { btn, btnPrimary, Card, Empty, Field, Initials, input, Kpi, Line, n, PageHeader, pct, Pill, Sheet } from './parts';
 import { companiesWhere, fieldErrors, refusal, type Audience, type Options } from './types';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * One call campaign (MKT-CAL-01…08, MKT-CAL-15; the W10 / DK10 supervisor view): how the queue stands, who is on a
@@ -185,7 +186,7 @@ export default function CallCampaignView({ id, options, onBack, onQueue }: { id:
           {data.consent_required && reach && reach.no_consent > 0 ? (
             <Card tone="warning">
               <div className="flex gap-2.5 text-[13px] leading-snug text-ink">
-                <Icon name="warning" size={16} className="mt-0.5 shrink-0 text-[#9A4A06] dark:text-warning" />
+                <Icon name="warning" size={16} className="mt-0.5 shrink-0 text-warning-ink dark:text-warning" />
                 <span>
                   {text('{held} of {total} contacts have no phone consent and are held back. Record a lawful basis or collect consent to release them.', { held: n(reach.no_consent), total: n(reach.total) })}
                 </span>
@@ -208,13 +209,13 @@ export default function CallCampaignView({ id, options, onBack, onQueue }: { id:
 function Figures({ r }: { r: CallResults }) {
   const interested = (r.outcomes.interested ?? 0) + (r.outcomes.qualified ?? 0);
   return (
-    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">
-      <Kpi label="In queue" value={n(r.waiting)} sub={text('{n} ready now', { n: n(r.ready_now) })} />
-      <Kpi label="Claimed now" value={n(r.claimed_now ?? null)} sub={<span className="text-[#9A4A06] dark:text-warning">Released after 20 min idle</span>} />
-      <Kpi label="Reached" value={n(r.connected)} sub={r.calls > 0 ? text('{p} of calls made', { p: pct((r.connected / r.calls) * 100) }) : 'No calls yet'} />
-      <Kpi label="Interested" value={n(interested)} sub={<span className="text-success">{text('{n} handed to CRM', { n: n(r.handed_over ?? r.leads) })}</span>} />
-      <Kpi label="Callbacks due" value={n(r.callbacks_due ?? r.callbacks)} sub="Created as Tasks" />
-    </div>
+    <StatGrid min={180}>
+      <Kpi icon="list-todo" tone="blue" label="In queue" value={n(r.waiting)} sub={text('{n} ready now', { n: n(r.ready_now) })} />
+      <Kpi icon="hand" tone="violet" label="Claimed now" value={n(r.claimed_now ?? null)} sub={<span className="text-warning-ink dark:text-warning">Released after 20 min idle</span>} />
+      <Kpi icon="phone-call" tone="cyan" label="Reached" value={n(r.connected)} sub={r.calls > 0 ? text('{p} of calls made', { p: pct((r.connected / r.calls) * 100) }) : 'No calls yet'} />
+      <Kpi icon="star" tone="green" label="Interested" value={n(interested)} sub={<span className="text-success">{text('{n} handed to CRM', { n: n(r.handed_over ?? r.leads) })}</span>} />
+      <Kpi icon="phone-incoming" tone="amber" label="Callbacks due" value={n(r.callbacks_due ?? r.callbacks)} sub="Created as Tasks" />
+    </StatGrid>
   );
 }
 

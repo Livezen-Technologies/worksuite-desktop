@@ -8,11 +8,13 @@ import { dayWords } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, input, Kpi, Sheet } from '../hr/parts';
-import { Pill } from '../inventory/parts';
+import { btn, btnPrimary, btnSmall, Empty, input, Kpi, Sheet } from '../../components/PageKit';
+import { Pill } from '../../components/ListKit';
 import { fetchOrgs, K as EK } from '../expenses/api';
 import { K } from './api';
 import { amount, fetchLinkable, fetchTenderExpenses, KE, linkExpense, markRefunded, overBy, presetFor, statusOf, unlinkExpense, varianceLine, type TenderExpense, type TenderExpenses } from './bidcost';
+import { StatGrid } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 const NewClaim = lazy(() => import('../expenses/NewClaim'));
 const ClaimPanel = lazy(() => import('../expenses/ClaimPanel'));
@@ -59,17 +61,18 @@ export default function Expenses({ id, tender }: { id: number; tender: { title: 
 
   return (
     <div className="flex flex-col gap-3.5" aria-label="Expenses">
-      <div className="grid grid-cols-4 gap-3" aria-label="Bid cost">
-        <Kpi label="Total spent" value={amount(t?.spent ?? '0', ccy)} sub={`${t?.count ?? 0} ${t?.count === 1 ? 'expense' : 'expenses'}, rejected ones left out`} />
-        <Kpi label="Pending approval" value={amount(t?.pending ?? '0', ccy)} tone={Number(t?.pending ?? 0) > 0 ? 'amber' : undefined} sub={`${t?.by_status.submitted?.count ?? 0} waiting`} />
-        <Kpi label="Reimbursable" value={amount(t?.reimbursable ?? '0', ccy)} sub="Approved, not yet paid back" />
+      <StatGrid label="Bid cost">
+        <Kpi icon="wallet" tone="blue" label="Total spent" value={amount(t?.spent ?? '0', ccy)} sub={`${t?.count ?? 0} ${t?.count === 1 ? 'expense' : 'expenses'}, rejected ones left out`} />
+        <Kpi icon="hourglass" label="Pending approval" value={amount(t?.pending ?? '0', ccy)} tone={Number(t?.pending ?? 0) > 0 ? 'amber' : undefined} sub={`${t?.by_status.submitted?.count ?? 0} waiting`} />
+        <Kpi icon="hand-coins" tone="cyan" label="Reimbursable" value={amount(t?.reimbursable ?? '0', ccy)} sub="Approved, not yet paid back" />
         <Kpi
+          icon="scale"
           label="Budget vs actual"
           value={v ? `${v.percent}%` : '—'}
           tone={v?.over ? 'red' : undefined}
           sub={v ? `of ${amount(v.planned, ccy)} planned` : 'No bid budget set on the Budget tab'}
         />
-      </div>
+      </StatGrid>
 
       {v ? (
         <p className={cx('m-0 text-[12.5px]', v.over ? 'text-danger' : 'text-ink-2')} aria-label="Budget variance">
@@ -180,7 +183,7 @@ function Row({ x, ccy, onOpen }: { x: TenderExpense; ccy: string | null; onOpen:
   const s = statusOf(x.status);
   const own = x.base_amount !== null ? amount(x.base_amount, x.base_currency || ccy) : amount(x.amount, x.currency);
   return (
-    <tr data-expense={x.id} onClick={onOpen} className={cx('cursor-pointer border-b border-line/60 last:border-b-0 hover:bg-subtle', x.status === 'rejected' && 'text-ink-3')}>
+    <tr tabIndex={0} onKeyDown={clickOnKey} data-expense={x.id} onClick={onOpen} className={cx('cursor-pointer border-b border-line/60 last:border-b-0 hover:bg-subtle', x.status === 'rejected' && 'text-ink-3')}>
       <td className="px-3.5 py-2 whitespace-nowrap text-ink-2">{x.spent_on ? dayWords(x.spent_on, { year: true }) : '—'}</td>
       <td className="px-2 py-2 text-ink-2">{x.category ?? '—'}</td>
       <td className="max-w-[280px] px-2 py-2">

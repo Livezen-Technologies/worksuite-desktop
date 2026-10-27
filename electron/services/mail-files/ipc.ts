@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, shell, utilityProcess, type WebContents } from 'electron';
+import { BrowserWindow, dialog, utilityProcess, type WebContents } from 'electron';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAIL_FILE_FILTERS, type ExportProgress, type ImportProgress } from '@shared/mail-files';
@@ -6,7 +6,7 @@ import type { NavigateRequest } from '@shared/types';
 import { DesktopError } from '../../main/errors';
 import type { IpcRouter } from '../../ipc/router';
 import type { HttpClient } from '../http';
-import { openExternalSafely } from '../../security/hardening';
+import { openMailLink } from '../../security/hardening';
 import { verifySmime } from '../smime';
 import { setSpellLanguages, spellState } from '../spellcheck';
 import { exportMail } from './export';
@@ -132,17 +132,9 @@ export function createMailFilesIpc(deps: MailFilesIpcDeps) {
     router.handle('mail:spellLanguages', (_input, c) => spellState(c.sender.session));
     router.handle('mail:setSpellLanguages', (input, c) => setSpellLanguages(c.sender.session, input.languages));
 
-    // A link from a message, after the safe-link check in the window (DMO-SEC-03).
-    router.handle('mail:openLink', async (input, c) => {
-      const u = new URL(input.url);
-      if (!input.confirmed) return openExternalSafely(u.toString(), winOf(c.sender));
-      if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
-      // The person chose to go on (past a warning, or a link with none): the real address, without a name hidden before the host.
-      u.username = '';
-      u.password = '';
-      await shell.openExternal(u.toString());
-      return true;
-    });
+    // A link from a message, after the safe-link check in the window (DMO-SEC-03). `confirmed` is only believed for a
+    // link this process handed that window; any other address is asked about here first (audit D-G16).
+    router.handle('mail:openLink', (input, c) => openMailLink(input.url, input.confirmed, c.sender.id, winOf(c.sender)));
 
     router.handle('smime:verify', async (input) => {
       const resp = await deps.http.raw('GET', deps.http.url(`/api/mail/messages/${input.uid}/source`, { folder: input.folder, download: 1, ...(input.mailbox ? { mailbox: input.mailbox } : {}) }), { timeoutMs: 60_000 });

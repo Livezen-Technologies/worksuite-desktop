@@ -62,13 +62,13 @@ export function BillRail({ view, draftsOnly, onPick, onDrafts, onOnAccount, onNe
         title={web ? `${label} — opens in your browser` : label}
         aria-current={on ? 'page' : undefined}
         onClick={() => (web ? browser() : onPick(id))}
-        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-info-bg font-bold text-info-ink dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
       >
         <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
         <Icon name={icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {badge ? (
-          <span className={cx('flex h-[18px] min-w-5 shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold tabular-nums', tone === 'red' ? 'bg-[#E0522F] text-white' : 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning')}>{badge}</span>
+          <span className={cx('flex h-[18px] min-w-5 shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold tabular-nums', tone === 'red' ? 'bg-red text-white' : 'bg-warning-bg text-warning-ink dark:bg-warning-bg dark:text-warning')}>{badge}</span>
         ) : web ? (
           <Icon name="external" size={12} className="shrink-0 text-ink-3" />
         ) : null}
@@ -81,11 +81,11 @@ export function BillRail({ view, draftsOnly, onPick, onDrafts, onOnAccount, onNe
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </button>
   );
-  const head = (label: string, warn?: boolean) => <div className={cx('mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] uppercase', warn ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-3')}>{label}</div>;
+  const head = (label: string, warn?: boolean) => <div className={cx('mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] uppercase', warn ? 'text-warning-ink dark:text-warning' : 'text-ink-3')}>{label}</div>;
   const attention = counts.drafts > 0 || counts.unallocated > 0;
 
   return (
-    <nav aria-label="Billing" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
+    <nav aria-label="Billing" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-rail text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         {orgs.length > 1 ? (
           <OrgSwitcher variant="field" orgs={orgs.map((c) => ({ id: String(c.id), name: c.name }))} value={org ? [org] : []} onChange={(ids) => onOrg(ids[0] ?? '')} />
@@ -136,12 +136,12 @@ export function BillRail({ view, draftsOnly, onPick, onDrafts, onOnAccount, onNe
         {item('rep', 'Reports', 'chart')}
         {attention ? head('Needs attention', true) : null}
         {counts.drafts > 0 ? (
-          <button type="button" onClick={onDrafts} aria-current={view === 'inv' && draftsOnly ? 'page' : undefined} className={cx('flex h-[29px] shrink-0 items-center rounded-[7px] px-2.5 text-left text-[12.5px] text-[#9A4A06] hover:bg-subtle dark:text-warning', view === 'inv' && draftsOnly && 'bg-[#FFF4E0] font-bold dark:bg-warning-bg')}>
+          <button type="button" onClick={onDrafts} aria-current={view === 'inv' && draftsOnly ? 'page' : undefined} className={cx('flex h-[29px] shrink-0 items-center rounded-[7px] px-2.5 text-left text-[12.5px] text-warning-ink hover:bg-subtle dark:text-warning', view === 'inv' && draftsOnly && 'bg-warning-bg font-bold dark:bg-warning-bg')}>
             {counts.drafts} {counts.drafts === 1 ? 'draft' : 'drafts'} not yet issued
           </button>
         ) : null}
         {counts.unallocated > 0 ? (
-          <button type="button" onClick={onOnAccount} className="flex h-[29px] shrink-0 items-center rounded-[7px] px-2.5 text-left text-[12.5px] text-[#9A4A06] hover:bg-subtle dark:text-warning">
+          <button type="button" onClick={onOnAccount} className="flex h-[29px] shrink-0 items-center rounded-[7px] px-2.5 text-left text-[12.5px] text-warning-ink hover:bg-subtle dark:text-warning">
             {counts.unallocated} {counts.unallocated === 1 ? 'payment' : 'payments'} on account
           </button>
         ) : null}
