@@ -49,7 +49,18 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: xvfb-run -a npm test
+      # The unit tests, with line coverage (v8) held to the floors in vitest.config.ts (audit D-G07).
+      - run: xvfb-run -a npm run test:coverage
+      - name: Coverage report
+        if: ${{ !cancelled() }}
+        run: node scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+          if-no-files-found: ignore
       - run: npm audit --omit=dev --audit-level=high
 
   package:

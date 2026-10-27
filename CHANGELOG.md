@@ -16,6 +16,34 @@ person who has to live with the change — what it does, and where it bites.
 The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G19, D-G21, D-G22, D-G24, D-G25), and
 its release and CI round (D-G01, D-G02, D-G06, D-G20), and its UX round (D-G09, D-G12, D-G14, D-G23).
 
+### Added (quality round)
+
+- **Line coverage, measured on every build.** `npm run test:coverage` runs the unit tests with v8 coverage; CI runs
+  it in place of `npm test`, writes a table by module to the job summary (`scripts/coverage-summary.mjs`) and keeps the
+  HTML report as the `coverage` artifact. The floors are today's figures rounded down — lines 63 %, statements 63 %,
+  functions 57 %, branches 77 % — so coverage cannot fall without the build saying so. (D-G07)
+- **Tests for the five modules with the fewest for their size** (test cases per thousand lines): Label Studio, Cheque
+  Manager, Events, Payroll and Appointments — their API clients and normalisers, 59 tests. Lines covered: Label
+  0 → 7.6 %, Cheque 11.5 → 14.9 %, Events 31.7 → 32.5 %, Payroll 13.8 → 14.7 %, Appointments 6.0 → 7.7 % (their
+  `api.ts` files 77–100 %), each with its own floor. (D-G07)
+- **A pull request template** with the checks, module versions, the changelog and the TRACEABILITY row. (D-G11)
+
+### Changed (quality round)
+
+- **TRACEABILITY re-baselined.** The rows the shipped work had overtaken now say what is built — the mail composer
+  (rich text, attachments), chat's voice notes and reactions, drag and drop into twenty-odd apps, the call window,
+  Linux repositories, PDF Studio's D2 and on-device tools, and the self-update rule for unsigned builds — and the work
+  merged on 26–27 October has its own section: Hosting, desktop settings, the launcher, stat cards, the release
+  pipeline, offline caches and PDF Studio. (D-G11)
+
+### Security (quality round)
+
+- **The shell's CSP, tightened and its inline styles explained.** `script-src-attr 'none'` and `manifest-src 'none'`
+  were added, and a test pins every `'none'` directive and the script sources. `style-src` keeps `'unsafe-inline'`:
+  mail bodies, signatures, email designs and billing previews are shown in `srcdoc` frames that inherit the shell's
+  policy, and an email's own styles carry no nonce. SECURITY.md says why, and what moving mail to its own origin would
+  take. (D-G17)
+
 ### Changed (structure round)
 
 Nothing a person sees changes: the same screens, the same behaviour. (D-G08, D-G13)

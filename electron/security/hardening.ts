@@ -345,6 +345,12 @@ export function contentSecurityPolicy(sources: CspSources = {}): string {
     "default-src 'self'",
     // WebAssembly may compile (the built-in Office editor, BetterOffice); JavaScript eval and remote scripts may not.
     "script-src 'self' 'wasm-unsafe-eval'",
+    // No inline event handlers (onclick="…") anywhere, said outright rather than left to script-src.
+    "script-src-attr 'none'",
+    // Inline styles stay allowed, and why (docs/SECURITY.md › Content-Security-Policy, audit D-G17): a mail body, a
+    // signature, an email being designed and a billing preview are shown in sandboxed srcdoc frames, which inherit
+    // this policy, and an email's own <style> and style="" carry no nonce; the boot mark in index.html is styled
+    // inline so it paints before any bundle. Script, not style, is what this policy has to hold.
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: ${extra([server])}`.trim(),
     "font-src 'self' data:",
@@ -353,6 +359,8 @@ export function contentSecurityPolicy(sources: CspSources = {}): string {
     "frame-src 'self' blob: about:",
     "worker-src 'self' blob:",
     "object-src 'none'",
+    // The shell installs no web app manifest.
+    "manifest-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",
