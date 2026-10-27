@@ -11,7 +11,10 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
-## Unreleased
+## 0.2.284 — 2026-10-27
+
+The desktop audit's last round (D-G07, D-G10, D-G11, D-G17), Sinhala and Tamil drafts for the core of the app, and
+a Mac App Store build for TestFlight. Needs the same server as 0.2.283.
 
 ### Added (Mac App Store)
 
