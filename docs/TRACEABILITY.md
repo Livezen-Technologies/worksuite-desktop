@@ -5,6 +5,12 @@ Status of every Phase 1 requirement of WS-DESKTOP-SRS-001 v1.1 in this build.
 with a stated limit; **Later** = scheduled for a later phase by the SRS or
 blocked by something outside the code.
 
+Re-baselined 2026-10-27 against the code (desktop audit D-G11): the rows that the shipped work had overtaken were
+corrected (mail's composer, chat's voice notes and reactions, drag and drop, the call window, Linux repositories,
+PDF Studio's D2 and on-device tools, the self-update rule for unsigned builds), and the work merged on 2026-10-26/27
+has its own section, [Shipped 2026-10-26 / 27](#shipped-2026-10-26--27). A pull request that changes what a
+requirement does updates its row here in the same change (the PR template asks).
+
 ## Shell, platforms & packaging (SHL)
 
 | ID | Status | Where / note |
@@ -67,7 +73,7 @@ blocked by something outside the code.
 | FR-TRAY-01..03, 05..07 | Done | Tray menu incl. Clock In/Out (also in the title bar, one implementation for both), quick actions, pause notifications; minimize to tray; autostart; background services; state icons with priority; dock/taskbar badge |
 | FR-TRAY-04 | Partial | Required services from policy are applied and shown locked |
 | FR-NTF-01..04, 06 | Done | Native notifications for server notifications, chat, calls and new mail; privacy modes (content hidden while locked); DND and pause |
-| FR-NTF-05 | Partial (P2) | Incoming calls raise a notification; the always-on-top call window arrives with Meet |
+| FR-NTF-05 | Done | Incoming calls raise a notification and ring in an always-on-top call window, top right of the screen the pointer is on (`windows/manager.ts` `ring`); website chats and urgent tickets ring the same way |
 | FR-NTF-07 | Partial | Read state is marked on the server; cross-device suppression depends on the server |
 
 ## Transfers, offline, realtime (XFR, OFF, RT)
@@ -76,7 +82,7 @@ blocked by something outside the code.
 |---|---|---|
 | FR-XFR-01/02 | Done | Central download and chunked, resumable upload managers |
 | FR-XFR-03 | Done | Transfer Center |
-| FR-XFR-04 | Partial | Drop onto Files and Chat |
+| FR-XFR-04 | Done | Files dropped from the OS (paths only from a real drop, `registerDropped` in the preload): Files, Chat, Mail's composer, Tasks, Support's composer, PDF Studio, Social Media, Inventory, Garage and the hotel desk (`garage/parts.tsx` `DropZone`), HR documents, Payroll inputs, Expenses receipts, Assets, Billing, Contacts, Meetings, Notes, Salon, Tenders, Sinhala Tools, the AI assistant and My account |
 | FR-XFR-05 | Done | Paste screenshots/files into Chat, user gesture only |
 | FR-OFF-01..05 | Done | READ_CACHE proxy; encrypted ordered queue with idempotency keys, conflicts surfaced; network pill with pending count |
 | FR-OFF-06 | Done | Mail cache window 7/30/90 days or headers only |
@@ -156,8 +162,8 @@ BACKEND.md). The MVP items of §7 and §9, and the ones the desktop shares with 
 
 | ID | Status | Where / note |
 |---|---|---|
-| FR-COM-01 | Partial | Three-pane mail, combined inbox, shared mailboxes, folders, read, reply/forward, archive/delete, print, attachments download; composer is plain text without attachments |
-| FR-COM-02/03 | Partial | Rooms, threads, receipts, reactions shown, files, typing, pending offline messages, mini window; sending reactions, voice notes and GIFs is on the web for now |
+| FR-COM-01 | Done | Three-pane mail, combined inbox, shared mailboxes, folders, read, reply/forward, archive/delete, print, attachments download; the composer is the rich-text editor (`mail/editor/MailEditor.tsx`) with attachments from this computer, Drive and drops, drafts kept encrypted and on the server, signatures and send later (`mail/Compose.tsx`) |
+| FR-COM-02/03 | Partial | Rooms, threads, receipts, reactions shown and sent (`POST messages/{id}/react`), files, typing, pending offline messages, mini window, voice notes recorded and sent (`chat/parts.tsx` `VoiceRecorder`, `kit/recording.ts`; tests `chat-voice-285`, `chat-voice-300`). Sending GIFs is on the web |
 | FR-COM-04/05 | Done | Meet meetings in their own window; screen share through our picker only (`ScreenShare`) |
 | FR-COM-06 | Partial | Meet remote control (WS-MEET-ENH-01): controlling another shared screen (`src/modules/meet/remote`), and being controlled (`electron/services/remote-control`) — consent with local proof, signed grant, AES-GCM + HMAC channel, input through PowerShell/SendInput, osascript/CGEvent or xdotool; Wayland is share-only. Handover asked in the same prompt; files both ways (RC06), accepting with local proof. The named laser pointer and annotations over a shared screen (RC-PTR-01…03, RC08; `src/modules/meet/remote/pointers.ts`, `PointerLayer.tsx`), the web client's messages on its topic, which the person sharing can clear or switch off; the controller's name beside the pointer on the shared computer (RC-INP-04). Injection is unit-tested with a fake helper and run for real on Linux (X11, under Xvfb); the Windows helper ran under PowerShell against a stand-in user32 and the macOS script against a stand-in bridge. `tests/os/remote-control/check.mjs` (workflow *Remote control helpers*) runs them on real Windows and macOS: not yet run, as GitHub started no Actions jobs in the repository on 2026-09-28 |
 | FR-COM-07/08 | Partial | The AI dock (Ask / Write / Changes) and Quick Ask (Ask / Rewrite or translate). Ask is the server's assistant (`/api/ai/assist/chat`, `assistant.panel` and `desktop.quick`): the record the active tab shows as its context, which the person can leave out; a file picked on this computer (`ai:upload`: a synced Drive file by its Drive id, anything else its words for a day). Changes it proposes are cards confirmed only in the main window, through `ai:confirm` (the API proxy refuses the route); Quick Ask sends a card to the main window instead. Waiting changes arrive as notifications that only open the Changes view, and in the tray (`electron/services/ai-pending.ts`). The device policy's `ai_quick_ask`, `ai_insert`, `ai_local_files` and the company's AI policy (`/api/ai/assist/device`) both apply, the stricter winning (`electron/services/ai.ts`). Write is the writing assistant (`/api/ai/write`). Quick Ask reads the selection once, on its shortcut, and inserts only on a click. File summaries with citations are the web's |
@@ -330,8 +336,10 @@ Tests: `tests/unit/renderer/pms-desk.test.tsx`, `tests/unit/renderer/pms-money.t
 ## PDF Studio (WorkSuite PDF Studio SRS v1.0, stages D1 — foundation and viewer — and D2 — editing)
 
 `src/modules/pdf` (renderer), `electron/services/pdf` and `electron/workers/pdf-worker.ts` (main and engine).
-D2 adds annotation, pages, saving, locks, autosave, recovery and offline saves; forms, signing, OCR, redaction and
-compare are later phases (no server API yet). D2 tests: `tests/unit/electron/pdf-edit.test.ts` (the real PDFium),
+D2 adds annotation, pages, saving, locks, autosave, recovery and offline saves. The tools on this computer (audit
+D-G12: from pictures or blank pages, combine, duplicate and split, page images and text, protect and unlock, true
+redaction, Bates and stamps) run in the engine; what needs the server says so and is offered in the Pro panel for Drive
+PDFs (docs/PDF_STUDIO_GAP_PLAN.md, `src/modules/pdf/tools.ts`, `ToolPanels.tsx`; tests `pdf-tools`). D2 tests: `tests/unit/electron/pdf-edit.test.ts` (the real PDFium),
 `pdf-editing.test.ts` (the service with the real engine and a fake PDF Studio server),
 `tests/unit/renderer/pdf-editing-ui.test.tsx`. Tests:
 `tests/unit/electron/pdf-engine.test.ts` (the real PDFium), `pdf-worker.test.ts` (the worker protocol, crashes,
@@ -342,21 +350,20 @@ on a real system `tests/os/pdf/check.mjs` (workflow "PDF engine").
 |---|---|---|
 | PDF-ARCH-001, 002 | Done | `PDFEngineInterface` (`engine.ts`); `PdfiumProvider` (PDFium, WebAssembly, `@embedpdf/pdfium` 2.15.1); no MuPDF provider (AGPL/commercial, §2.5) |
 | PDF-ARCH-003 | Done | Nothing above the interface knows the engine; the contract carries no engine types |
-| PDF-ARCH-004 | Later | OCR is Ph5 |
+| PDF-ARCH-004 | Partial | OCR of Drive PDFs runs on the server from the Pro panel; device OCR and the scanner bridge are not in this version |
 | PDF-ARCH-005 | Done | `capabilities()` asked at run time (sent with the worker's `ready`); layers and text editing are false for PDFium and hidden |
 | PDF-ARCH-010, 011 | Done | `window.worksuite.pdf` only (preload); no fs / child_process / shell in the renderer |
 | PDF-ARCH-012, 013 | Done | A worker per document; cancelable (renders by ticket, searches and scans between pages), memory-capped (1 GB), ended on a hang (no pong 20 s, deadline 30 s) and restartable (Retry) |
 | PDF-ARCH-014, 015 | Done | `local-files.ts` (handles; resolved, regular, `%PDF-`, size, not in the app's data); working copies in `<profile>/PDF/work` |
 | PDF-UI-001, 002 | Partial | Left: Pages, Bookmarks (outline), Search, Files (attachments). Right: Properties, Versions, Activity. Comments, Forms, Signatures, Layers panels come with their features (layers: PDFium has no API); panels collapse (View), not yet dockable |
-| PDF-UI-003 | Partial | File, source, version and "Read only" (with why); Saved / Saving / Unsaved / Saved locally come with editing (D2) |
+| PDF-UI-003 | Done | File, source, version and "Read only" (with why); Saved · vN / Saving / Unsaved / Saved on this computer (see PDF-SAVE) |
 | PDF-UI-004 | Done | A PDF per WorkSuite tab (`open.ts`), the open one brought to the front; the ● prefix comes with editing |
-| PDF-UI-005 | Later | D2 (nothing unsaved in a viewer) |
 | PDF-UI-006 | Done | Ribbon commands off with their reason as the tooltip (policy, the PDF's own flags, view-only shares); later stages' tabs not shown |
 | PDF-UI-007, 008 | Done | Full screen of the PDF workspace; Present: one page on black, keys |
 | §4.3 shortcuts | Done | Ctrl/⌘ O, S (says read-only), P, F, Shift F, + / −, H, V through the shortcut registry (`core/commands.ts`, Settings); Z / Y with D2. The app menu's own zoom roles may take Ctrl/⌘ + / − on macOS first — to try there |
 | PDF-OPEN-001 | Partial | Drive (Files), local (dialog, drop, OS argv / `open-file`), Mail attachments. Chat attachments, Google Drive / OneDrive (no connectors in the desktop) and module documents not yet |
-| PDF-OPEN-002, 003 | Partial | Local files read in place, never uploaded; Edit / Save / Save As / Upload are D2 |
-| PDF-OPEN-004 | Partial | Mail: preview only; Save to Drive and Edit Copy are D2 |
+| PDF-OPEN-002, 003 | Done | Local files read in place, never uploaded unless asked; edited and saved in place (atomic) or as a copy, or uploaded to Drive (PDF-SAVE) |
+| PDF-OPEN-004 | Done | A mail attachment opens in PDF Studio (`mail/MessageView.tsx` `openPdf`, kind `mail`) as a copy that can be annotated, edited and saved to Drive or this computer |
 | PDF-OPEN-008 | Done | Prompt with "Remember for this session" (memory only); permanent remembering not offered |
 | PDF-OPEN-009 | Done | Max PDF Size (policy seam, default 2 GB): refused with the limit, before fetching |
 | PDF-OPEN-010 | Partial | `GET /api/pdf/{id}/status` (the server's PdfAccess "open") before any content; `files.pdf.open` is the server's (stage S) |
@@ -372,8 +379,8 @@ on a real system `tests/os/pdf/check.mjs` (workflow "PDF engine").
 | PDF-PRN-002 | Partial | The PDF's print flag and the organisation's policy (seam); `files.print` / `files.pdf.print` are the server's (stage S) |
 | PDF-PRN-003, 004 | Done | With or without comments and fields; `pdf.printed` audited with id, version, page count |
 | PDF-API-001…003 | Done | Opaque handles; per-session sender check; strict schemas |
-| PDF-API-004 | Later | No destructive calls in D1 |
-| PDF-AUD-001, 004 | Partial | `pdf.opened`, `pdf.printed` (local audit outbox, sent to `/desktop/v1/audit`); editing events with D2 |
+| PDF-API-004 | Done | D2's writes (save, page edits, lock take-over) go through the same handles and checks; a save names its base version and a conflict asks (PDF-CONF) |
+| PDF-AUD-001, 004 | Done | `pdf.opened`, `pdf.printed`, `pdf.saved` (local or Drive, with the edit summary) in the local audit outbox, sent to `/desktop/v1/audit` (`electron/services/pdf/service.ts`) |
 | PDF-NFR-001, 002 | Partial | Measured on the Linux check (2,000 pages: 224 ms to the first page); needs the reference machine |
 | PDF-NFR-010 | Done | A crashed or hung worker fails its tab with Retry, nothing else |
 | PDF-NFR-020 | Done | Sealed working copies and thumbnails |
@@ -390,7 +397,7 @@ on a real system `tests/os/pdf/check.mjs` (workflow "PDF engine").
 | PDF-OFF (save offline) | Done | A save offline is kept and sent when WorkSuite is back (`online()`) |
 | PDF-UI-005 | Done | Closing a tab with unsaved changes keeps them for recovery and says so |
 | PDF-OPEN-001 (modules) | Done | Chat and task attachments, HR documents and leave evidence, billing and purchasing PDFs, mail: downloaded, then PDF Studio (`openInApp`) |
-| PDF-FORM, SIGN, OCR, REDACT, COMPARE | Later | Later phases; no server API |
+| PDF-FORM, SIGN, OCR, REDACT, COMPARE | Partial | Redaction: patterns and words found, reviewed and truly removed on this computer; signing: a drawn or typed mark, and a smart card or USB token (PKCS#11, `electron/services/pdf/pkcs11.ts`) signing the server's signed attributes from the Pro panel; OCR: the server's, from the Pro panel. Forms and Compare need the server (Pro panel) — docs/PDF_STUDIO_GAP_PLAN.md |
 
 ## WorkSuite Events — the Event Desk (Events SRS §15.2 [D], §9, §8.4)
 
@@ -695,7 +702,7 @@ answers 404 and the screen says so.
 | HDM-DSK-01 | Done | `shared/apps.ts` (`hosting`, Business, `globe`), `src/core/app-look.ts` (cyan `#0891B2`), `src/modules/registry.ts` |
 | HDM-DSK-02 | Done | `modules/hosting/Rail.tsx` — 88 px rail, ten screens |
 | HDM-DSK-03 | Done | Tabs and record windows per domain / server; ⌘N, ⌘⇧S, F5, Alt+1…0, ↑↓ ↵ ⌘↵ ⌘⇧↵; command palette entries while Hosting is open |
-| HDM-DSK-04 | Done | `electron/services/hosting-alerts.ts`, `shared/hosting.ts`, `electron/tray/tray.ts` (badge on Windows / Linux; the macOS Dock badge is not yet painted with it) |
+| HDM-DSK-04 | Done | `electron/services/hosting-alerts.ts`, `shared/hosting.ts`, `electron/tray/tray.ts` (badge on Windows / Linux) and the macOS Dock badge (`src/core/dock-badge.ts` counts `hosting`) |
 | HDM-DSK-05 | Done | READ_CACHE (`hostingCached`), `ReadOnly`, "as of" banner |
 
 ## Devices, security, updates (SEC, UPD)
@@ -708,7 +715,7 @@ answers 404 and the screen says so.
 | FR-SEC-07/08 | Done | Revoke → wipe of WorkSuite's own data only; on a desktop-v1 server the refused refresh (`DEVICE_REVOKED`) triggers it too |
 | FR-SEC-11 | Done | "Cannot reach WorkSuite server…" |
 | FR-UPD-01..05 | Done | Signed manifest, channels, minimum version screen, busy check, critical deadline with warnings; install requires signed builds |
-| FR-UPD-06 | Partial | Per-user NSIS and machine-wide MSI; PKG for MDM; Linux repositories later |
+| FR-UPD-06 | Done | Per-user NSIS and machine-wide MSI; PKG for MDM; APT and DNF repositories for Linux, signed, which the updater uses for a repository install (`updater/linux.ts`, docs/RELEASING.md; tests `linux-repo`, `updater-linux`) |
 
 ## Printing, diagnostics, localization (HW, DIAG, L10N)
 
@@ -720,10 +727,30 @@ answers 404 and the screen says so.
 | FR-L10N-02 | Done | User → organization → OS time zone; WorkSuite's UTC vs wall-clock rules |
 | FR-L10N-03 | Partial | Keyboard navigation, focus rings, ARIA roles, reduced motion, high contrast; a full screen-reader audit is still to do |
 
+## Shipped 2026-10-26 / 27
+
+The work merged on 2026-10-26 and 2026-10-27 (0.2.282 and Unreleased in CHANGELOG.md), by the requirement or board it
+answers.
+
+| ID | Status | Where / note |
+|---|---|---|
+| HDM-DSK-06 (register, import, reports, bulk) | Done | `modules/hosting/Register.tsx` (every connected registrar that can, price, step-up before registering), `Import.tsx` (CSV, the server's column guess and dry run, Apply), `Reports.tsx`, `Bulk.tsx` (link, tag, owner, remove), `Costs.tsx`, `Monitors.tsx`, `Accounts.tsx` (Test, Sync, schedule); `StepUp.tsx` for the high-risk acts. Reads `/api/hosting` as the server writes it (Hosting 1.1.0); an older server: "needs a server update". Tests: `hosting.test.tsx` |
+| HDM-DSK-07 (offline) | Done | READ_CACHE (`hostingCached`, `shared/hosting.ts`), read-only with its "as of" time; every write waits for WorkSuite |
+| DSK-SET-01 (desktop settings) | Done | `shared/desktop-settings.ts` (the catalogue, sources, locks), `electron/services/desktop-settings.ts` (sync, offline copy, first upload), `src/core/desktop-settings.ts`; Settings › **Features & apps** (`settings/FeaturesSettings.tsx`) turns features and apps off, and an app turned off is gone from the launcher, sidebar, search, links, shortcuts, palette and tray; **Desktop & startup** (`StartupSettings.tsx`) says what WorkSuite opens on. Managed keys show *Managed by your organization*; a server without Desktop 1.13.0 keeps them on this computer. Tests: `desktop-settings`, `desktop-settings-enforcement` |
+| DSK-SET-02 (one Settings look) | Done | Every Settings screen and the modules' settings screens draw `src/components/SettingsKit.tsx` (D-G09): sections with search, cards, rows, Reset to default |
+| LCH-01 (the app launcher) | Done | `src/app/overlays/Launcher.tsx`, `shared/launcher.ts`, `src/core/launcher-prefs.ts`, `settings/LauncherSettings.tsx`: one card over the dimmed app, search with its shortcut, Pinned and Recent, category pills with counts; the organisation's launcher defaults from its desktop policy. The server's apps without a desktop module (Documents, Forms, Rental, Diagrams) are listed as *opens in your browser*, for whoever the server gives them. Tests: `launcher`, `launcher-redesign`, `launcher-settings`, `launcher-defaults` |
+| UI-STAT-01 (figure cards) | Done | One `StatCard` laid out by `StatGrid` (`src/components/StatCard.tsx`) for the KPI, stat and summary cards of every module's dashboards and reports, light and dark (D-G22). Tests: `stat-card.test.tsx` |
+| REL-01 (release pipeline) | Done | `.github/workflows/build.yml`: a pushed `vX.Y.Z` tag (it must be `package.json`'s version) builds, signs and publishes to the WorkSuite Update Center with `publish-release.mjs` — BETA by default, stopping at READY_FOR_TEST for people to approve; a tag or STABLE run fails unsigned and checks the Windows installers' Authenticode signature; CI tags module versions. docs/RELEASING.md. Tests: `release-ci.test.ts` (D-G01, D-G02, D-G20) |
+| REL-02 (end-to-end in CI) | Done | `.github/workflows/e2e.yml`: Connection & Startup (`tests/e2e/accounts.mjs`, against the mock Cloud and an enterprise stand-in) on every pull request, on `main` and nightly; the real-server smoke nightly when its secrets are set (D-G06) |
+| OFF-READ-01 (offline caches) | Done | `shared/offline-reads.ts` (`offlineReadModule`: which module a cached GET belongs to), `src/core/offline-read.ts`, `src/components/OfflineReadOnly.tsx`: Finance, Expenses, Marketing, Cheque Manager, Recruitment and Board read their last copy offline under an "Offline · read-only" banner with its time, every change refused before it is sent; share links, exports, files, receipts, cards, credentials and print checks are never kept (D-G14). Tests: `offline-reads`, `offline-read-only` |
+| PDF-TOOL (on this computer) | Done | `src/modules/pdf/tools.ts`, `ToolPanels.tsx`, `electron/services/pdf/host.ts`: PDF from pictures or blank pages; combine with ranges and a bookmark per file; duplicate and split; pages as PNG and text as .txt; protect (AES-256, passwords, permissions) and unlock; true redaction of what the search found; Bates, headers, footers and watermarks. What needs the server or WorkSuite Office says so ("Needs the WorkSuite server", the Pro panel for Drive PDFs) instead of a dead button (D-G12). Tests: `pdf-tools` |
+| PDF-PRO-SIG (token signing) | Done | A smart card or USB token (PKCS#11, `electron/services/pdf/pkcs11.ts`) signs the server's signed attributes; the PIN goes to the token library, never kept |
+
 ## Known limitations
 
-- Code signing, notarization and the Windows certificate are credentials this
-  repository cannot hold; unsigned builds run but cannot self-update.
+- Code signing, notarization and the Windows certificate are CI secrets (docs/RELEASING.md §4). A tag or STABLE
+  build fails without them; an unsigned build runs and self-updates only on the test channels
+  (`electron/updater/updater.ts`), never on STABLE.
 - Policies are signed only where the server has `desktop.policySigningKey`
   and the build pins its public key; see [BACKEND.md](BACKEND.md).
 - Translations other than English need review by native speakers.

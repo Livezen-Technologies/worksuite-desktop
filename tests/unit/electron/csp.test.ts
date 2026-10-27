@@ -39,6 +39,19 @@ describe('content security policy', () => {
     expect(directive(csp, 'connect-src')).toBe("connect-src 'self' wss://media.worksuite.lk https://media.worksuite.lk");
   });
 
+  it('allows no inline script, no plugins, no manifest, no base or form targets, and no framing of the app (D-G17)', () => {
+    const csp = contentSecurityPolicy({ server: 'https://app.worksuite.lk', media: ['wss://media.worksuite.lk'] });
+    expect(directive(csp, 'script-src-attr')).toBe("script-src-attr 'none'");
+    for (const d of ['object-src', 'manifest-src', 'base-uri', 'form-action', 'frame-ancestors']) expect(directive(csp, d)).toBe(`${d} 'none'`);
+    expect(directive(csp, 'script-src')).not.toMatch(/unsafe-inline|(?<!wasm-)unsafe-eval|\*|https?:/);
+    expect(directive(csp, 'default-src')).toBe("default-src 'self'");
+  });
+
+  it("keeps inline styles, which mail and email previews need in their srcdoc frames (SECURITY.md; D-G17)", () => {
+    // Removing it is a decision with its own tests: a mail body's <style> and style="" must still apply.
+    expect(directive(contentSecurityPolicy(), 'style-src')).toBe("style-src 'self' 'unsafe-inline'");
+  });
+
   it('refuses anything that is not a bare origin', () => {
     expect(cspOrigin('https://x.example/path', ['https:'])).toBeNull();
     expect(cspOrigin('javascript:alert(1)', ['https:'])).toBeNull();

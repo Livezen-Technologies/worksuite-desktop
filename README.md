@@ -30,6 +30,7 @@ accept `http://localhost:<port>`; packaged builds accept HTTPS only.
 | `npm run typecheck` | TypeScript (strict) for the main process and the renderer |
 | `npm run lint` | ESLint, including React Compiler rules |
 | `npm test` | Unit tests (Vitest, run under Electron's own Node 24) |
+| `npm run test:coverage` | The unit tests with line coverage (v8): `coverage/index.html`, and a table by module from `node scripts/coverage-summary.mjs`; CI holds it to the floors in `vitest.config.ts` |
 | `npm run e2e` | End-to-end smoke test against a real server (see below) |
 | `npm run build` | Production bundles in `out/` |
 | `npm run dist:dir` | An unpacked app for this machine in `release/` |
