@@ -1,5 +1,6 @@
 import type { AccountKind, AccountRecord, AccountsState, AccountView, ConnectionHealth, UnsyncedSummary } from '@shared/accounts';
 import type { DiscoveredServer } from '@shared/discovery';
+import { DEFAULT_STARTUP } from '@shared/startup-config';
 import type { TrustedConfig } from '@shared/trusted-config';
 import type { AuthState, ServerInfo } from '@shared/types';
 import { DesktopError } from '../../main/errors';
@@ -88,6 +89,8 @@ export function discoveredFromProbe(info: ServerInfo): DiscoveredServer {
     serverId: null,
     name: info.name,
     deployment: 'LEGACY',
+    /* A legacy server publishes nothing about the startup screen, so the built-in one stands. */
+    startup: DEFAULT_STARTUP,
     schema: info.api === 'desktop-v1' ? 'legacy-desktop' : 'legacy-core',
     signed: false,
     authMode: 'legacy',

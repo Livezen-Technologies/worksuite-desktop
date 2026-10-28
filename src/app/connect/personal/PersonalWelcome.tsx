@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import type { AccountView } from '@shared/accounts';
 import type { BrowserSignIn, IdpHint } from '@shared/cloud';
 import { CLOUD_ORIGIN, type ConnectRun } from '@shared/discovery';
+import { DEFAULT_STARTUP, signupMode, visibleCredentials, type StartupConfig, type StartupMethod } from '@shared/startup-config';
 import { app } from '../../../core/app-state';
 import { call, errorMessage } from '../../../core/bridge';
 import { useStore } from '../../../core/store';
@@ -81,6 +82,12 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const startup: StartupConfig = run?.server?.startup ?? DEFAULT_STARTUP;
+  const credentials = visibleCredentials(startup);
+  const buttons = PROVIDERS.filter((p) => credentials.includes(p.id as StartupMethod)).sort((a, b) => credentials.indexOf(a.id as StartupMethod) - credentials.indexOf(b.id as StartupMethod));
+  const emailOn = credentials.includes('email');
+  const signup = signupMode(startup, run?.server?.signup ?? true);
+  const words = startup.text;
   const freeBytes = run?.server?.plans?.freeBytes ?? 2 * GiB;
   const host = (() => {
     try {
@@ -144,8 +151,10 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
   return (
     <ConnectFrame title={TITLE} aside={hero}>
       <form onSubmit={onEmail} className="flex w-[400px] max-w-full flex-col gap-3.5" aria-label="Sign in to WorkSuite Cloud">
-        <h1 className="m-0 text-[28px] font-extrabold text-ink">{account || !adding ? 'Welcome back' : 'Sign in to WorkSuite Cloud'}</h1>
-        <p className="m-0 mb-1.5 text-[14px] text-ink-3">Sign-in opens in your browser. WorkSuite Desktop never sees your password.</p>
+        <h1 className="m-0 text-[28px] font-extrabold text-ink">{words.title ?? (account || !adding ? 'Welcome back' : 'Sign in to WorkSuite Cloud')}</h1>
+        <p className="m-0 mb-1.5 text-[14px] text-ink-3">{words.subtitle ?? (signup === 'in_app' ? 'Sign in with your WorkSuite Cloud account, or create one here.' : 'Sign-in opens in your browser. WorkSuite Desktop never sees your password.')}</p>
+        {emailOn ? (
+          <>
         <label htmlFor="personal-email" className="text-[13px] font-semibold text-ink">
           Email (optional)
         </label>
@@ -162,13 +171,17 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
           {busy === 'email' ? <Icon name="spinner" size={16} className="animate-spin-slow" /> : null}
           Continue with email
         </button>
-        <div className="flex items-center gap-3 text-[12px] text-ink-3">
-          <span className="h-px flex-1 bg-line" />
-          or
-          <span className="h-px flex-1 bg-line" />
-        </div>
+          </>
+        ) : null}
+        {emailOn && buttons.length > 1 ? (
+          <div className="flex items-center gap-3 text-[12px] text-ink-3">
+            <span className="h-px flex-1 bg-line" />
+            or
+            <span className="h-px flex-1 bg-line" />
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-2.5">
-          {PROVIDERS.map((p) => (
+          {buttons.filter((p) => p.id !== 'email').map((p) => (
             <button
               key={p.id}
               type="button"
@@ -186,6 +199,7 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
             {error}
           </div>
         ) : null}
+        {signup === 'off' ? null : (
         <div className="mt-2.5 flex items-center justify-between gap-3 rounded-[12px] border border-line bg-surface p-4">
           <span className="text-[14px] text-ink">Don't have an account?</span>
           <button type="button" disabled={!idle} onClick={() => void start(email.trim() ? 'email' : null, 'sign-up', 'sign-up')} className="flex items-center gap-2 rounded-[10px] bg-teal px-4 py-2.5 text-[14px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
@@ -193,6 +207,7 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
             Create Free Account
           </button>
         </div>
+        )}
         <button type="button" onClick={() => void call('cloud:openWeb', { page: 'forgot' }).catch(() => undefined)} className="self-start text-[13px] text-primary hover:underline">
           Forgot password?
         </button>

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { type StartupConfig } from './startup-config';
 import type { TrustedConfig } from './trusted-config';
 
 /**
@@ -87,6 +88,8 @@ export const discoveryDocumentV1 = z.looseObject({
         .default(null),
     })
     .default({ logo: null, accent: null }),
+  /** The startup screen the Admin Center publishes (shared/startup-config.ts). Absent on servers that predate it. */
+  startup: z.unknown().nullish(),
   link_hosts: z.array(z.string().max(253)).max(64).default([]),
   plans: z.looseObject({ free: z.looseObject({ storage_bytes: z.number().nonnegative() }) }).nullable().default(null),
   keys: z.looseObject({ discovery: z.string().max(512).nullable().default(null), policy: z.string().max(512).nullable().default(null) }).default({ discovery: null, policy: null }),
@@ -214,6 +217,8 @@ export interface DiscoveredServer {
   minimumVersion: string | null;
   serverVersion: string | null;
   plans: { freeBytes: number } | null;
+  /** What the startup screen shows and offers, already merged with this computer's local policy. */
+  startup: StartupConfig;
   discoveryKey: string | null;
   trustSource: TrustedConfig['source'];
 }

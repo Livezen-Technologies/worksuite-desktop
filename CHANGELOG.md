@@ -11,6 +11,28 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.285 — 2026-10-28
+
+Central login management, part 1: the startup screen now follows what the server publishes.
+
+### Added
+
+- **A published startup configuration.** WorkSuite Cloud (and any WorkSuite server) can say which ways in the
+  startup screen offers — Personal, Enterprise, guest, Join a meeting, email, Google, Microsoft, Apple, passkey and
+  SSO — in what order, which one leads, whether `Create Free Account` is offered and where it happens, and the words
+  on the screen. It rides in the discovery document's `startup` block (`shared/startup-config.ts`), so it is covered
+  by the document's signature and cached with it for an offline start. [ENH-AUTH-01 §1–3]
+- **Two rules that cannot be configured away.** An unsigned document is ignored — only a signed one may dictate the
+  screen. And a configuration that would leave nobody a way in is repaired before it is used: with every credential
+  method off, email comes back; with neither Personal nor Enterprise left, Personal does.
+
+### Changed
+
+- **Local policy still wins.** `managed.json`, `policy.json`, the Windows registry and a setup link can switch a
+  method off, and a published configuration can never switch it back on — a managed install keeps its own rules.
+- **The Personal welcome screen is drawn from the configuration**: the credential buttons it shows and their order,
+  whether the email field appears at all, the title and subtitle, and whether the sign-up card is there.
+
 ## 0.2.284 — 2026-10-27
 
 The desktop audit's last round (D-G07, D-G10, D-G11, D-G17), Sinhala and Tamil drafts for the core of the app, and
