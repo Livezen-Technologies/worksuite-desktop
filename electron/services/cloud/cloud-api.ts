@@ -1,5 +1,5 @@
 import { DesktopError } from '../../main/errors';
-import { CLOUD_API, type CloudMe, type CloudPlan, type ProvisioningStatus, type StorageUsage } from '@shared/cloud';
+import { CLOUD_API, type AccountDeletion, type CloudMe, type CloudPlan, type ProvisioningStatus, type StorageUsage } from '@shared/cloud';
 import { errorFromResponse, type HttpClient } from '../http';
 
 /**
@@ -47,6 +47,20 @@ export class CloudApi {
         .slice(0, 50)
         .map((f) => ({ id: String(f.id), name: f.name, bytes: Number(f.bytes) || 0 })),
     };
+  }
+
+  /** What is known about this account being deleted: when, what is in the way, and where it can be called off. */
+  async deletionState(): Promise<AccountDeletion> {
+    const d = await this.client().get<AccountDeletion>(CLOUD_API.accountDeletion);
+    if (!d || typeof d !== 'object') throw bad('account deletion');
+    return { scheduled_for: d.scheduled_for ?? null, requested_at: d.requested_at ?? null, blockers: Array.isArray(d.blockers) ? d.blockers.slice(0, 20) : [], cancel_url: String(d.cancel_url ?? '') };
+  }
+
+  /** Begin deleting this account. Everything is removed after the server's grace period, not now. */
+  async requestDeletion(confirm: string, password: string): Promise<{ scheduledFor: string; cancelUrl: string }> {
+    const d = await this.client().post<{ scheduled_for?: string; cancel_url?: string }>(CLOUD_API.accountDeletion, { confirm, password });
+    if (!d?.scheduled_for) throw bad('account deletion');
+    return { scheduledFor: d.scheduled_for, cancelUrl: String(d.cancel_url ?? '') };
   }
 
   /** The compact JWS for `organizationId` (answered as `application/jose`, or JSON `{entitlements|jws|token}`). */

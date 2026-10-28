@@ -29,12 +29,18 @@ export const ACCOUNTS_INVOKE_CHANNELS = [
   'signin:reopen',
   'signin:copyLink',
   'signin:cancel',
+  'signup:start',
+  'signup:resend',
+  'signup:verify',
+  'signup:cancel',
   'cloud:status',
   'cloud:refresh',
   'cloud:resendVerification',
   'cloud:retryProvisioning',
   'cloud:storage',
   'cloud:plans',
+  'cloud:deletionState',
+  'cloud:requestDeletion',
   'cloud:openWeb',
 ] as const;
 

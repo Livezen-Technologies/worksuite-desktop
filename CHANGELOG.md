@@ -11,6 +11,72 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.285 — 2026-10-28
+
+Central login management, part 1: the startup screen now follows what the server publishes.
+
+### Added
+
+- **A published startup configuration.** WorkSuite Cloud (and any WorkSuite server) can say which ways in the
+  startup screen offers — Personal, Enterprise, guest, Join a meeting, email, Google, Microsoft, Apple, passkey and
+  SSO — in what order, which one leads, whether `Create Free Account` is offered and where it happens, and the words
+  on the screen. It rides in the discovery document's `startup` block (`shared/startup-config.ts`), so it is covered
+  by the document's signature and cached with it for an offline start. [ENH-AUTH-01 §1–3]
+- **Two rules that cannot be configured away.** An unsigned document is ignored — only a signed one may dictate the
+  screen. And a configuration that would leave nobody a way in is repaired before it is used: with every credential
+  method off, email comes back; with neither Personal nor Enterprise left, Personal does.
+
+### Changed
+
+- **Local policy still wins.** `managed.json`, `policy.json`, the Windows registry and a setup link can switch a
+  method off, and a published configuration can never switch it back on — a managed install keeps its own rules.
+- **The Personal welcome screen is drawn from the configuration**: the credential buttons it shows and their order,
+  whether the email field appears at all, the title and subtitle, and whether the sign-up card is there.
+
+### Added (part 4 — creating an account in the app)
+
+- **`Create Free Account` no longer sends you to a browser** when the Admin Center publishes `signup.mode = in_app`.
+  The app asks WorkSuite Cloud for a sign-up flow without opening it, takes the details and the emailed code itself,
+  and finishes signed in (`electron/services/cloud/in-app-signup.ts`).
+- **The password is typed once, here, and never exchanged for a session.** Creating the account is all it does: the
+  session still comes from an authorization code bound to a PKCE challenge this process made, exchanged at the token
+  endpoint like any browser sign-in's. A redirect whose `state` is not this process's own is refused.
+- **The server's rules are the server's.** Rate limits, the disposable-address check, password rules, the emailed
+  code and its tries, and the terms and privacy versions are unchanged — the app only drives them. If the account is
+  made but no code comes back, it says so and asks you to sign in, rather than leaving you nowhere.
+- **Two screens, inside the app**: the details (name, email, password, country) and then the six-digit code, with
+  Send another code, the server's own wording for a refusal, and a wrong code leaving the box open to try again.
+  Leaving the screen drops the sign-up in the main process, so nothing half-made is left waiting.
+
+### Added (part 5 — the Mac App Store)
+
+- **This account can be deleted from inside the app** (My account → Storage → Delete this account). Apple's review
+  asks an app that creates accounts to let a person begin removing theirs without being sent to a web page. The
+  server schedules it, emails the confirmation and keeps a grace period in which the email's link calls it off;
+  what is kept afterwards — invoices already issued — is said on the screen, and what has to be settled first (an
+  organization you solely own that has members, or a paid plan still running) is listed before the button works.
+  Scheduling ends every sign-in this account has, this app's included, so it signs out.
+- **docs/APP-REVIEW.md**: what the reviewers check and where each answer lives — the sign-in rules, including why
+  Sign in with Apple does not apply while the server offers no third-party sign-in at all, the App Privacy table to
+  copy into App Store Connect, why the build sells nothing, and the checklist to run before each submission.
+
+### Added (gap round)
+
+- **The startup screen's mark and accent are published too.** `branding.logo` (https only — anything else is
+  dropped, since it would never load) and `branding.accent`, in the same signed block as the rest.
+- **Keyboard and screen readers on the sign-up screens**: the code box describes itself and is marked invalid
+  when a code is refused, the password and country rules are tied to their fields, the work in progress is
+  announced politely, and the provider buttons are one named group.
+
+### Added (part 3 — staying current)
+
+- **The configuration is refreshed while the app runs.** Once a Personal account is signed in, the organization's own
+  policy is read from `/api/v1/desktop/auth-config` and again every six hours, so a change made in the Admin Center
+  reaches a running app without a restart (`electron/services/cloud/startup-sync.ts`).
+- **A sync can only ever improve matters.** The last good configuration is kept when the server cannot be reached or
+  answers something unreadable; `config_version` only rises, so a stale answer cannot undo a newer publish; and the
+  computer's local policy is applied over whatever arrives. Signing out forgets the synced copy.
+
 ## 0.2.284 — 2026-10-27
 
 The desktop audit's last round (D-G07, D-G10, D-G11, D-G17), Sinhala and Tamil drafts for the core of the app, and

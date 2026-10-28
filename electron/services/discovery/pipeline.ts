@@ -15,6 +15,7 @@ import {
   type DiscoveryDocument,
   type TlsDetails,
 } from '@shared/discovery';
+import { DEFAULT_STARTUP, mergeStartup, readStartupConfig } from '@shared/startup-config';
 import { parseSetupLink, type ParsedSetupLink, type TrustedConfig } from '@shared/trusted-config';
 import { logger } from '../../main/log';
 import { checkCompat } from './compat';
@@ -449,6 +450,8 @@ function buildServer(ctx: Context, origin: string, found: Found, sig: { signed: 
       minimumVersion: info ? (info.minimumVersions[platform] ?? info.minimumVersion) : null,
       serverVersion: null,
       plans: null,
+      /* A legacy server publishes no startup config: the built-in screen, minus anything local policy forbids. */
+      startup: mergeStartup(DEFAULT_STARTUP, { allowPersonal: sig.trust?.allowPersonal ?? true }),
       discoveryKey: null,
       trustSource,
     };
@@ -490,6 +493,8 @@ function buildServer(ctx: Context, origin: string, found: Found, sig: { signed: 
     minimumVersion: doc.desktop.min_version[platform] ?? null,
     serverVersion: doc.server_version ?? null,
     plans: doc.plans ? { freeBytes: doc.plans.free.storage_bytes } : null,
+    /* An unsigned document may not dictate the startup screen: only what the signature covers is published policy. */
+    startup: mergeStartup(sig.signed ? readStartupConfig(doc) : DEFAULT_STARTUP, { allowPersonal: sig.trust?.allowPersonal ?? true }),
     discoveryKey: sig.key ?? doc.keys.discovery ?? null,
     trustSource,
   };

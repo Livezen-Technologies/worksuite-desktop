@@ -131,8 +131,27 @@ describe('installAccounts', () => {
     const w = installAccounts({ router: { handle } as unknown as IpcRouter, ctx: { http: {}, bootstrap: { setLicenceSource } } as unknown as AppContext });
     const names = handle.mock.calls.map(([ch]) => String(ch));
     expect(names.filter((ch) => ch.startsWith('connect:') || ch === 'accounts:rediscover').sort()).toEqual(['accounts:rediscover', 'connect:cancel', 'connect:confirm', 'connect:copyDetails', 'connect:get', 'connect:parseSetup', 'connect:start']);
-    const cloudChannels = handle.mock.calls.map(([ch]) => String(ch)).filter((ch) => ch.startsWith('signin:') || ch.startsWith('cloud:'));
-    expect(cloudChannels.sort()).toEqual(['cloud:openWeb', 'cloud:plans', 'cloud:refresh', 'cloud:resendVerification', 'cloud:retryProvisioning', 'cloud:status', 'cloud:storage', 'signin:cancel', 'signin:copyLink', 'signin:reopen', 'signin:start']);
+    const cloudChannels = handle.mock.calls.map(([ch]) => String(ch)).filter((ch) => ch.startsWith('signin:') || ch.startsWith('signup:') || ch.startsWith('cloud:'));
+    /* signup:* and cloud:*Deletion are ENH-AUTH-01 §4-5: creating an account in the app, and deleting it from there. */
+    expect(cloudChannels.sort()).toEqual([
+      'cloud:deletionState',
+      'cloud:openWeb',
+      'cloud:plans',
+      'cloud:refresh',
+      'cloud:requestDeletion',
+      'cloud:resendVerification',
+      'cloud:retryProvisioning',
+      'cloud:status',
+      'cloud:storage',
+      'signin:cancel',
+      'signin:copyLink',
+      'signin:reopen',
+      'signin:start',
+      'signup:cancel',
+      'signup:resend',
+      'signup:start',
+      'signup:verify',
+    ]);
     expect(w.handleAuthCallback('worksuite://auth/callback?code=1&state=2')).toBe(false);
     expect(w.discovery.pinsFor('ws.example')).toBeNull();
     expect(w.cloud.status()).toBeNull();

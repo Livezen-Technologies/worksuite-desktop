@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { BrowserSignIn, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
+import type { AccountDeletion, BrowserSignIn, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
 import { IDP_HINTS } from './cloud';
 import type { ConnectRun } from './discovery';
 import type { SetupLinkPayload, TrustedConfig } from './trusted-config';
@@ -189,12 +189,31 @@ export const accountsContract = {
   'signin:reopen': { input: z.strictObject({ attemptId }) },
   'signin:copyLink': { input: z.strictObject({ attemptId }) },
   'signin:cancel': { input: z.strictObject({ attemptId }) },
+  /* Creating an account inside the app (ENH-AUTH-01 §4); only when the server publishes signup.mode = in_app. */
+  'signup:start': {
+    input: z.strictObject({
+      accountId,
+      firstName: z.string().trim().min(1).max(60),
+      lastName: z.string().trim().min(1).max(60),
+      email: z.string().trim().max(320),
+      password: z.string().max(256),
+      country: z.string().trim().length(2),
+      timezone: z.string().max(64).optional(),
+    }),
+    rate: 2,
+  },
+  'signup:resend': { input: z.strictObject({ accountId }), rate: 1 },
+  'signup:verify': { input: z.strictObject({ accountId, code: z.string().trim().max(12) }), rate: 4 },
+  'signup:cancel': { input: none },
   'cloud:status': { input: none },
   'cloud:refresh': { input: none, rate: 2 },
   'cloud:resendVerification': { input: none, rate: 1 },
   'cloud:retryProvisioning': { input: none, rate: 1 },
   'cloud:storage': { input: none, session: true },
   'cloud:plans': { input: none },
+  /* Apple's App Review 5.1.1(v): an account made in the app can be deleted from the app. */
+  'cloud:deletionState': { input: none },
+  'cloud:requestDeletion': { input: z.strictObject({ confirm: z.string().max(16), password: z.string().max(256) }), sensitive: true, rate: 1 },
   'cloud:openWeb': { input: z.strictObject({ page: z.enum(['storage', 'upgrade', 'privacy', 'support', 'verify', 'forgot']) }) },
 };
 
@@ -226,6 +245,11 @@ export interface AccountsOutputs {
   'signin:reopen': boolean;
   'signin:copyLink': { url: string };
   'signin:cancel': void;
+  /** The address the code went to, and how long the sign-up stays open (seconds). */
+  'signup:start': { email: string; expiresIn: number };
+  'signup:resend': { email: string };
+  'signup:verify': { done: true };
+  'signup:cancel': void;
   'cloud:status': CloudStatus;
   'cloud:refresh': CloudStatus;
   /** When Resend may be pressed again (epoch ms). */
@@ -233,6 +257,8 @@ export interface AccountsOutputs {
   'cloud:retryProvisioning': ProvisioningStatus;
   'cloud:storage': StorageUsage;
   'cloud:plans': CloudPlan[];
+  'cloud:deletionState': AccountDeletion;
+  'cloud:requestDeletion': { scheduledFor: string; cancelUrl: string };
   'cloud:openWeb': boolean;
 }
 

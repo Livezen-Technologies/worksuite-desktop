@@ -216,6 +216,11 @@ xcrun altool --upload-app   -f "$PKG" -t macos -u <apple-id> -p <app-specific-pa
 4. Testers install **TestFlight** from the Mac App Store, accept the invite email, and install WorkSuite from there.
    TestFlight installs updates; the app's own updater does not run.
 
+## App Review
+
+What Apple's reviewers check — sign-in, account deletion, the App Privacy answers, payments and updates — and the
+checklist to run before each submission: [APP-REVIEW.md](APP-REVIEW.md).
+
 ## Known limits of the sandboxed build
 
 The App Sandbox blocks some things the direct-download build can do. Test these in TestFlight; they need fixing or

@@ -13,6 +13,7 @@ import { BrowserSignInFlow, type TakenCallback } from './browser-signin';
 import { CloudApi } from './cloud-api';
 import { EntitlementStore, entitlementKeyring, type EntitlementKeyValue } from './entitlements';
 import { buildAuthorize, exchangeCode, fetchMetadata, isAllowedEndpoint, listenLoopback, OIDC_CALLBACK, OidcTokenEndpoint, randomToken, s256, type LoopbackListener, type OidcMetadata, type PendingAuthorize } from './oidc';
+import { codeRetriable, openFlow, resendCode, startSignUp, verifyAndSignIn, type Started } from './in-app-signup';
 import { ProvisioningFlow } from './provisioning';
 import { QuotaWatcher } from './quota';
 
@@ -322,6 +323,9 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
     return attempt;
   };
 
+  /** The sign-up being created in the app, if any: held in memory only, dropped when it finishes or is cancelled. */
+  let signup: { accountId: string; started: Started; meta: OidcMetadata; clientId: string } | null = null;
+
   const failed = (accountId: string, e: unknown) => {
     const err = isDesktopError(e) ? e : new DesktopError('INTERNAL', String((e as Error)?.message ?? e));
     log.warn('browser sign-in did not finish', { code: err.code });
@@ -416,6 +420,54 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
   router.handle('signin:copyLink', ({ attemptId }) => flow.copyLink(attemptId));
   router.handle('signin:cancel', ({ attemptId }) => flow.cancel(attemptId));
 
+  router.handle('signup:start', async ({ accountId, firstName, lastName, email, password, country, timezone }) => {
+    const rec = deps.account(accountId);
+    if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
+    const auth = await serverAuth(rec);
+    if (!auth.oidc) throw new DesktopError('NOT_WORKSUITE', 'This server does not create accounts from the app.');
+    const meta = await fetchMetadata(auth.oidc.issuer, deps.fetchFor(rec.id), now);
+    const fetch = deps.fetchFor(rec.id);
+    /* The redirect never opens: the code comes back through /signup/verify, not through a browser. */
+    const { flow: flowToken, pending: auth2 } = await openFlow(meta, auth.oidc.clientId, OIDC_CALLBACK, email, fetch);
+    const started = await startSignUp(rec.apiOrigin || rec.serverOrigin, flowToken, auth2, { firstName, lastName, email, password, country, timezone, acceptTerms: true, acceptPrivacy: true }, fetch);
+    signup = { accountId, started, meta, clientId: auth.oidc.clientId };
+    return { email: started.email, expiresIn: started.expiresIn };
+  });
+
+  router.handle('signup:resend', async ({ accountId }) => {
+    if (!signup || signup.accountId !== accountId) throw new DesktopError('NOT_FOUND', 'That sign-up is no longer open. Start again.');
+    const rec = deps.account(accountId);
+    if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
+    await resendCode(rec.apiOrigin || rec.serverOrigin, signup.started, deps.fetchFor(accountId));
+    return { email: signup.started.email };
+  });
+
+  router.handle('signup:verify', async ({ accountId, code }) => {
+    if (!signup || signup.accountId !== accountId) throw new DesktopError('NOT_FOUND', 'That sign-up is no longer open. Start again.');
+    const rec = deps.account(accountId);
+    if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
+    deps.onStage?.(accountId, 'bootstrapping', null);
+    const op = signup;
+    try {
+      const tokens = await verifyAndSignIn(rec.apiOrigin || rec.serverOrigin, op.meta, op.clientId, op.started, code, deps.fetchFor(accountId));
+      const { id_token: _id, ...keep } = tokens;
+      await deps.acceptTokens(accountId, keep);
+      signup = null;
+      accountChanged();
+      return { done: true as const };
+    } catch (e) {
+      /* A wrong code leaves the sign-up open to try again; anything else ends it, and the screen says why. */
+      const err = isDesktopError(e) ? e : new DesktopError('INTERNAL', String((e as Error)?.message ?? e));
+      if (!codeRetriable(e)) signup = null;
+      deps.onStage?.(accountId, 'signed-out', null);
+      throw err;
+    }
+  });
+
+  router.handle('signup:cancel', () => {
+    signup = null;
+  });
+
   router.handle('cloud:status', () => {
     ensureBound();
     return status() ?? { ...EMPTY_CLOUD_STATUS };
@@ -448,6 +500,18 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
   router.handle('cloud:plans', () => {
     needBound();
     return api.plans();
+  });
+  router.handle('cloud:deletionState', () => {
+    needBound();
+    return api.deletionState();
+  });
+  /* Scheduling a deletion ends every sign-in this account has, this app's included: it signs out straight after. */
+  router.handle('cloud:requestDeletion', async ({ confirm, password }) => {
+    needBound();
+    const out = await api.requestDeletion(confirm, password);
+    deps.onStage?.(deps.activePersonal()?.id ?? '', 'signed-out', null);
+    accountChanged();
+    return out;
   });
   router.handle('cloud:openWeb', async ({ page }) => {
     const url = await webUrl(page);

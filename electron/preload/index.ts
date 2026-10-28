@@ -808,6 +808,12 @@ const api = {
     copyLink: call('signin:copyLink'),
     cancel: call('signin:cancel'),
   },
+  signup: {
+    start: call('signup:start'),
+    resend: call('signup:resend'),
+    verify: call('signup:verify'),
+    cancel: call('signup:cancel'),
+  },
   cloud: {
     status: call('cloud:status'),
     refresh: call('cloud:refresh'),
@@ -816,6 +822,8 @@ const api = {
     storage: call('cloud:storage'),
     plans: call('cloud:plans'),
     openWeb: call('cloud:openWeb'),
+    deletionState: call('cloud:deletionState'),
+    requestDeletion: call('cloud:requestDeletion'),
   },
   events: { on },
 };
