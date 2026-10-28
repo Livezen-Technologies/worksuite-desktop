@@ -770,6 +770,46 @@ export const posContract = {
   'posLocal:changePassword': { input: z.strictObject({ oldPassword: z.string().max(256), newPassword: z.string().max(256) }), sensitive: true, rate: 4 },
   'posLocal:resetPassword': { input: z.strictObject({ userId: z.string().max(40), newPassword: z.string().max(256) }), sensitive: true, rate: 4 },
   'posLocal:audits': { input: z.strictObject({ limit: z.number().int().min(1).max(500).optional() }).optional(), rate: 10 },
+  /* Selling on the offline till (phase 2). */
+  'posLocal:settings': { input: none },
+  'posLocal:setSettings': {
+    input: z.strictObject({ code: z.string().trim().min(1).max(8).optional(), taxMode: z.enum(['inclusive', 'exclusive']).optional(), rounding: z.union([z.literal(1), z.literal(5), z.literal(10)]).optional(), currency: z.string().trim().length(3).optional() }),
+    rate: 5,
+  },
+  'posLocal:products': { input: z.strictObject({ search: z.string().max(80).optional() }).optional(), rate: 20 },
+  'posLocal:barcode': { input: z.strictObject({ code: z.string().trim().min(1).max(64) }), rate: 30 },
+  'posLocal:saveProduct': {
+    input: z.strictObject({
+      id: z.string().max(40).optional(),
+      sku: z.string().trim().min(1).max(40),
+      barcode: z.string().trim().max(64).nullable().optional(),
+      name: z.string().trim().min(1).max(120),
+      price: z.number().int().min(0),
+      taxRate: z.number().min(0).max(100).optional(),
+      stock: z.number().int().nullable().optional(),
+      active: z.boolean().optional(),
+    }),
+    rate: 10,
+  },
+  'posLocal:register': { input: none },
+  'posLocal:openRegister': { input: z.strictObject({ float: z.number().int().min(0) }), rate: 4 },
+  'posLocal:closeRegister': { input: z.strictObject({ counted: z.number().int().min(0), note: z.string().max(200).optional() }), rate: 4 },
+  'posLocal:cashMove': { input: z.strictObject({ direction: z.enum(['in', 'out']), amount: z.number().int().positive(), reason: z.string().max(200) }), rate: 10 },
+  'posLocal:sell': {
+    input: z.strictObject({
+      lines: z
+        .array(z.strictObject({ productId: z.string().max(40).nullable(), name: z.string().max(120).optional(), unitPrice: z.number().int().min(0).optional(), qty: z.number().positive(), taxRate: z.number().min(0).max(100).optional(), discount: z.number().int().min(0).optional() }))
+        .min(1)
+        .max(200),
+      tenders: z.array(z.strictObject({ kind: z.enum(['cash', 'card', 'voucher', 'other']), amount: z.number().int().positive(), reference: z.string().max(80).nullable().optional() })).min(1).max(10),
+      saleDiscount: z.number().int().min(0).optional(),
+      customer: z.string().max(120).nullable().optional(),
+    }),
+    rate: 30,
+  },
+  'posLocal:void': { input: z.strictObject({ ref: z.string().max(40) }), rate: 6, sensitive: true },
+  'posLocal:sale': { input: z.strictObject({ ref: z.string().max(40) }), rate: 20 },
+  'posLocal:summary': { input: none, rate: 10 },
   'pos:till': { input: none, session: true },
   /** `device_name`: what the till's dashboard calls this computer (Phase 2 lets the person name it). */
   'pos:pair': { input: z.strictObject({ terminal_id: z.number().int().positive(), take_over: z.boolean().optional(), device_name: z.string().trim().min(1).max(120).optional() }), session: true, rate: 2, sensitive: true },
@@ -858,6 +898,19 @@ export interface PosOutputs {
   'posLocal:changePassword': PosLocalState;
   'posLocal:resetPassword': import('./pos-local').PosLocalUser[];
   'posLocal:audits': Array<{ at: string; username: string | null; action: string; detail: string }>;
+  'posLocal:settings': import('../electron/services/pos-local/sales').TillSettings;
+  'posLocal:setSettings': import('../electron/services/pos-local/sales').TillSettings;
+  'posLocal:products': import('./pos-local-sale').LocalProduct[];
+  'posLocal:barcode': import('./pos-local-sale').LocalProduct | null;
+  'posLocal:saveProduct': import('./pos-local-sale').LocalProduct;
+  'posLocal:register': import('../electron/services/pos-local/sales').OpenRegister | null;
+  'posLocal:openRegister': import('../electron/services/pos-local/sales').OpenRegister;
+  'posLocal:closeRegister': { expected: number; counted: number; variance: number };
+  'posLocal:cashMove': void;
+  'posLocal:sell': import('../electron/services/pos-local/sales').RecordedSale;
+  'posLocal:void': void;
+  'posLocal:sale': ReturnType<import('../electron/services/pos-local/sales').PosLocalSales['sale']>;
+  'posLocal:summary': ReturnType<import('../electron/services/pos-local/sales').PosLocalSales['summary']>;
   'pos:till': PosTillStatus;
   'pos:pair': { status: PosTillStatus; message: string };
   'pos:forget': PosTillStatus;

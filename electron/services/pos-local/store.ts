@@ -47,6 +47,94 @@ const MIGRATIONS: string[] = [
     updated_at TEXT NOT NULL
   );
   `,
+  // 2 — what the till sells, what it took, and the drawer it took it into.
+  `
+  CREATE TABLE pos_local_products (
+    id TEXT PRIMARY KEY,
+    sku TEXT NOT NULL UNIQUE,
+    barcode TEXT UNIQUE,
+    name TEXT NOT NULL,
+    price INTEGER NOT NULL,          -- minor units
+    tax_rate REAL NOT NULL DEFAULT 0,
+    stock INTEGER,                   -- null: not counted (a service)
+    active INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX pos_local_products_name ON pos_local_products(name);
+
+  CREATE TABLE pos_local_registers (
+    id TEXT PRIMARY KEY,
+    opened_at TEXT NOT NULL,
+    opened_by TEXT NOT NULL,
+    float_amount INTEGER NOT NULL,
+    closed_at TEXT,
+    closed_by TEXT,
+    counted INTEGER,
+    expected INTEGER,
+    note TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX pos_local_registers_open ON pos_local_registers(closed_at);
+
+  CREATE TABLE pos_local_sales (
+    ref TEXT PRIMARY KEY,
+    register_id TEXT NOT NULL,
+    sold_at TEXT NOT NULL,
+    sold_by TEXT NOT NULL,
+    sold_by_name TEXT NOT NULL,
+    customer TEXT,
+    gross INTEGER NOT NULL,
+    discount INTEGER NOT NULL,
+    net INTEGER NOT NULL,
+    tax INTEGER NOT NULL,
+    rounding INTEGER NOT NULL,
+    total INTEGER NOT NULL,
+    change_given INTEGER NOT NULL DEFAULT 0,
+    voided_at TEXT,
+    voided_by TEXT,
+    /* Filled once a sale has gone to WorkSuite (phase 5); null while the till is on its own. */
+    synced_at TEXT
+  );
+  CREATE INDEX pos_local_sales_register ON pos_local_sales(register_id);
+  CREATE INDEX pos_local_sales_day ON pos_local_sales(sold_at);
+  CREATE INDEX pos_local_sales_unsynced ON pos_local_sales(synced_at);
+
+  CREATE TABLE pos_local_sale_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ref TEXT NOT NULL REFERENCES pos_local_sales(ref) ON DELETE CASCADE,
+    product_id TEXT,
+    name TEXT NOT NULL,
+    unit_price INTEGER NOT NULL,
+    qty REAL NOT NULL,
+    tax_rate REAL NOT NULL,
+    discount INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX pos_local_sale_lines_ref ON pos_local_sale_lines(ref);
+
+  CREATE TABLE pos_local_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ref TEXT NOT NULL REFERENCES pos_local_sales(ref) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    reference TEXT
+  );
+  CREATE INDEX pos_local_payments_ref ON pos_local_payments(ref);
+
+  CREATE TABLE pos_local_cash_moves (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    register_id TEXT NOT NULL,
+    at TEXT NOT NULL,
+    by_user TEXT NOT NULL,
+    direction TEXT NOT NULL,         -- 'in' | 'out'
+    amount INTEGER NOT NULL,
+    reason TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX pos_local_cash_moves_register ON pos_local_cash_moves(register_id);
+
+  CREATE TABLE pos_local_counters (
+    day TEXT PRIMARY KEY,
+    seq INTEGER NOT NULL
+  );
+  `,
 ];
 
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 } as const;

@@ -17,6 +17,24 @@ Offline POS, phase 1: a till with its own people and its own database, on a comp
 
 ### Added
 
+- **Selling with no server** (`shared/pos-local-sale.ts`, `electron/services/pos-local/sales.ts`). A sale, its lines,
+  its payments, the stock it moved and the drawer it went into are written in one transaction: a till that loses
+  power mid-sale either sold it or did not, and a sale that cannot be written does not even spend a receipt number.
+- **Money is whole cents everywhere.** An offline till is the system of record for its own sales — there is no
+  server to price them again — so no total is ever a floating-point number. Tax comes out of a shelf price that
+  includes it or is added to one that does not, a sale's discount is spread across its lines by share with the
+  remainder going to the largest, and the per-rate tax lines still add up to what the customer pays.
+- **Cash rounding** to the nearest 1, 5 or 10 cents, with what the rounding did kept on the sale.
+- **Tenders and change**: cash, card, voucher and other; only cash may be over the total, because only cash gives
+  change back, and a sale that is not paid in full is refused.
+- **The drawer**: open with a float, pay money in and out with a reason, close with what was counted and be told
+  how far out it is. What the drawer should hold is worked out from the float, cash taken, change given and the
+  moves — not kept as a running number that can drift.
+- **Receipt numbers a person can read back**: `T1-20261029-0007`, the till's own letters, the day, and a number that
+  starts again each day.
+- **Voiding instead of deleting.** A voided sale keeps its number and its lines, and the stock goes back; a cashier
+  cannot void, discount, change products or read the day's figures.
+
 - **An offline till's people** (`shared/pos-local.ts`, `electron/services/pos-local/`). The first person opened on a
   till is its owner, whatever role was asked for, because there is nobody to grant it; after that only an owner adds
   people. Three roles: a cashier sells and works the drawer, a manager also refunds, discounts, voids, fixes prices

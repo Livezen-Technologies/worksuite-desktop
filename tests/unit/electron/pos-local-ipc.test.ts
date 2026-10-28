@@ -111,3 +111,45 @@ describe('offline till IPC', () => {
     expect(h.call('posLocal:state')).toMatchObject({ mustChangePassword: false });
   });
 });
+
+describe('selling through the till’s IPC', () => {
+  const sellOne = () => h.call('posLocal:sell', { lines: [{ productId: (h.call('posLocal:products') as Array<{ id: string }>)[0]!.id, qty: 1 }], tenders: [{ kind: 'cash', amount: 2000 }] });
+
+  beforeEach(() => {
+    h.call('posLocal:addUser', OWNER);
+    h.call('posLocal:saveProduct', { sku: 'TEA', name: 'Tea 400g', price: 1150, taxRate: 15, stock: 10 });
+    h.call('posLocal:openRegister', { float: 10_000 });
+  });
+
+  it('refuses to sell while a reset password has not been changed', () => {
+    const list = h.call('posLocal:users') as Array<{ id: string; username: string }>;
+    h.call('posLocal:addUser', { username: 'nimal', displayName: 'Nimal', password: 'second-person', role: 'cashier' });
+    const nimal = (h.call('posLocal:users') as Array<{ id: string; username: string }>).find((u) => u.username === 'nimal')!;
+    void list;
+    h.call('posLocal:resetPassword', { userId: nimal.id, newPassword: 'reset-password-1' });
+    h.call('posLocal:signOut');
+    h.call('posLocal:signIn', { username: 'nimal', password: 'reset-password-1' });
+    expect(() => sellOne()).toThrow(/new password before selling/);
+  });
+
+  it('sells, and the day’s figures follow', () => {
+    const sale = sellOne() as { ref: string; change: number };
+    expect(sale.ref).toMatch(/^T1-\d{8}-0001$/);
+    expect(sale.change).toBe(850);
+    expect(h.call('posLocal:summary')).toMatchObject({ sales: 1, total: 1150 });
+  });
+
+  it('keeps a cashier out of the day’s figures', () => {
+    h.call('posLocal:addUser', { username: 'nimal', displayName: 'Nimal', password: 'second-person', role: 'cashier' });
+    h.call('posLocal:signOut');
+    h.call('posLocal:signIn', { username: 'nimal', password: 'second-person' });
+    expect(() => h.call('posLocal:summary')).toThrow(/does not read the day/);
+  });
+
+  it('refuses everything on the selling side when nobody is signed in', () => {
+    h.call('posLocal:signOut');
+    expect(() => h.call('posLocal:products')).toThrow(/Sign in to the till/);
+    expect(() => sellOne()).toThrow(/Sign in to the till/);
+    expect(() => h.call('posLocal:summary')).toThrow(/Sign in to the till/);
+  });
+});

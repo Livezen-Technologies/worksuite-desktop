@@ -1,6 +1,6 @@
 {
     "module": "pos",
-    "version": "1.6.0",
+    "version": "1.7.0",
     "paths": [
         "electron/services/pos-carts.ts",
         "electron/services/pos-catalogue.ts",
@@ -9,11 +9,13 @@
         "electron/services/pos-display.ts",
         "electron/services/pos-ipc.ts",
         "electron/services/pos-local/ipc.ts",
+        "electron/services/pos-local/sales.ts",
         "electron/services/pos-local/store.ts",
         "electron/services/pos-outbox.ts",
         "electron/services/pos-print.ts",
         "electron/services/pos-thumbs.ts",
         "electron/services/pos-till.ts",
+        "shared/pos-local-sale.ts",
         "shared/pos-local.ts"
     ]
 }
