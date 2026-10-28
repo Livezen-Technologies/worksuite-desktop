@@ -33,6 +33,18 @@ Central login management, part 1: the startup screen now follows what the server
 - **The Personal welcome screen is drawn from the configuration**: the credential buttons it shows and their order,
   whether the email field appears at all, the title and subtitle, and whether the sign-up card is there.
 
+### Added (part 4 — creating an account in the app)
+
+- **`Create Free Account` no longer sends you to a browser** when the Admin Center publishes `signup.mode = in_app`.
+  The app asks WorkSuite Cloud for a sign-up flow without opening it, takes the details and the emailed code itself,
+  and finishes signed in (`electron/services/cloud/in-app-signup.ts`).
+- **The password is typed once, here, and never exchanged for a session.** Creating the account is all it does: the
+  session still comes from an authorization code bound to a PKCE challenge this process made, exchanged at the token
+  endpoint like any browser sign-in's. A redirect whose `state` is not this process's own is refused.
+- **The server's rules are the server's.** Rate limits, the disposable-address check, password rules, the emailed
+  code and its tries, and the terms and privacy versions are unchanged — the app only drives them. If the account is
+  made but no code comes back, it says so and asks you to sign in, rather than leaving you nowhere.
+
 ### Added (part 3 — staying current)
 
 - **The configuration is refreshed while the app runs.** Once a Personal account is signed in, the organization's own
