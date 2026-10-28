@@ -189,6 +189,22 @@ export const accountsContract = {
   'signin:reopen': { input: z.strictObject({ attemptId }) },
   'signin:copyLink': { input: z.strictObject({ attemptId }) },
   'signin:cancel': { input: z.strictObject({ attemptId }) },
+  /* Creating an account inside the app (ENH-AUTH-01 §4); only when the server publishes signup.mode = in_app. */
+  'signup:start': {
+    input: z.strictObject({
+      accountId,
+      firstName: z.string().trim().min(1).max(60),
+      lastName: z.string().trim().min(1).max(60),
+      email: z.string().trim().max(320),
+      password: z.string().max(256),
+      country: z.string().trim().length(2),
+      timezone: z.string().max(64).optional(),
+    }),
+    rate: 2,
+  },
+  'signup:resend': { input: z.strictObject({ accountId }), rate: 1 },
+  'signup:verify': { input: z.strictObject({ accountId, code: z.string().trim().max(12) }), rate: 4 },
+  'signup:cancel': { input: none },
   'cloud:status': { input: none },
   'cloud:refresh': { input: none, rate: 2 },
   'cloud:resendVerification': { input: none, rate: 1 },
@@ -226,6 +242,11 @@ export interface AccountsOutputs {
   'signin:reopen': boolean;
   'signin:copyLink': { url: string };
   'signin:cancel': void;
+  /** The address the code went to, and how long the sign-up stays open (seconds). */
+  'signup:start': { email: string; expiresIn: number };
+  'signup:resend': { email: string };
+  'signup:verify': { done: true };
+  'signup:cancel': void;
   'cloud:status': CloudStatus;
   'cloud:refresh': CloudStatus;
   /** When Resend may be pressed again (epoch ms). */

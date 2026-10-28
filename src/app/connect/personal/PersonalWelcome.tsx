@@ -9,6 +9,7 @@ import { useStore } from '../../../core/store';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
 import { ConnectFrame } from '../ConnectFrame';
+import { InAppSignUp } from './InAppSignUp';
 
 export interface PersonalWelcomeProps {
   /** An email to start from (the optional login hint). */
@@ -81,6 +82,8 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
   const [email, setEmail] = useState(prefill ?? account?.user?.email ?? '');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* The account row the in-app sign-up belongs to; set when `Create Free Account` opens it. */
+  const [creating, setCreating] = useState<string | null>(null);
 
   const startup: StartupConfig = run?.server?.startup ?? DEFAULT_STARTUP;
   const credentials = visibleCredentials(startup);
@@ -105,6 +108,23 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
       const accountId = await personalAccount(account);
       const hint = email.trim();
       await call('signin:start', { accountId, method, purpose, ...(hint ? { loginHint: hint } : {}) });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * `Create Free Account`. In the app when the server publishes that mode: the Personal account row is made first,
+   * exactly as a sign-in makes it, and the sign-up screens take over. Otherwise it is the browser, as before.
+   */
+  const createAccount = async () => {
+    if (signup !== 'in_app') return start(email.trim() ? 'email' : null, 'sign-up', 'sign-up');
+    setBusy('sign-up');
+    setError(null);
+    try {
+      setCreating(await personalAccount(account));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -148,6 +168,12 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
   );
 
   const idle = busy === null;
+  if (creating)
+    return (
+      <ConnectFrame title={TITLE} aside={hero}>
+        <InAppSignUp accountId={creating} prefill={email.trim() || undefined} onBack={() => setCreating(null)} />
+      </ConnectFrame>
+    );
   return (
     <ConnectFrame title={TITLE} aside={hero}>
       <form onSubmit={onEmail} className="flex w-[400px] max-w-full flex-col gap-3.5" aria-label="Sign in to WorkSuite Cloud">
@@ -202,7 +228,7 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
         {signup === 'off' ? null : (
         <div className="mt-2.5 flex items-center justify-between gap-3 rounded-[12px] border border-line bg-surface p-4">
           <span className="text-[14px] text-ink">Don't have an account?</span>
-          <button type="button" disabled={!idle} onClick={() => void start(email.trim() ? 'email' : null, 'sign-up', 'sign-up')} className="flex items-center gap-2 rounded-[10px] bg-teal px-4 py-2.5 text-[14px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
+          <button type="button" disabled={!idle} onClick={() => void createAccount()} className="flex items-center gap-2 rounded-[10px] bg-teal px-4 py-2.5 text-[14px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
             {busy === 'sign-up' ? <Icon name="spinner" size={15} className="animate-spin-slow" /> : null}
             Create Free Account
           </button>

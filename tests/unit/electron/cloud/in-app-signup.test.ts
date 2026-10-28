@@ -16,7 +16,7 @@ const reply = (status: number, body: unknown, headers: Record<string, string> = 
 
 describe('in-app sign-up', () => {
   it('reads the flow token out of the authorize redirect instead of opening a browser', async () => {
-    const fetch = vi.fn(async (url: string) => {
+    const fetch = vi.fn(async (url: string, _init?: RequestInit) => {
       expect(url).toContain('prompt=create');
       expect(url).toContain('code_challenge_method=S256');
       return new Response(null, { status: 302, headers: { location: 'https://account.worksuitecloud.com/auth/signup/?flow=FLOW123&client=desktop' } });
@@ -24,7 +24,7 @@ describe('in-app sign-up', () => {
     const { flow, pending } = await openFlow(meta, 'worksuite-desktop', 'worksuite://auth/oidc', DETAILS.email, fetch as never);
     expect(flow).toBe('FLOW123');
     expect(pending.verifier).toBeTruthy();
-    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ redirect: 'manual' });
+    expect((fetch.mock.calls[0] as unknown[])[1]).toMatchObject({ redirect: 'manual' });
   });
 
   it('says so when the server refuses to create accounts from the app', async () => {

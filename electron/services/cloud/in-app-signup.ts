@@ -1,3 +1,4 @@
+import type { DesktopErrorCode } from '@shared/ipc/contract';
 import { DesktopError } from '../../main/errors';
 import type { Tokens } from '../auth-tokens';
 import { buildAuthorize, exchangeCode, type FetchLike, type OidcMetadata, type PendingAuthorize } from './oidc';
@@ -56,7 +57,36 @@ interface VerifyAnswer {
   redirect?: string;
 }
 
-const failed = (code: string, message: string) => new DesktopError(code as never, message);
+/**
+ * The server's own refusals, as Desktop's codes. The server's code is kept beside the error (`serverCode`), because
+ * the screen cares which one it was: a wrong code leaves the sign-up open to try again, anything else ends it.
+ */
+const CODES: Record<string, DesktopErrorCode> = {
+  CODE_INVALID: 'INVALID_CREDENTIALS',
+  CODE_EXPIRED: 'INVALID_CREDENTIALS',
+  CODE_LOCKED: 'INVALID_CREDENTIALS',
+  FLOW_EXPIRED: 'SESSION_EXPIRED',
+  EMAIL_TAKEN: 'ACCOUNT_EXISTS',
+  SIGNUP_CLOSED: 'PERSONAL_NOT_ALLOWED',
+  SIGNUP_IN_BROWSER: 'PERSONAL_NOT_ALLOWED',
+  PASSWORD_WEAK: 'INVALID_CREDENTIALS',
+  EMAIL_DISPOSABLE: 'INVALID_CREDENTIALS',
+  RATE_LIMITED: 'RATE_LIMITED',
+  VALIDATION: 'INVALID_CREDENTIALS',
+};
+
+export interface SignUpError extends DesktopError {
+  /** What the server called it, for the screen: CODE_INVALID, PASSWORD_WEAK, RATE_LIMITED… */
+  serverCode: string;
+  /** Field messages, when the server named fields. */
+  fields: Record<string, string> | null;
+}
+
+/** The sign-up is still open to another try: only the code was wrong. */
+export const codeRetriable = (e: unknown): boolean => (e as SignUpError)?.serverCode === 'CODE_INVALID' || (e as SignUpError)?.serverCode === 'CODE_EXPIRED';
+
+const failed = (serverCode: string, message: string, fields: Record<string, string> | null = null): SignUpError =>
+  Object.assign(new DesktopError(CODES[serverCode] ?? 'SERVER_ERROR', message), { serverCode, fields });
 
 /** The `flow` token behind `/oauth/authorize`, read from its redirect rather than opened in a browser. */
 export async function openFlow(meta: OidcMetadata, clientId: string, redirectUri: string, email: string, fetch: FetchLike): Promise<{ flow: string; pending: PendingAuthorize }> {
@@ -94,7 +124,7 @@ export async function startSignUp(apiOrigin: string, flow: string, pending: Pend
   const body = (await res.json().catch(() => null)) as (SignupAnswer & { error?: { code?: string; message?: string; fields?: Record<string, string> } }) | null;
   if (!res.ok || !body?.signupToken) {
     const e = body?.error;
-    throw Object.assign(failed(e?.code ?? 'SERVER_ERROR', e?.message ?? 'The account could not be created. Try again.'), { fields: e?.fields ?? null });
+    throw failed(e?.code ?? 'SERVER_ERROR', e?.message ?? 'The account could not be created. Try again.', e?.fields ?? null);
   }
   return { signupToken: body.signupToken, pending, flow, email: body.email ?? details.email, expiresIn: body.expiresIn ?? 3600 };
 }

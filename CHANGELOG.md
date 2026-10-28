@@ -44,6 +44,9 @@ Central login management, part 1: the startup screen now follows what the server
 - **The server's rules are the server's.** Rate limits, the disposable-address check, password rules, the emailed
   code and its tries, and the terms and privacy versions are unchanged — the app only drives them. If the account is
   made but no code comes back, it says so and asks you to sign in, rather than leaving you nowhere.
+- **Two screens, inside the app**: the details (name, email, password, country) and then the six-digit code, with
+  Send another code, the server's own wording for a refusal, and a wrong code leaving the box open to try again.
+  Leaving the screen drops the sign-up in the main process, so nothing half-made is left waiting.
 
 ### Added (part 3 — staying current)
 
