@@ -747,6 +747,29 @@ export const posApproveSchema = z.strictObject({ approver_id: id, pin: z.string(
 
 /** Spread into `contract` (shared/ipc/contract.ts): the same checks as every channel there. */
 export const posContract = {
+  /* ── Offline POS: a till with no server and no account (ENH-POS-01 §1). `session: false` throughout — these are
+     the only POS channels that answer before anybody has signed in to WorkSuite at all. ── */
+  /** Whether this computer has an offline till yet, and who is at it. */
+  'posLocal:state': { input: none },
+  /** The first person opened on an empty till becomes its owner, whatever role is asked for. */
+  'posLocal:addUser': {
+    input: z.strictObject({
+      username: z.string().trim().toLowerCase().min(1).max(32),
+      displayName: z.string().trim().max(80),
+      password: z.string().min(1).max(256),
+      role: z.enum(['owner', 'manager', 'cashier']),
+    }),
+    sensitive: true,
+    rate: 4,
+  },
+  'posLocal:signIn': { input: z.strictObject({ username: z.string().trim().toLowerCase().max(32), password: z.string().max(256) }), sensitive: true, rate: 8 },
+  'posLocal:signOut': { input: none },
+  'posLocal:users': { input: none },
+  'posLocal:update': { input: z.strictObject({ userId: z.string().max(40), role: z.enum(['owner', 'manager', 'cashier']).optional(), suspended: z.boolean().optional() }), rate: 6 },
+  'posLocal:remove': { input: z.strictObject({ userId: z.string().max(40) }), rate: 4, sensitive: true },
+  'posLocal:changePassword': { input: z.strictObject({ oldPassword: z.string().max(256), newPassword: z.string().max(256) }), sensitive: true, rate: 4 },
+  'posLocal:resetPassword': { input: z.strictObject({ userId: z.string().max(40), newPassword: z.string().max(256) }), sensitive: true, rate: 4 },
+  'posLocal:audits': { input: z.strictObject({ limit: z.number().int().min(1).max(500).optional() }).optional(), rate: 10 },
   'pos:till': { input: none, session: true },
   /** `device_name`: what the till's dashboard calls this computer (Phase 2 lets the person name it). */
   'pos:pair': { input: z.strictObject({ terminal_id: z.number().int().positive(), take_over: z.boolean().optional(), device_name: z.string().trim().min(1).max(120).optional() }), session: true, rate: 2, sensitive: true },
@@ -813,7 +836,28 @@ export interface PosDisplayMedia {
 export type PosSellOutcome = { sale: PosSale; queued: boolean; printed: PosPrintOutcome | null } | { needs: PosApprovalNeed };
 export type PosGiveBackOutcome = { sale: PosSale; refund: PosReturn; message: string } | { needs: PosApprovalNeed };
 
+/** What `posLocal:state` says: whether a till exists here, and who is signed in to it. */
+export interface PosLocalState {
+  /** No people yet: the first-run screen. */
+  empty: boolean;
+  signedIn: import('./pos-local').PosLocalUser | null;
+  /** The signed-in person has to choose a new password before selling (an owner reset it). */
+  mustChangePassword: boolean;
+  /** What the signed-in person may do, for hiding buttons; the main process checks regardless. */
+  permissions: string[];
+}
+
 export interface PosOutputs {
+  'posLocal:state': PosLocalState;
+  'posLocal:addUser': PosLocalState;
+  'posLocal:signIn': PosLocalState | { refused: 'unknown' | 'wrong' | 'locked' | 'suspended'; lockedUntil?: string | null };
+  'posLocal:signOut': PosLocalState;
+  'posLocal:users': import('./pos-local').PosLocalUser[];
+  'posLocal:update': import('./pos-local').PosLocalUser[];
+  'posLocal:remove': import('./pos-local').PosLocalUser[];
+  'posLocal:changePassword': PosLocalState;
+  'posLocal:resetPassword': import('./pos-local').PosLocalUser[];
+  'posLocal:audits': Array<{ at: string; username: string | null; action: string; detail: string }>;
   'pos:till': PosTillStatus;
   'pos:pair': { status: PosTillStatus; message: string };
   'pos:forget': PosTillStatus;

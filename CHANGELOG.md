@@ -11,6 +11,32 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.286 — 2026-10-29
+
+Offline POS, phase 1: a till with its own people and its own database, on a computer with no server and no account.
+
+### Added
+
+- **An offline till's people** (`shared/pos-local.ts`, `electron/services/pos-local/`). The first person opened on a
+  till is its owner, whatever role was asked for, because there is nobody to grant it; after that only an owner adds
+  people. Three roles: a cashier sells and works the drawer, a manager also refunds, discounts, voids, fixes prices
+  and reads the day's figures, an owner alone makes people, changes the till's settings, restores a backup or
+  connects it to WorkSuite — the four that can lose or leak everything on the machine.
+- **Its own database.** A SQLite file beside the app's data, not inside an account's profile: an offline till has no
+  account, and a computer that later signs in to WorkSuite must not mix the two. It is made on first use, so a
+  computer that never sells never makes it.
+- **Passwords that are never kept.** scrypt with a per-password salt, the parameters stored beside the hash so they
+  can be raised later, compared in constant time. A missing username is answered after the same work a real check
+  costs, so it cannot be told apart by how quickly the till says no.
+- **Five wrong passwords holds the account for five minutes**, the right password included, and a successful
+  sign-in clears the count. A till left quiet for ten minutes signs itself out — a shop floor is not a desk — and
+  the clock is restarted by doing something, not by the screen asking what the state is.
+- **The till always keeps an owner who can run it**: the last one cannot be removed, suspended or demoted, and
+  a suspended owner does not count as one. A role taken away takes effect at the next thing that person does, even
+  on another till sharing the same shop database.
+- **What happened on the till is written down** — it was opened, people added and changed, passwords changed and
+  reset, who signed in and when somebody was held out. A cashier cannot read it.
+
 ## 0.2.285 — 2026-10-28
 
 Central login management, part 1: the startup screen now follows what the server publishes.

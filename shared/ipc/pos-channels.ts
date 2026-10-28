@@ -4,6 +4,16 @@
  * schemas and answers are in shared/pos.ts; the handlers in electron/services/pos-ipc.ts.
  */
 export const POS_INVOKE_CHANNELS = [
+  'posLocal:state',
+  'posLocal:addUser',
+  'posLocal:signIn',
+  'posLocal:signOut',
+  'posLocal:users',
+  'posLocal:update',
+  'posLocal:remove',
+  'posLocal:changePassword',
+  'posLocal:resetPassword',
+  'posLocal:audits',
   'pos:till',
   'pos:pair',
   'pos:forget',
