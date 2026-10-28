@@ -31,6 +31,8 @@ export const CLOUD_API = {
   entitlements: '/api/v1/entitlements',
   /** To confirm with the Cloud team (plan §8.1 item 5). */
   plans: '/api/v1/plans',
+  /** The organization's startup screen configuration, for the periodic sync (ENH-AUTH-01 §3). */
+  desktopAuthConfig: '/api/v1/desktop/auth-config',
 } as const;
 
 /** `GET /api/v1/me`. */

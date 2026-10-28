@@ -33,6 +33,15 @@ Central login management, part 1: the startup screen now follows what the server
 - **The Personal welcome screen is drawn from the configuration**: the credential buttons it shows and their order,
   whether the email field appears at all, the title and subtitle, and whether the sign-up card is there.
 
+### Added (part 3 — staying current)
+
+- **The configuration is refreshed while the app runs.** Once a Personal account is signed in, the organization's own
+  policy is read from `/api/v1/desktop/auth-config` and again every six hours, so a change made in the Admin Center
+  reaches a running app without a restart (`electron/services/cloud/startup-sync.ts`).
+- **A sync can only ever improve matters.** The last good configuration is kept when the server cannot be reached or
+  answers something unreadable; `config_version` only rises, so a stale answer cannot undo a newer publish; and the
+  computer's local policy is applied over whatever arrives. Signing out forgets the synced copy.
+
 ## 0.2.284 — 2026-10-27
 
 The desktop audit's last round (D-G07, D-G10, D-G11, D-G17), Sinhala and Tamil drafts for the core of the app, and
