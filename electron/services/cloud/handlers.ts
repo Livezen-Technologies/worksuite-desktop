@@ -501,6 +501,18 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
     needBound();
     return api.plans();
   });
+  router.handle('cloud:deletionState', () => {
+    needBound();
+    return api.deletionState();
+  });
+  /* Scheduling a deletion ends every sign-in this account has, this app's included: it signs out straight after. */
+  router.handle('cloud:requestDeletion', async ({ confirm, password }) => {
+    needBound();
+    const out = await api.requestDeletion(confirm, password);
+    deps.onStage?.(deps.activePersonal()?.id ?? '', 'signed-out', null);
+    accountChanged();
+    return out;
+  });
   router.handle('cloud:openWeb', async ({ page }) => {
     const url = await webUrl(page);
     if (!isAllowedEndpoint(url)) return false;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { BrowserSignIn, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
+import type { AccountDeletion, BrowserSignIn, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
 import { IDP_HINTS } from './cloud';
 import type { ConnectRun } from './discovery';
 import type { SetupLinkPayload, TrustedConfig } from './trusted-config';
@@ -211,6 +211,9 @@ export const accountsContract = {
   'cloud:retryProvisioning': { input: none, rate: 1 },
   'cloud:storage': { input: none, session: true },
   'cloud:plans': { input: none },
+  /* Apple's App Review 5.1.1(v): an account made in the app can be deleted from the app. */
+  'cloud:deletionState': { input: none },
+  'cloud:requestDeletion': { input: z.strictObject({ confirm: z.string().max(16), password: z.string().max(256) }), sensitive: true, rate: 1 },
   'cloud:openWeb': { input: z.strictObject({ page: z.enum(['storage', 'upgrade', 'privacy', 'support', 'verify', 'forgot']) }) },
 };
 
@@ -254,6 +257,8 @@ export interface AccountsOutputs {
   'cloud:retryProvisioning': ProvisioningStatus;
   'cloud:storage': StorageUsage;
   'cloud:plans': CloudPlan[];
+  'cloud:deletionState': AccountDeletion;
+  'cloud:requestDeletion': { scheduledFor: string; cancelUrl: string };
   'cloud:openWeb': boolean;
 }
 

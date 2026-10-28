@@ -48,6 +48,18 @@ Central login management, part 1: the startup screen now follows what the server
   Send another code, the server's own wording for a refusal, and a wrong code leaving the box open to try again.
   Leaving the screen drops the sign-up in the main process, so nothing half-made is left waiting.
 
+### Added (part 5 — the Mac App Store)
+
+- **This account can be deleted from inside the app** (My account → Storage → Delete this account). Apple's review
+  asks an app that creates accounts to let a person begin removing theirs without being sent to a web page. The
+  server schedules it, emails the confirmation and keeps a grace period in which the email's link calls it off;
+  what is kept afterwards — invoices already issued — is said on the screen, and what has to be settled first (an
+  organization you solely own that has members, or a paid plan still running) is listed before the button works.
+  Scheduling ends every sign-in this account has, this app's included, so it signs out.
+- **docs/APP-REVIEW.md**: what the reviewers check and where each answer lives — the sign-in rules, including why
+  Sign in with Apple does not apply while the server offers no third-party sign-in at all, the App Privacy table to
+  copy into App Store Connect, why the build sells nothing, and the checklist to run before each submission.
+
 ### Added (part 3 — staying current)
 
 - **The configuration is refreshed while the app runs.** Once a Personal account is signed in, the organization's own

@@ -33,6 +33,8 @@ export const CLOUD_API = {
   plans: '/api/v1/plans',
   /** The organization's startup screen configuration, for the periodic sync (ENH-AUTH-01 §3). */
   desktopAuthConfig: '/api/v1/desktop/auth-config',
+  /** Beginning (and reading the state of) the deletion of this account, from inside the app. */
+  accountDeletion: '/api/v1/account/deletion',
 } as const;
 
 /** `GET /api/v1/me`. */
@@ -42,6 +44,17 @@ export interface CloudMe {
   organizations: Array<{ id: string; name: string; plan: string; state: OrgLifecycle }>;
   active_organization_id: string | null;
   onboarding: { complete: boolean; step?: string | null };
+}
+
+/** `GET /api/v1/account/deletion`: what Apple's review calls account deletion, begun in the app. */
+export interface AccountDeletion {
+  /** When everything is removed, if it has been asked for. */
+  scheduled_for: string | null;
+  requested_at: string | null;
+  /** What has to be settled first: an organization this person solely owns that has members or a paid plan. */
+  blockers: Array<{ organization_id: string; name: string; reason: string; message: string }>;
+  /** Where the deletion can be called off (the same link the confirmation email carries). */
+  cancel_url: string;
 }
 
 /** `GET /api/v1/provisioning/status`. */

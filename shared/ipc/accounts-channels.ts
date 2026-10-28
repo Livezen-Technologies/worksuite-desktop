@@ -39,6 +39,8 @@ export const ACCOUNTS_INVOKE_CHANNELS = [
   'cloud:retryProvisioning',
   'cloud:storage',
   'cloud:plans',
+  'cloud:deletionState',
+  'cloud:requestDeletion',
   'cloud:openWeb',
 ] as const;
 

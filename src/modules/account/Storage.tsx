@@ -8,6 +8,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Spinner, cx } from '../../components/ui';
 import { Card, Head } from '../../components/CardKit';
+import { DeleteAccount } from './DeleteAccount';
 
 /**
  * Account › Storage (Connection & Startup screen 12) and the storage pieces shown elsewhere for a Personal account:
@@ -289,6 +290,7 @@ export default function StoragePage() {
             </p>
           </Card>
           <ThisComputer />
+          <DeleteAccount />
         </div>
       </div>
     </div>
