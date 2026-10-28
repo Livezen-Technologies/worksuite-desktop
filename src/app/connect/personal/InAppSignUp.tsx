@@ -107,15 +107,23 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
           ref={codeBox}
           inputMode="numeric"
           autoComplete="one-time-code"
+          aria-describedby="signup-code-hint"
+          aria-invalid={error ? true : undefined}
           maxLength={6}
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
           className={cx(field, 'text-center font-mono text-[20px] tracking-[8px]')}
         />
+        <p id="signup-code-hint" className="m-0 text-[12px] text-ink-3">
+          Six digits. The code expires in an hour; Send another code issues a fresh one.
+        </p>
         <button type="submit" disabled={busy || code.length < 6} className="flex h-[46px] items-center justify-center gap-2 rounded-[10px] bg-primary text-[15px] font-semibold text-white hover:bg-primary-hover disabled:opacity-60">
           {busy ? <Icon name="spinner" size={16} className="animate-spin-slow" /> : null}
           Create my account
         </button>
+        <div aria-live="polite" role="status" className="sr-only">
+          {busy ? 'Checking your code' : ''}
+        </div>
         {error ? (
           <div role="alert" className="rounded-[10px] bg-danger-bg px-3 py-2.5 text-[13px] text-danger">
             {error}
@@ -158,12 +166,13 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
       <label htmlFor="signup-password" className="text-[13px] font-semibold text-ink">
         Password
       </label>
-      <input id="signup-password" type="password" autoComplete="new-password" maxLength={256} value={form.password} onChange={set('password')} className={field} />
-      <p className="m-0 text-[12px] text-ink-3">At least 8 characters. Your password is used to create the account and is never stored on this computer.</p>
+      <input id="signup-password" type="password" autoComplete="new-password" aria-describedby="signup-password-hint" maxLength={256} value={form.password} onChange={set('password')} className={field} />
+      <p id="signup-password-hint" className="m-0 text-[12px] text-ink-3">At least 8 characters. Your password is used to create the account and is never stored on this computer.</p>
       <label htmlFor="signup-country" className="text-[13px] font-semibold text-ink">
         Country
       </label>
-      <input id="signup-country" autoComplete="country" maxLength={2} value={form.country} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') }))} className={cx(field, 'uppercase')} />
+      <input id="signup-country" autoComplete="country" aria-describedby="signup-country-hint" maxLength={2} value={form.country} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') }))} className={cx(field, 'uppercase')} />
+      <p id="signup-country-hint" className="m-0 text-[12px] text-ink-3">Two letters, as LK or GB.</p>
       <button type="submit" disabled={busy || !ready} className="flex h-[46px] items-center justify-center gap-2 rounded-[10px] bg-teal text-[15px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
         {busy ? <Icon name="spinner" size={16} className="animate-spin-slow" /> : null}
         Continue

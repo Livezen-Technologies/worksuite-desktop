@@ -47,6 +47,11 @@ describe('startup config', () => {
     expect(visibleCredentials(c)[0]).toBe('email');
   });
 
+  it('drops a logo that is not https, and a malformed accent', () => {
+    expect(cfg({ branding: { logo: 'http://example.com/l.png', accent: '#112233' } }).branding).toEqual({ logo: null, accent: '#112233' });
+    expect(cfg({ branding: { logo: 'https://example.com/l.png', accent: 'red' } }).branding).toEqual({ logo: 'https://example.com/l.png', accent: null });
+  });
+
   it('offers sign-up only when the server allows it', () => {
     expect(signupMode(cfg({ signup: { mode: 'in_app' } }), true)).toBe('in_app');
     expect(signupMode(cfg({ signup: { mode: 'in_app' } }), false)).toBe('off');

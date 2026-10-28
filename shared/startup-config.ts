@@ -49,6 +49,21 @@ export const startupConfigV1 = z.looseObject({
   text: z.looseObject({ title: text, subtitle: text, personal_card: text, enterprise_card: text, footer: text }).default({}),
   /** The language the startup screen opens in, when the person has not chosen one. */
   language: z.string().max(8).nullish(),
+  /** The mark and accent the screen wears. A logo that is not https is dropped: it would never load anyway. */
+  branding: z
+    .looseObject({
+      logo: z
+        .string()
+        .max(2048)
+        .nullish()
+        .transform((v) => (v && /^https:\/\//i.test(v) ? v : null)),
+      accent: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{6}$/)
+        .nullish()
+        .catch(null),
+    })
+    .default({ logo: null, accent: null }),
 });
 
 export type StartupConfig = z.infer<typeof startupConfigV1>;

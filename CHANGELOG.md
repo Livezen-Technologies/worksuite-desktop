@@ -60,6 +60,14 @@ Central login management, part 1: the startup screen now follows what the server
   Sign in with Apple does not apply while the server offers no third-party sign-in at all, the App Privacy table to
   copy into App Store Connect, why the build sells nothing, and the checklist to run before each submission.
 
+### Added (gap round)
+
+- **The startup screen's mark and accent are published too.** `branding.logo` (https only — anything else is
+  dropped, since it would never load) and `branding.accent`, in the same signed block as the rest.
+- **Keyboard and screen readers on the sign-up screens**: the code box describes itself and is marked invalid
+  when a code is refused, the password and country rules are tied to their fields, the work in progress is
+  announced politely, and the provider buttons are one named group.
+
 ### Added (part 3 — staying current)
 
 - **The configuration is refreshed while the app runs.** Once a Personal account is signed in, the organization's own

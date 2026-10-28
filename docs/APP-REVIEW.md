@@ -14,6 +14,14 @@ how the build is made. [ENH-AUTH-01 §5]
 | 4.0 Browser sign-in | Sign-in opens in the system browser (RFC 8252), with PKCE, and the app never sees the password. The sandbox needs `com.apple.security.network.server` for the one-shot loopback listener that receives the redirect — that is the entitlement's whole purpose. |
 | 5.1.1(v) Account deletion | *My account → Storage → Delete this account* begins it inside the app (`src/modules/account/DeleteAccount.tsx`, `POST /api/v1/account/deletion`). The server schedules the deletion, emails the confirmation and keeps a grace period; what is kept afterwards (invoices already issued) is listed on the screen. Deleting ends every sign-in, so the app signs out. |
 
+### Where the tokens are
+
+The refresh and access tokens go through `SecureStore` (`electron/services/secure-store.ts`), which encrypts them
+with Electron's `safeStorage`. On macOS that key is held in the **Keychain** and the encrypted values sit in the
+account's own `secrets` file — it is Keychain-protected storage, not one Keychain item per token, which is worth
+saying plainly if a reviewer asks. Where the operating system offers no key store (a headless Linux box), the
+store keeps secrets in memory for that run only and says so in the log rather than writing them in the clear.
+
 ### Creating an account
 
 With `signup.mode = in_app` the account is created in the app (`electron/services/cloud/in-app-signup.ts`); with

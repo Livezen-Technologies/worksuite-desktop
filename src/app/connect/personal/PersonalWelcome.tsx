@@ -206,7 +206,7 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
             <span className="h-px flex-1 bg-line" />
           </div>
         ) : null}
-        <div className="grid grid-cols-2 gap-2.5">
+        <div role="group" aria-label="Other ways to sign in" className="grid grid-cols-2 gap-2.5">
           {buttons.filter((p) => p.id !== 'email').map((p) => (
             <button
               key={p.id}

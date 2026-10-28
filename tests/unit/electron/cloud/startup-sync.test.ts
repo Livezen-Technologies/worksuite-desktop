@@ -68,6 +68,27 @@ describe('startup sync', () => {
     expect(s.current()).toEqual(DEFAULT_STARTUP);
   });
 
+  it('a published change does not touch what is already signed in', async () => {
+    /* The sync only ever returns a configuration for the screen: nothing in it ends a session or a token. */
+    const { s } = sync([{ startup: { config_version: 7, methods: { email: false, google: false, microsoft: false, apple: false, passkey: false } } }]);
+    const out = await s.refresh();
+    /* Even "every method off" is repaired rather than obeyed, so a signed-in person is never locked out mid-session. */
+    expect(out.methods.email).toBe(true);
+    expect(s.state()?.version).toBe(7);
+  });
+
+  it('an organization policy replaces the one synced for the account before it', async () => {
+    const { s } = sync([
+      { startup: { config_version: 2, methods: { guest: true } }, organization_id: 'org_a' },
+      { startup: { config_version: 3, methods: { guest: false } }, organization_id: 'org_b' },
+    ]);
+    await s.refresh();
+    s.forget();
+    const after = await s.refresh();
+    expect(after.methods.guest).toBe(false);
+    expect(s.state()).toMatchObject({ organizationId: 'org_b', version: 3 });
+  });
+
   it('reads a discovery document under local policy', () => {
     expect(startupFromDiscovery({ startup: { methods: { guest: false } } }, { allowPersonal: false }).methods).toMatchObject({ guest: false, personal: false });
   });
