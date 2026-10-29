@@ -554,7 +554,11 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
       offline: { mode: 'PARTIAL_WRITE', entities: ['sale'], cache: ['/api/pos/options', '/api/pos/registers', '/api/pos/sessions/mine'] },
       native: ['printing', 'barcode', 'hardware'],
       windows: [{ id: 'pos-display', route: '/pos/display' }],
-      quickActions: [{ id: 'pos-register', label: 'Open the till', route: '/pos' }],
+      quickActions: [
+        { id: 'pos-register', label: 'Open the till', route: '/pos' },
+        /* The till that needs no WorkSuite account and no network (ENH-POS-01 §1). */
+        { id: 'pos-offline', label: 'Open the offline till', route: '/pos?mode=offline' },
+      ],
       deepLinks: ['pos', 'pos/sales/:id'],
     }),
     load: () => import('./pos/PosShell'),

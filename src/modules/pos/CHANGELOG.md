@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-10-29
+
+- Offline till: the POS screens, on this computer's own store
+
 ## 1.7.0 — 2026-10-28
 
 - Offline till: selling, the drawer and the day's figures

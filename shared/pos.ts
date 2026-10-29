@@ -1,3 +1,4 @@
+import type { LocalProduct as PosLocalProduct, OpenRegister as PosLocalOpenRegister, RecordedSale as PosLocalRecordedSale, SaleDetail as PosLocalSaleDetail, TillSettings as PosLocalTillSettings, TillSummary as PosLocalTillSummary } from './pos-local-sale';
 /**
  * POS — the till on this computer: what crosses IPC between the register's screens and the main process, and the
  * checks on it (the typed contract's POS part, spread into shared/ipc/contract.ts).
@@ -898,19 +899,19 @@ export interface PosOutputs {
   'posLocal:changePassword': PosLocalState;
   'posLocal:resetPassword': import('./pos-local').PosLocalUser[];
   'posLocal:audits': Array<{ at: string; username: string | null; action: string; detail: string }>;
-  'posLocal:settings': import('../electron/services/pos-local/sales').TillSettings;
-  'posLocal:setSettings': import('../electron/services/pos-local/sales').TillSettings;
-  'posLocal:products': import('./pos-local-sale').LocalProduct[];
-  'posLocal:barcode': import('./pos-local-sale').LocalProduct | null;
-  'posLocal:saveProduct': import('./pos-local-sale').LocalProduct;
-  'posLocal:register': import('../electron/services/pos-local/sales').OpenRegister | null;
-  'posLocal:openRegister': import('../electron/services/pos-local/sales').OpenRegister;
+  'posLocal:settings': PosLocalTillSettings;
+  'posLocal:setSettings': PosLocalTillSettings;
+  'posLocal:products': PosLocalProduct[];
+  'posLocal:barcode': PosLocalProduct | null;
+  'posLocal:saveProduct': PosLocalProduct;
+  'posLocal:register': PosLocalOpenRegister | null;
+  'posLocal:openRegister': PosLocalOpenRegister;
   'posLocal:closeRegister': { expected: number; counted: number; variance: number };
   'posLocal:cashMove': void;
-  'posLocal:sell': import('../electron/services/pos-local/sales').RecordedSale;
+  'posLocal:sell': PosLocalRecordedSale;
   'posLocal:void': void;
-  'posLocal:sale': ReturnType<import('../electron/services/pos-local/sales').PosLocalSales['sale']>;
-  'posLocal:summary': ReturnType<import('../electron/services/pos-local/sales').PosLocalSales['summary']>;
+  'posLocal:sale': PosLocalSaleDetail | null;
+  'posLocal:summary': PosLocalTillSummary;
   'pos:till': PosTillStatus;
   'pos:pair': { status: PosTillStatus; message: string };
   'pos:forget': PosTillStatus;

@@ -11,7 +11,27 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
-## 0.2.286 — 2026-10-29
+## 0.2.287 — 2026-10-29
+
+Offline POS, phase 3: the till has screens, and they are the POS app's own.
+
+### Added
+
+- **`/pos?mode=offline` — the till with no WorkSuite behind it.** Setting it up, signing in, choosing a new
+  password after a reset and opening the register are screens of its own, because the server-backed POS has no
+  equivalent of a person who exists only on this computer.
+- **Selling is the POS module's own counter.** The same Register screen, cart, keypad and payment panel a paired
+  till runs, given a `Till` built from this computer's store and its three fetch-and-write calls pointed at the
+  local database while that screen is up (`src/modules/pos/local/adapter.ts`). There is no second POS to keep in
+  step: a change to the counter reaches the offline till the day it reaches the other one.
+- **What an offline till cannot do is said once, in `OFFLINE_CAPS`**, and the screens draw themselves without it:
+  server pricing, product lookup, promotions, coupons, loyalty, emailed receipts, settling and repricing, and
+  refunds until phase 4. A sale still needs an open drawer, and a mistake is still voided rather than deleted.
+- **Two conversions, at the boundary and nowhere else.** The screens count money in major units because that is
+  what WorkSuite sends them; the store counts whole cents, because an offline till is the system of record for its
+  own sales. And each product carries a number that never changes, since a sale's lines name a product by number.
+
+
 
 Offline POS, phase 1: a till with its own people and its own database, on a computer with no server and no account.
 

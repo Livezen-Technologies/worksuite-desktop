@@ -10,6 +10,8 @@
 /** A product as the offline till keeps it. Prices are minor units; `taxRate` is a percentage, 15 for 15 %. */
 export interface LocalProduct {
   id: string;
+  /** The same product as a number, for the POS screens, which key a line by `product_id`. Never changes. */
+  n: number;
   sku: string;
   barcode: string | null;
   name: string;
@@ -176,3 +178,47 @@ export function variance(counted: number, expected: number): number {
 
 /** A shop decides what difference is worth a word. Anything above this is said plainly at close. */
 export const VARIANCE_NOTE = 100;
+
+/** How this till is set up: its letters in a receipt number, how tax is priced, how cash is rounded. */
+export interface TillSettings {
+  code: string;
+  taxMode: PosLocalTaxMode;
+  rounding: CashRounding;
+  currency: string;
+}
+
+/** The register that is open, if one is. */
+export interface OpenRegister {
+  id: string;
+  openedAt: string;
+  openedBy: string;
+  float: number;
+}
+
+/** What a sale came to, once it is written. */
+export interface RecordedSale {
+  ref: string;
+  totals: SaleTotals;
+  change: number;
+  soldAt: string;
+}
+
+/** One receipt, with everything on it. */
+export interface SaleDetail extends RecordedSale {
+  lines: CartLine[];
+  tenders: Tender[];
+  voided: boolean;
+  soldByName: string;
+}
+
+/** The register's day so far: what the X and Z reports are built from. */
+export interface TillSummary {
+  sales: number;
+  voided: number;
+  gross: number;
+  net: number;
+  tax: number;
+  total: number;
+  byTender: Array<{ kind: string; amount: number }>;
+  drawer: DrawerCount & { expected: number; registerId: string | null };
+}

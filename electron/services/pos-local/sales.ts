@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { expectedCash, receiptRef, settle, totalsOf, type CartLine, type DrawerCount, type LocalProduct, type PosLocalTaxMode, type SaleTotals, type Tender, type CashRounding } from '@shared/pos-local-sale';
+import { expectedCash, receiptRef, settle, totalsOf, type CartLine, type DrawerCount, type LocalProduct, type OpenRegister, type RecordedSale, type SaleDetail, type TillSettings, type TillSummary, type Tender } from '@shared/pos-local-sale';
 import { may, type PosLocalUser } from '@shared/pos-local';
 import { DesktopError } from '../../main/errors';
 import type { PosLocalStore } from './store';
@@ -15,14 +15,6 @@ import type { PosLocalStore } from './store';
  * puts the stock back — what a shop can show an auditor, and what a sync to WorkSuite can replay later.
  */
 
-export interface TillSettings {
-  /** What the till is called in a receipt number: `T1`. */
-  code: string;
-  taxMode: PosLocalTaxMode;
-  rounding: CashRounding;
-  currency: string;
-}
-
 export const DEFAULT_SETTINGS: TillSettings = { code: 'T1', taxMode: 'inclusive', rounding: 1, currency: 'LKR' };
 
 export interface SaleInput {
@@ -32,22 +24,9 @@ export interface SaleInput {
   customer?: string | null;
 }
 
-export interface RecordedSale {
-  ref: string;
-  totals: SaleTotals;
-  change: number;
-  soldAt: string;
-}
-
-export interface OpenRegister {
-  id: string;
-  openedAt: string;
-  openedBy: string;
-  float: number;
-}
-
 interface ProductRow {
   id: string;
+  n: number;
   sku: string;
   barcode: string | null;
   name: string;
@@ -57,7 +36,7 @@ interface ProductRow {
   active: number;
 }
 
-const product = (r: ProductRow): LocalProduct => ({ id: r.id, sku: r.sku, barcode: r.barcode, name: r.name, price: r.price, taxRate: r.tax_rate, stock: r.stock, active: !!r.active });
+const product = (r: ProductRow): LocalProduct => ({ id: r.id, n: Number(r.n), sku: r.sku, barcode: r.barcode, name: r.name, price: r.price, taxRate: r.tax_rate, stock: r.stock, active: !!r.active });
 
 export class PosLocalSales {
   constructor(private readonly store: PosLocalStore, private readonly now: () => number = Date.now) {}
@@ -108,13 +87,15 @@ export class PosLocalSales {
     const at = new Date(this.now()).toISOString();
     const clash = this.db.prepare('SELECT id FROM pos_local_products WHERE (sku = ? OR (barcode IS NOT NULL AND barcode = ?)) AND id <> ?').get(input.sku.trim(), input.barcode ?? '\u0000', id) as unknown as { id: string } | undefined;
     if (clash) throw new DesktopError('CONFLICT', 'Another product already has that code or barcode.');
+    /* A new product takes the next number; an edit keeps the one it has. */
+    const n = Number((this.db.prepare('SELECT COALESCE(MAX(n), 0) + 1 AS next FROM pos_local_products').get() as unknown as { next: number }).next);
     this.db
       .prepare(
-        `INSERT INTO pos_local_products (id, sku, barcode, name, price, tax_rate, stock, active, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO pos_local_products (id, n, sku, barcode, name, price, tax_rate, stock, active, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET sku = excluded.sku, barcode = excluded.barcode, name = excluded.name, price = excluded.price,
            tax_rate = excluded.tax_rate, stock = excluded.stock, active = excluded.active, updated_at = excluded.updated_at`,
       )
-      .run(id, input.sku.trim(), input.barcode?.trim() || null, input.name.trim(), input.price, input.taxRate ?? 0, input.stock ?? null, input.active === false ? 0 : 1, at);
+      .run(id, n, input.sku.trim(), input.barcode?.trim() || null, input.name.trim(), input.price, input.taxRate ?? 0, input.stock ?? null, input.active === false ? 0 : 1, at);
     return product(this.db.prepare('SELECT * FROM pos_local_products WHERE id = ?').get(id) as unknown as ProductRow);
   }
 
@@ -256,7 +237,7 @@ export class PosLocalSales {
   }
 
   /** One receipt, with everything on it. */
-  sale(ref: string): (RecordedSale & { lines: CartLine[]; tenders: Tender[]; voided: boolean; soldByName: string }) | null {
+  sale(ref: string): SaleDetail | null {
     const s = this.db.prepare('SELECT * FROM pos_local_sales WHERE ref = ?').get(ref) as unknown as Record<string, unknown> | undefined;
     if (!s) return null;
     const lines = (this.db.prepare('SELECT product_id, name, unit_price, qty, tax_rate, discount FROM pos_local_sale_lines WHERE ref = ? ORDER BY id').all(ref) as unknown as Array<Record<string, unknown>>).map((l) => ({
@@ -286,7 +267,7 @@ export class PosLocalSales {
   }
 
   /** The day's figures for the register that is open (or one named): what the X and Z reports are built from. */
-  summary(registerId?: string): { sales: number; voided: number; gross: number; net: number; tax: number; total: number; byTender: Array<{ kind: string; amount: number }>; drawer: ReturnType<PosLocalSales['drawer']> } {
+  summary(registerId?: string): TillSummary {
     const reg = registerId ?? this.openRegister()?.id;
     const where = reg ? 'WHERE register_id = ?' : 'WHERE 1 = 0';
     const args = reg ? [reg] : [];

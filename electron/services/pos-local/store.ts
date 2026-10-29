@@ -135,6 +135,18 @@ const MIGRATIONS: string[] = [
     seq INTEGER NOT NULL
   );
   `,
+  /*
+   * 3 — a number for each product.
+   *
+   * The POS screens this till reuses are the server-backed ones, and they key a product by a number
+   * (shared/pos.ts `posLineSchema.product_id`). The offline store's own id is a string, so each product also
+   * carries a small number that never changes, assigned in the order they were made.
+   */
+  `
+  ALTER TABLE pos_local_products ADD COLUMN n INTEGER;
+  UPDATE pos_local_products SET n = rowid WHERE n IS NULL;
+  CREATE UNIQUE INDEX pos_local_products_n ON pos_local_products(n);
+  `,
 ];
 
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 } as const;

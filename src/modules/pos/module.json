@@ -1,6 +1,6 @@
 {
     "module": "pos",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "paths": [
         "electron/services/pos-carts.ts",
         "electron/services/pos-catalogue.ts",
@@ -16,6 +16,15 @@
         "electron/services/pos-thumbs.ts",
         "electron/services/pos-till.ts",
         "shared/pos-local-sale.ts",
-        "shared/pos-local.ts"
+        "shared/pos-local.ts",
+        "src/modules/pos/local/ChangePassword.tsx",
+        "src/modules/pos/local/FirstRun.tsx",
+        "src/modules/pos/local/LocalTill.tsx",
+        "src/modules/pos/local/OfflineRegister.tsx",
+        "src/modules/pos/local/RegisterClosed.tsx",
+        "src/modules/pos/local/SignIn.tsx",
+        "src/modules/pos/local/adapter.ts",
+        "src/modules/pos/local/parts.tsx",
+        "src/modules/pos/local/state.ts"
     ]
 }

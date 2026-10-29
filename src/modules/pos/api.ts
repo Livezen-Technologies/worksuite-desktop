@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import type { PosCatalogue, PosCustomer, PosGiveBack, PosPrintPatch, PosPrintSettings, PosProduct, PosReport, PosSale, PosSellInput, PosTillSettings, PosTillSettingsPatch, PosTillStatus } from '@shared/pos';
+import type { PosCatalogue, PosCustomer, PosGiveBack, PosPrintPatch, PosPrintSettings, PosProduct, PosReport, PosSale, PosSellInput, PosSellOutcome, PosTillSettings, PosTillSettingsPatch, PosTillStatus } from '@shared/pos';
 import { apiGet, ApiError, request } from '../../core/api';
 import { call, on } from '../../core/bridge';
 import { estimateCart, withDiscount, type CartLineInput, type PricedCart } from './pricing';
@@ -287,10 +287,26 @@ export const tillStatus = () => call('pos:till');
 export const pairTill = (terminal_id: number, take_over = false, device_name?: string) => call('pos:pair', { terminal_id, take_over, ...(device_name?.trim() ? { device_name: device_name.trim().slice(0, 120) } : {}) });
 export const renameDevice = (device_name: string) => call('pos:rename', { device_name });
 export const forgetTill = (discard = false, unpair = false) => call('pos:forget', { discard, ...(unpair ? { unpair } : {}) });
-export const readCatalogue = () => call('pos:catalogue');
+/*
+ * The offline till (ENH-POS-01 §1) runs these very screens against this computer's own SQLite instead of
+ * WorkSuite. It is a mode, not a second POS: the screens, the cart and the payment panel are the same code, and
+ * only the few calls that fetch or write go somewhere else. `local/adapter.ts` does the converting.
+ */
+let localMode: null | {
+  catalogue: () => Promise<PosCatalogue>;
+  sell: (input: PosSellInput) => Promise<PosSellOutcome>;
+  sales: () => Promise<PosSale[]>;
+} = null;
+
+/** Turned on by the offline till's shell while it is mounted, and off again when it goes. */
+export function useLocalPos(mode: typeof localMode): void {
+  localMode = mode;
+}
+
+export const readCatalogue = () => (localMode ? localMode.catalogue() : call('pos:catalogue'));
 export const refreshCatalogue = (capable?: boolean) => call('pos:catalogueRefresh', capable === undefined ? {} : { capable });
-export const sell = (input: PosSellInput) => call('pos:sell', input);
-export const listSales = (f: { session_id?: number; since?: string; limit?: number } = {}) => call('pos:sales', f);
+export const sell = (input: PosSellInput) => (localMode ? localMode.sell(input) : call('pos:sell', input));
+export const listSales = (f: { session_id?: number; since?: string; limit?: number } = {}) => (localMode ? localMode.sales() : call('pos:sales', f));
 export const readSale = (ref: string) => call('pos:sale', { ref });
 /** Send what waits; `catalogue`: bring the catalogue copy up to date as well (Sync now, the till opened). */
 export const syncNow = (o: { catalogue?: boolean } = {}) => call('pos:syncNow', o.catalogue ? { catalogue: true } : {});

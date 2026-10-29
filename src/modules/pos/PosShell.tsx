@@ -25,6 +25,7 @@ const Shift = lazy(() => import('./ShiftScreen'));
 const Sales = lazy(() => import('./Sales'));
 const TillSettings = lazy(() => import('./TillSettings'));
 const CustomerDisplay = lazy(() => import('./CustomerDisplay'));
+const LocalTill = lazy(() => import('./local/LocalTill').then((m) => ({ default: m.LocalTill })));
 
 const VIEWS: Record<PosView, { label: PosKey; icon: string }> = {
   register: { label: 'pos.register', icon: 'cart' },
@@ -35,10 +36,22 @@ const VIEWS: Record<PosView, { label: PosKey; icon: string }> = {
 };
 
 export default function PosShell({ route, active }: ModuleProps) {
-  if (route.split('?')[0] === '/pos/display') {
+  const [path, qs] = route.split('?');
+  if (path === '/pos/display') {
     return (
       <Suspense fallback={<Spinner />}>
         <CustomerDisplay />
+      </Suspense>
+    );
+  }
+  /*
+   * `/pos?mode=offline` — the till with no WorkSuite behind it (ENH-POS-01 §1): local people, this computer's
+   * own database, and these same screens, which the offline shell mounts with a Till of its own.
+   */
+  if (new URLSearchParams(qs ?? '').get('mode') === 'offline') {
+    return (
+      <Suspense fallback={<Spinner />}>
+        <LocalTill />
       </Suspense>
     );
   }
