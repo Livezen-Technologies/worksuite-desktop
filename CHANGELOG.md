@@ -11,6 +11,17 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.288 — 2026-11-04
+
+Every bill says who it is powered by.
+
+### Changed
+
+- **"Powered by worksuitecloud.com by Livezen" on every Point of Sale and SalonMate bill.** The till's receipts (a
+  sale, a reprint of WorkSuite's receipt, a receipt template) and SalonMate's offline till receipt end with this line,
+  after the business's own footer, design and barcode. It is fixed: no setting, receipt design or template removes it.
+  Receipts WorkSuite prints for you carry the same line from the server (POS 1.6.0, SalonMate 1.3.0).
+
 ## 0.2.287 — 2026-11-04
 
 Two-step verification for personal accounts, inside the app.

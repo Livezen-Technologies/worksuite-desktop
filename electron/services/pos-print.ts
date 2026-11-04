@@ -1,6 +1,6 @@
 import qrcode from 'qrcode-generator';
 import { code128Encodable, code128Svg } from '@shared/code128';
-import { DEFAULT_RECEIPT_DESIGN, saleFlags, saleReductions, serverReductions, vatRows, type PosPrintOutcome, type PosReduction, type PosPrintPatch, type PosPrintSettings, type PosReceiptBlock, type PosReceiptDesign, type PosReceiptPreview, type PosReceiptTemplate, type PosReport, type PosSale, type PosServerReceipt } from '@shared/pos';
+import { DEFAULT_RECEIPT_DESIGN, saleFlags, saleReductions, serverReductions, vatRows, type PosPrintOutcome, type PosReduction, type PosPrintPatch, type PosPrintSettings, type PosReceiptBlock, type PosReceiptDesign, type PosReceiptPreview, type PosReceiptTemplate, type PosReport, type PosSale, type PosServerReceipt, POWERED_BY } from '@shared/pos';
 import { DesktopError } from '../main/errors';
 import { drawerPulse, printInWindow, sendRaw, type PrintJob, type PrintResult } from './salon-print';
 
@@ -77,6 +77,15 @@ export type ReceiptRow =
   | { kind: 'image'; png: string; width: number; height: number; raster: string };
 
 const METHOD: Record<string, string> = { cash: 'Cash', card: 'Card', bank_transfer: 'Bank transfer', wallet: 'Wallet', qr: 'QR payment', voucher: 'Gift voucher', store_credit: 'Store credit', account: 'On account' };
+
+/**
+ * The line every bill ends with, after the till's footer and any template: fixed on purpose, so no setting, design or
+ * template removes it. The same words as the server's receipts (`App\\Libraries\\PoweredBy`).
+ */
+function poweredBy(rows: ReceiptRow[]): ReceiptRow[] {
+  rows.push({ kind: 'text', text: POWERED_BY, align: 'center' });
+  return rows;
+}
 
 export function money(v: number, currency?: string | null): string {
   const s = (Math.round(v * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -161,7 +170,7 @@ export function receiptRows(sale: PosSale, s: DesignedSettings, o: { till: strin
     rows.push({ kind: 'text', text: 'Provisional: priced offline. WorkSuite confirms the figures.', align: 'center' });
   }
   pushBottom(rows, s, sale.ref);
-  return rows;
+  return poweredBy(rows);
 }
 
 /** The discount lines under the subtotal: each with its amount, a reason on the line below. */
@@ -218,7 +227,7 @@ export function serverReceiptRows(r: PosServerReceipt, s: DesignedSettings, o: {
     if (r.loyalty.balance != null) rows.push({ kind: 'pair', left: 'Points balance', right: String(r.loyalty.balance) });
   }
   pushBottom(rows, { ...s, footer: s.footer || r.footer }, r.receipt_no);
-  return rows;
+  return poweredBy(rows);
 }
 
 /* ── A receipt by the company's template ────────────────────────────── */
@@ -445,7 +454,7 @@ export function templateRows(d: ReceiptDoc, tpl: PosReceiptTemplate, o: { reprin
     rows.push({ kind: 'rule' });
     rows.push({ kind: 'text', text: 'Provisional: priced offline. WorkSuite confirms the figures.', align: 'center' });
   }
-  return rows;
+  return poweredBy(rows);
 }
 
 /** The paper a template prints on, where the till's printer can: 58 or 80 mm (A4 keeps the printer's own roll). */

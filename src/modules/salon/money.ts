@@ -1,5 +1,6 @@
 import { apiGet, request } from '../../core/api';
 import { call } from '../../core/bridge';
+import { POWERED_BY } from '@shared/pos';
 import type { SalonPaper, SalonPrintOutcome, SalonPrintPatch, SalonPrintSettings } from '@shared/types';
 import { amount, write, type Visit } from './api';
 
@@ -477,7 +478,8 @@ export function offlineReceipt(r: OfflineReceipt, h: Omit<PageHeading, 'date'>):
       rows(r.tenders.map((t): [string, string] => [`${METHOD_LABEL[t.method] ?? t.method}${t.reference ? ` ${t.reference}` : ''}`, amount(t.method === 'cash' ? t.amount + r.change : t.amount)])) +
       rows([['Change', amount(r.change)], ['Paid', amount(paid)]]) +
       '<hr><div class="c">Taken while WorkSuite was out of reach. Your tax invoice follows when it is back; any member discount or tax is shown on it.</div>' +
-      '<div class="c">ස්තූතියි · நன்றி · Thank you</div>',
+      '<div class="c">ස්තූතියි · நன்றி · Thank you</div>' +
+      `<div class="c s">${esc(POWERED_BY)}</div>`,
     WIDTH[h.paper],
   );
 }
