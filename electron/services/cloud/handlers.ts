@@ -120,7 +120,7 @@ type Pending =
   | { kind: 'handoff'; accountId: string; state: string; verifier: string; exchange: string; client: string };
 
 /** Where `cloud:openWeb` goes, under the account's (or Cloud's) web origin; `verify`/`forgot` under OneAuth. */
-const WEB_PATHS = { storage: '/account/storage', upgrade: '/account/subscription', privacy: '/account/privacy', support: '/support' } as const;
+const WEB_PATHS = { storage: '/account/storage', upgrade: '/account/subscription', privacy: '/account/privacy', security: '/account/security', support: '/support' } as const;
 
 /** Registers the sign-in and Cloud channels on `router`. */
 export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): CloudHandle {
@@ -393,7 +393,7 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
 
   // ── web pages ────────────────────────────────────────────────────────
 
-  const webUrl = async (page: 'storage' | 'upgrade' | 'privacy' | 'support' | 'verify' | 'forgot'): Promise<string> => {
+  const webUrl = async (page: 'storage' | 'upgrade' | 'privacy' | 'security' | 'support' | 'verify' | 'forgot'): Promise<string> => {
     const rec = deps.activePersonal();
     const base = rec?.serverOrigin ?? deps.cloudOrigin ?? CLOUD_ORIGIN;
     if (page !== 'verify' && page !== 'forgot') return `${base}${WEB_PATHS[page]}`;
@@ -529,6 +529,26 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
   router.handle('cloud:declineInvitation', async ({ id }) => {
     needBound();
     await api.declineInvitation(id);
+  });
+  router.handle('cloud:twoStep', () => {
+    needBound();
+    return api.twoStep();
+  });
+  router.handle('cloud:twoStepStart', (proof) => {
+    needBound();
+    return api.twoStepStart(proof);
+  });
+  router.handle('cloud:twoStepConfirm', ({ code }) => {
+    needBound();
+    return api.twoStepConfirm(code);
+  });
+  router.handle('cloud:twoStepRecoveryCodes', (proof) => {
+    needBound();
+    return api.twoStepRecoveryCodes(proof);
+  });
+  router.handle('cloud:twoStepDisable', (proof) => {
+    needBound();
+    return api.twoStepDisable(proof);
   });
   router.handle('cloud:deletionState', () => {
     needBound();

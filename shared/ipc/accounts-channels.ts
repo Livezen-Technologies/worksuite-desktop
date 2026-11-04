@@ -45,6 +45,11 @@ export const ACCOUNTS_INVOKE_CHANNELS = [
   'cloud:invitations',
   'cloud:acceptInvitation',
   'cloud:declineInvitation',
+  'cloud:twoStep',
+  'cloud:twoStepStart',
+  'cloud:twoStepConfirm',
+  'cloud:twoStepRecoveryCodes',
+  'cloud:twoStepDisable',
   'cloud:requestDeletion',
   'cloud:openWeb',
 ] as const;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AccountDeletion, BrowserSignIn, CloudInvitations, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
+import type { AccountDeletion, BrowserSignIn, CloudInvitations, CloudTwoStep, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
 import { IDP_HINTS } from './cloud';
 import type { ConnectRun } from './discovery';
 import type { SetupLinkPayload, TrustedConfig } from './trusted-config';
@@ -226,8 +226,14 @@ export const accountsContract = {
   'cloud:invitations': { input: none },
   'cloud:acceptInvitation': { input: z.strictObject({ id: z.string().regex(/^\d{1,18}$/).optional(), token: z.string().min(10).max(200).optional() }).refine((v) => !!v.id !== !!v.token, 'id or token'), rate: 2 },
   'cloud:declineInvitation': { input: z.strictObject({ id: z.string().regex(/^\d{1,18}$/) }), rate: 2 },
+  /* A personal account's two-step verification (WorkSuite Cloud's): every change carries the password or a code. */
+  'cloud:twoStep': { input: none },
+  'cloud:twoStepStart': { input: z.strictObject({ password: z.string().max(256).optional(), code: z.string().trim().max(20).optional() }), rate: 2 },
+  'cloud:twoStepConfirm': { input: z.strictObject({ code: z.string().trim().min(6).max(10) }), rate: 3 },
+  'cloud:twoStepRecoveryCodes': { input: z.strictObject({ password: z.string().max(256).optional(), code: z.string().trim().max(20).optional() }), rate: 2 },
+  'cloud:twoStepDisable': { input: z.strictObject({ password: z.string().max(256).optional(), code: z.string().trim().max(20).optional() }), rate: 2 },
   'cloud:requestDeletion': { input: z.strictObject({ confirm: z.string().max(16), password: z.string().max(256) }), sensitive: true, rate: 1 },
-  'cloud:openWeb': { input: z.strictObject({ page: z.enum(['storage', 'upgrade', 'privacy', 'support', 'verify', 'forgot']) }) },
+  'cloud:openWeb': { input: z.strictObject({ page: z.enum(['storage', 'upgrade', 'privacy', 'security', 'support', 'verify', 'forgot']) }) },
 };
 
 export interface AccountsOutputs {
@@ -276,6 +282,11 @@ export interface AccountsOutputs {
   'cloud:invitations': CloudInvitations;
   'cloud:acceptInvitation': { id: string; name: string };
   'cloud:declineInvitation': void;
+  'cloud:twoStep': CloudTwoStep;
+  'cloud:twoStepStart': { secret: string; uri: string };
+  'cloud:twoStepConfirm': CloudTwoStep & { recoveryCodes: string[] };
+  'cloud:twoStepRecoveryCodes': CloudTwoStep & { recoveryCodes: string[] };
+  'cloud:twoStepDisable': CloudTwoStep;
   'cloud:requestDeletion': { scheduledFor: string; cancelUrl: string };
   'cloud:openWeb': boolean;
 }

@@ -38,7 +38,16 @@ export const CLOUD_API = {
   /** Invitations to organisations for the signed-in person: list, accept (`{id}` or `{token}`), `/:id/decline`. */
   invitations: '/api/v1/invitations',
   invitationAccept: '/api/v1/invitations/accept',
+  /** Two-step verification of the signed-in person: status; `/start`, `/confirm`, `/recovery-codes`, `/disable`. */
+  twoStep: '/api/v1/security/two-step',
 } as const;
+
+/** `GET /api/v1/security/two-step`. */
+export interface CloudTwoStep {
+  enabled: boolean;
+  enabledAt: string | null;
+  recoveryCodesLeft: number;
+}
 
 /** `GET /api/v1/invitations`: an invitation to an organisation waiting for this person. */
 export interface CloudInvitation {

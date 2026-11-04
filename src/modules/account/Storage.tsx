@@ -137,7 +137,7 @@ export function StorageBanner({ storage }: { storage: CloudStatus['storage'] }) 
   );
 }
 
-export async function openWeb(page: 'storage' | 'upgrade' | 'privacy' | 'support' | 'verify' | 'forgot'): Promise<void> {
+export async function openWeb(page: 'storage' | 'upgrade' | 'privacy' | 'security' | 'support' | 'verify' | 'forgot'): Promise<void> {
   try {
     await call('cloud:openWeb', { page });
   } catch (e) {

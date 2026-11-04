@@ -11,6 +11,23 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.287 — 2026-11-04
+
+Two-step verification for personal accounts, inside the app.
+
+### Added
+
+- **Two-step verification in My account › Security (personal accounts).** Turn it on with an authenticator app (scan
+  the code or type the key, then enter a code), get 10 recovery codes, make new ones, move to a new phone or turn it
+  off — without leaving WorkSuite. Each change asks for your password again, or a current code. Passkeys are added in
+  the browser (Manage passkeys in the browser), since they belong to WorkSuite Cloud's web address. Needs a WorkSuite
+  Cloud with `/api/v1/security/two-step`.
+
+### Changed
+
+- Tests now cover opening the app offline after signing in once (it starts from what this computer saved, read-only
+  until the server answers) and staying signed out when nothing was saved.
+
 ## 0.2.286 — 2026-11-04
 
 Receipt printers by model, and a receipt designer with its preview, in the till's settings.

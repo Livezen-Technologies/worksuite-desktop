@@ -21,6 +21,7 @@ const General = lazy(() => import('./General'));
 const Preferences = lazy(() => import('./Preferences'));
 const Notifications = lazy(() => import('./Notifications'));
 const Security = lazy(() => import('./Security'));
+const CloudSecurity = lazy(() => import('./CloudSecurity'));
 const Pictures = lazy(() => import('./Pictures'));
 const Access = lazy(() => import('./Access'));
 const Storage = lazy(() => import('./Storage'));
@@ -62,7 +63,7 @@ export default function AccountPage(_props: ModuleProps) {
           {section === 'general' ? <General onPick={pick} onEdit={open} /> : null}
           {section === 'preferences' ? <Preferences /> : null}
           {section === 'notifications' ? <Notifications /> : null}
-          {section === 'security' ? <Security /> : null}
+          {section === 'security' ? (personal ? <CloudSecurity /> : <Security />) : null}
           {section === 'pictures' ? <Pictures onEdit={open} /> : null}
           {section === 'access' ? <Access /> : null}
           {section === 'storage' ? <Storage /> : null}
