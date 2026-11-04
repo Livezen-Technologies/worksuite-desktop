@@ -947,3 +947,9 @@ export function vatRows(lines: Array<Pick<PosSaleLine, 'tax_rate' | 'tax'>>, tot
 export function formatReceipt(prefix: string, n: number): string {
   return `${prefix}-${String(Math.max(1, Math.floor(n))).padStart(6, '0')}`;
 }
+
+/**
+ * The line every Point of Sale and SalonMate bill ends with, printed or on screen. Fixed on purpose: no setting,
+ * receipt design or template removes it. The same words as the server's (`App\\Libraries\\PoweredBy`).
+ */
+export const POWERED_BY = 'Powered by worksuitecloud.com by Livezen';

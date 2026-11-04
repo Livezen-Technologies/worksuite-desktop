@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ BrowserWindow: class {} }));
 
-import { vatRows, type PosSale, type PosServerReceipt } from '@shared/pos';
+import { POWERED_BY, vatRows, type PosSale, type PosServerReceipt } from '@shared/pos';
 import { code128, code128Encodable, code128Values, CODE128_PATTERNS } from '@shared/code128';
 import { barcodeBytes, COLUMNS, escpos, pairLine, plain, PosPrint, receiptHtml, receiptRows, reportRows, serverReceiptRows, type ReceiptRow } from '../../../electron/services/pos-print';
 import { drawerPulse, type PrintJob } from '../../../electron/services/salon-print';
@@ -192,7 +192,9 @@ describe('the receipt', () => {
     expect(pairs).toContain('VAT 18%|145.80');
     expect(pairs).toContain('VAT 8%|10.20');
     expect(pairs.some((p) => p.startsWith('Tax|'))).toBe(false);
-    expect(rows.at(-1)).toEqual({ kind: 'barcode', text: sale.ref });
+    // The barcode, then the fixed "Powered by" line that every bill ends with.
+    expect(rows.at(-2)).toEqual({ kind: 'barcode', text: sale.ref });
+    expect(rows.at(-1)).toEqual({ kind: 'text', text: POWERED_BY, align: 'center' });
     expect(vatRows([{ tax_rate: 0, tax: 0 }], 12)).toEqual([{ label: 'VAT', amount: 12 }]);
     expect(vatRows([{ tax_rate: 18, tax: 10 }], 10.01)).toEqual([{ label: 'VAT 18%', amount: 10.01 }]);
 
@@ -334,5 +336,12 @@ describe('receipt printers and the receipt design', () => {
     // settings saved by an older version: no design, no cut, no feed
     cfg.m.set('pos-print', { 'https://ws.example': { receipt_printer: null, paper: '58mm', mode: 'escpos', copies: 1, auto_print: true, drawer: 'off', drawer_pin: 2, header: '', footer: '' } });
     expect(p.settings()).toMatchObject({ paper: '58mm', cut: 'partial', feed: 4, design: { title_size: 'normal', show_barcode: true, logo: null } });
+  });
+});
+
+describe('the fixed "Powered by" line', () => {
+  it('ends every bill, whatever the footer and design say', () => {
+    const rows = receiptRows(sale, { header: 'Shop', footer: '' }, { till: null });
+    expect(rows.at(-1)).toEqual({ kind: 'text', text: 'Powered by worksuitecloud.com by Livezen', align: 'center' });
   });
 });
