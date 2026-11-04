@@ -30,6 +30,10 @@ export interface SignUpDetails {
   password: string;
   country: string;
   timezone?: string;
+  /** Required: the mobile number. */
+  phone: string;
+  /** Optional: the organization the person works for. */
+  organization?: string;
   acceptTerms: true;
   acceptPrivacy: true;
 }

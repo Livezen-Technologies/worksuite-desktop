@@ -17,6 +17,11 @@ Receipt printers by model, and a receipt designer with its preview, in the till'
 
 ### Added
 
+- **Sign-up asks for a mobile number and, optionally, an organization.** Creating a WorkSuite Cloud account in the
+  app now needs a mobile number; the organization name can be left empty. The form also asks you to confirm the
+  password and to tick the Terms of Service and Privacy Policy box, instead of accepting them for you. Needs a
+  WorkSuite Cloud that takes the two fields (worksuite-cloud migration 042).
+
 - **Xprinter models, set up for you.** Till settings › Receipt & printing has a Printer model list with 54 Xprinter
   receipt printers — the 80 mm desktop range (XP-80C, XP-Q200H, XP-Q800, XP-N160II, XP-C260H, XP-T80A, …), the
   58 mm range (XP-58IIH, XP-58IIL, XP-58C, …) and the portable ones (XP-P323B, XP-P810, …). Choosing one sets the

@@ -199,6 +199,12 @@ export const accountsContract = {
       password: z.string().max(256),
       country: z.string().trim().length(2),
       timezone: z.string().max(64).optional(),
+      /** Required by the server: the mobile number, national (read with `country`) or +international. */
+      phone: z.string().trim().min(1).max(32),
+      /** Optional: the organization the person works for. */
+      organization: z.string().trim().max(160).optional(),
+      /** The person ticked the Terms of Service and Privacy Policy box. */
+      acceptTerms: z.literal(true),
     }),
     rate: 2,
   },

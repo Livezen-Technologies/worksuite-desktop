@@ -420,7 +420,7 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
   router.handle('signin:copyLink', ({ attemptId }) => flow.copyLink(attemptId));
   router.handle('signin:cancel', ({ attemptId }) => flow.cancel(attemptId));
 
-  router.handle('signup:start', async ({ accountId, firstName, lastName, email, password, country, timezone }) => {
+  router.handle('signup:start', async ({ accountId, firstName, lastName, email, password, country, timezone, phone, organization }) => {
     const rec = deps.account(accountId);
     if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
     const auth = await serverAuth(rec);
@@ -429,7 +429,7 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
     const fetch = deps.fetchFor(rec.id);
     /* The redirect never opens: the code comes back through /signup/verify, not through a browser. */
     const { flow: flowToken, pending: auth2 } = await openFlow(meta, auth.oidc.clientId, OIDC_CALLBACK, email, fetch);
-    const started = await startSignUp(rec.apiOrigin || rec.serverOrigin, flowToken, auth2, { firstName, lastName, email, password, country, timezone, acceptTerms: true, acceptPrivacy: true }, fetch);
+    const started = await startSignUp(rec.apiOrigin || rec.serverOrigin, flowToken, auth2, { firstName, lastName, email, password, country, timezone, phone, ...(organization ? { organization } : {}), acceptTerms: true, acceptPrivacy: true }, fetch);
     signup = { accountId, started, meta, clientId: auth.oidc.clientId };
     return { email: started.email, expiresIn: started.expiresIn };
   });
