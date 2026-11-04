@@ -11,6 +11,26 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.286 — 2026-11-04
+
+Receipt printers by model, and a receipt designer with its preview, in the till's settings.
+
+### Added
+
+- **Xprinter models, set up for you.** Till settings › Receipt & printing has a Printer model list with 54 Xprinter
+  receipt printers — the 80 mm desktop range (XP-80C, XP-Q200H, XP-Q800, XP-N160II, XP-C260H, XP-T80A, …), the
+  58 mm range (XP-58IIH, XP-58IIL, XP-58C, …) and the portable ones (XP-P323B, XP-P810, …). Choosing one sets the
+  roll width, ESC/POS, the cut and the drawer for it; picking a printer whose name says which Xprinter it is sets that
+  model up too. Everything stays editable: some models are sold with and without a cutter.
+- **Cut and feed.** A partial cut, a full cut or none (tear off), and how many lines are fed before it. Before, every
+  receipt ended with four lines and a partial cut, which a printer without a cutter could not do.
+- **A receipt designer.** A logo, printed in black and white (as a raster image over ESC/POS, as a picture through
+  the driver); the shop's name large; the top and bottom lines centred or left; whether the receipt shows the order
+  number, the till, the cashier, the customer, the tax by rate and the receipt barcode; and a QR code at the bottom
+  (a web address, a review link, a payment code). Receipts the till prints and reprints from WorkSuite follow it.
+- **The receipt as it will print**, beside the designer: a sample sale with the settings just saved. Where the company
+  has published a receipt template for the till, that is what prints, so that is what the preview shows.
+
 ## 0.2.285 — 2026-10-28
 
 Central login management, part 1: the startup screen now follows what the server publishes.

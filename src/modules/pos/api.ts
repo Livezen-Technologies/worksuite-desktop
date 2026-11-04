@@ -306,6 +306,8 @@ export const giveBack = (input: PosGiveBack) => call('pos:giveBack', input);
 export const emailReceipt = (ref: string, email?: string) => call('pos:email', email ? { ref, email } : { ref });
 export const printReport = (r: PosReport) => call('pos:printReport', r);
 export const printTest = () => call('pos:printTest');
+/** The receipt as it will look with the settings saved now (Till settings › Receipt design). */
+export const receiptPreview = () => call('pos:receiptPreview');
 export const openDrawer = () => call('pos:openDrawer');
 export const openDisplay = () => call('pos:displayOpen');
 export const closeDisplay = () => call('pos:displayClose');

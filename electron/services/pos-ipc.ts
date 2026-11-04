@@ -186,6 +186,7 @@ export function createPos(d: PosDeps) {
     });
     router.handle('pos:printReport', async (input, c) => print.report(input, await installed(c.sender)));
     router.handle('pos:printTest', async (_i, c) => print.test(await installed(c.sender)));
+    router.handle('pos:receiptPreview', () => print.preview(tillOf()));
     router.handle('pos:openDrawer', async (_i, c) => {
       guard();
       return print.drawer(await installed(c.sender));

@@ -1,6 +1,6 @@
 import qrcode from 'qrcode-generator';
 import { code128Encodable, code128Svg } from '@shared/code128';
-import { saleFlags, saleReductions, serverReductions, vatRows, type PosPrintOutcome, type PosReduction, type PosPrintPatch, type PosPrintSettings, type PosReceiptBlock, type PosReceiptTemplate, type PosReport, type PosSale, type PosServerReceipt } from '@shared/pos';
+import { DEFAULT_RECEIPT_DESIGN, saleFlags, saleReductions, serverReductions, vatRows, type PosPrintOutcome, type PosReduction, type PosPrintPatch, type PosPrintSettings, type PosReceiptBlock, type PosReceiptDesign, type PosReceiptPreview, type PosReceiptTemplate, type PosReport, type PosSale, type PosServerReceipt } from '@shared/pos';
 import { DesktopError } from '../main/errors';
 import { drawerPulse, printInWindow, sendRaw, type PrintJob, type PrintResult } from './salon-print';
 
@@ -54,6 +54,10 @@ export const DEFAULT_POS_PRINT: PosPrintSettings = {
   header: '',
   footer: 'Thank you',
   display_touch: 'auto',
+  printer_model: null,
+  cut: 'partial',
+  feed: 4,
+  design: DEFAULT_RECEIPT_DESIGN,
 };
 
 /** Characters on a line in the printer's Font A: 576 dots on an 80 mm roll, 384 on 58 mm. */
@@ -68,7 +72,9 @@ export type ReceiptRow =
   /** The receipt number as a Code 128 barcode (scanned back for a return), its digits printed under it. */
   | { kind: 'barcode'; text: string }
   /** A QR code (a template's `barcode` block, `format: qr`), its text printed under it. */
-  | { kind: 'qr'; text: string };
+  | { kind: 'qr'; text: string }
+  /** A black-and-white picture (the shop's logo), centred: a PNG for the page, its dots for ESC/POS. */
+  | { kind: 'image'; png: string; width: number; height: number; raster: string };
 
 const METHOD: Record<string, string> = { cash: 'Cash', card: 'Card', bank_transfer: 'Bank transfer', wallet: 'Wallet', qr: 'QR payment', voucher: 'Gift voucher', store_credit: 'Store credit', account: 'On account' };
 
@@ -93,17 +99,42 @@ const lines = (t: string): string[] =>
     .filter(Boolean)
     .slice(0, 8);
 
-/** A sale's receipt: the shop's lines, the sale, its lines, the totals, how it was paid. */
-export function receiptRows(sale: PosSale, s: Pick<PosPrintSettings, 'header' | 'footer'>, o: { till: string | null; reprint?: boolean } = { till: null }): ReceiptRow[] {
+type DesignedSettings = Pick<PosPrintSettings, 'header' | 'footer'> & { design?: PosReceiptDesign };
+
+/** The design in force: what was set over the defaults (settings saved before the designer have none). */
+export function designOf(s: { design?: Partial<PosReceiptDesign> }): PosReceiptDesign {
+  return { ...DEFAULT_RECEIPT_DESIGN, ...(s.design ?? {}) };
+}
+
+/** The top of a receipt by the design: the logo, the shop's lines (the first double size if asked), a copy's mark. */
+function pushTop(rows: ReceiptRow[], s: DesignedSettings, reprint?: boolean): void {
+  const d = designOf(s);
+  if (d.logo) rows.push({ kind: 'image', ...d.logo });
+  lines(s.header).forEach((text, i) => rows.push({ kind: 'text', text, align: d.align, bold: i === 0, big: i === 0 && d.title_size === 'large' }));
+  if (reprint) rows.push({ kind: 'text', text: '*** COPY ***', align: 'center', bold: true });
+}
+
+/** The bottom by the design: the shop's closing lines, the QR code, the receipt number as a barcode. */
+function pushBottom(rows: ReceiptRow[], s: DesignedSettings, ref: string): void {
+  const d = designOf(s);
+  const foot = lines(s.footer);
+  if (foot.length) rows.push({ kind: 'rule' });
+  for (const l of foot) rows.push({ kind: 'text', text: l, align: d.align });
+  if (d.qr.trim()) rows.push({ kind: 'qr', text: d.qr.trim() });
+  if (d.show_barcode && code128Encodable(ref)) rows.push({ kind: 'barcode', text: ref });
+}
+
+/** A sale's receipt: the shop's lines, the sale, its lines, the totals, how it was paid — laid out by the design. */
+export function receiptRows(sale: PosSale, s: DesignedSettings, o: { till: string | null; reprint?: boolean } = { till: null }): ReceiptRow[] {
+  const d = designOf(s);
   const rows: ReceiptRow[] = [];
-  for (const l of lines(s.header)) rows.push({ kind: 'text', text: l, align: 'center', bold: rows.length === 0 });
-  if (o.reprint) rows.push({ kind: 'text', text: '*** COPY ***', align: 'center', bold: true });
+  pushTop(rows, s, o.reprint);
   rows.push({ kind: 'rule' });
   rows.push({ kind: 'pair', left: 'Receipt', right: sale.ref });
-  if (sale.number) rows.push({ kind: 'pair', left: 'Order', right: sale.number });
-  rows.push({ kind: 'pair', left: stampOf(sale.created_at), right: o.till ?? '' });
-  if (sale.cashier_name) rows.push({ kind: 'pair', left: 'Cashier', right: sale.cashier_name });
-  if (sale.customer?.name) rows.push({ kind: 'pair', left: 'Customer', right: sale.customer.name });
+  if (sale.number && d.show_order) rows.push({ kind: 'pair', left: 'Order', right: sale.number });
+  rows.push({ kind: 'pair', left: stampOf(sale.created_at), right: d.show_till ? (o.till ?? '') : '' });
+  if (sale.cashier_name && d.show_cashier) rows.push({ kind: 'pair', left: 'Cashier', right: sale.cashier_name });
+  if (sale.customer?.name && d.show_customer) rows.push({ kind: 'pair', left: 'Customer', right: sale.customer.name });
   rows.push({ kind: 'rule' });
   for (const l of sale.lines) {
     rows.push({ kind: 'text', text: l.name });
@@ -114,7 +145,7 @@ export function receiptRows(sale: PosSale, s: Pick<PosPrintSettings, 'header' | 
   // The coupon, the promotions, the points and the cashier's discount (with its reason), each its own line (#293).
   pushReductions(rows, saleReductions(sale));
   // The tax by rate ("VAT 18%"), from the lines WorkSuite (or the preview) priced.
-  for (const v of vatRows(sale.lines, sale.totals.tax)) rows.push({ kind: 'pair', left: v.label, right: money(v.amount) });
+  if (d.show_tax) for (const v of vatRows(sale.lines, sale.totals.tax)) rows.push({ kind: 'pair', left: v.label, right: money(v.amount) });
   rows.push({ kind: 'pair', left: 'TOTAL', right: money(sale.totals.total, sale.currency), bold: true });
   rows.push({ kind: 'rule' });
   for (const t of sale.tenders) rows.push({ kind: 'pair', left: `${METHOD[t.method] ?? t.method}${t.reference ? ` (${t.reference})` : ''}`, right: money(t.amount) });
@@ -129,10 +160,7 @@ export function receiptRows(sale: PosSale, s: Pick<PosPrintSettings, 'header' | 
     rows.push({ kind: 'rule' });
     rows.push({ kind: 'text', text: 'Provisional: priced offline. WorkSuite confirms the figures.', align: 'center' });
   }
-  const foot = lines(s.footer);
-  if (foot.length) rows.push({ kind: 'rule' });
-  for (const l of foot) rows.push({ kind: 'text', text: l, align: 'center' });
-  if (code128Encodable(sale.ref)) rows.push({ kind: 'barcode', text: sale.ref });
+  pushBottom(rows, s, sale.ref);
   return rows;
 }
 
@@ -147,23 +175,20 @@ function pushReductions(rows: ReceiptRow[], list: PosReduction[]): void {
 const STATUS: Record<string, string> = { payment_missing: '*** PAYMENT MISSING ***', voided: '*** VOIDED ***', refunded: '*** REFUNDED ***', part_refunded: '*** PART REFUNDED ***' };
 
 /** WorkSuite's receipt for a sale (`Receipt::data`), laid out the same way; the till's header and footer around it. */
-export function serverReceiptRows(r: PosServerReceipt, s: Pick<PosPrintSettings, 'header' | 'footer'>, o: { till: string | null; reprint?: boolean } = { till: null }): ReceiptRow[] {
+export function serverReceiptRows(r: PosServerReceipt, s: DesignedSettings, o: { till: string | null; reprint?: boolean } = { till: null }): ReceiptRow[] {
+  const d = designOf(s);
   const rows: ReceiptRow[] = [];
-  const head = lines(s.header);
-  if (head.length) for (const l of head) rows.push({ kind: 'text', text: l, align: 'center', bold: rows.length === 0 });
-  else if (r.company.name) {
-    rows.push({ kind: 'text', text: r.company.name, align: 'center', bold: true });
-    for (const l of [r.company.address, r.company.phone, r.company.tax_number ? `Tax no. ${r.company.tax_number}` : null]) if (l) rows.push({ kind: 'text', text: l, align: 'center' });
-  }
-  if (o.reprint) rows.push({ kind: 'text', text: '*** COPY ***', align: 'center', bold: true });
+  // the till's own lines at the top, else the company's from WorkSuite
+  const company = [r.company.name, r.company.address, r.company.phone, r.company.tax_number ? `Tax no. ${r.company.tax_number}` : null].filter((l): l is string => !!l);
+  pushTop(rows, lines(s.header).length || !r.company.name ? s : { ...s, header: company.join('\n') }, o.reprint);
   if (STATUS[r.status]) rows.push({ kind: 'text', text: STATUS[r.status]!, align: 'center', bold: true });
   rows.push({ kind: 'rule' });
   rows.push({ kind: 'pair', left: 'Receipt', right: r.receipt_no });
   if (r.invoice_number) rows.push({ kind: 'pair', left: 'Invoice', right: r.invoice_number });
-  else if (r.order_number) rows.push({ kind: 'pair', left: 'Order', right: r.order_number });
-  rows.push({ kind: 'pair', left: r.at ?? '', right: o.till ?? r.register ?? '' });
-  if (r.cashier) rows.push({ kind: 'pair', left: 'Cashier', right: r.cashier });
-  if (r.customer?.name) rows.push({ kind: 'pair', left: 'Customer', right: r.customer.name });
+  else if (r.order_number && d.show_order) rows.push({ kind: 'pair', left: 'Order', right: r.order_number });
+  rows.push({ kind: 'pair', left: r.at ?? '', right: d.show_till ? (o.till ?? r.register ?? '') : '' });
+  if (r.cashier && d.show_cashier) rows.push({ kind: 'pair', left: 'Cashier', right: r.cashier });
+  if (r.customer?.name && d.show_customer) rows.push({ kind: 'pair', left: 'Customer', right: r.customer.name });
   rows.push({ kind: 'rule' });
   for (const l of r.lines) {
     rows.push({ kind: 'text', text: l.description });
@@ -172,8 +197,10 @@ export function serverReceiptRows(r: PosServerReceipt, s: Pick<PosPrintSettings,
   rows.push({ kind: 'rule' });
   rows.push({ kind: 'pair', left: 'Subtotal', right: money(r.totals.subtotal) });
   pushReductions(rows, serverReductions(r));
-  if (r.taxes.length) for (const t of r.taxes) rows.push({ kind: 'pair', left: `Tax ${t.name}`, right: money(t.amount) });
-  else rows.push({ kind: 'pair', left: 'Tax', right: money(r.totals.tax) });
+  if (d.show_tax) {
+    if (r.taxes.length) for (const t of r.taxes) rows.push({ kind: 'pair', left: `Tax ${t.name}`, right: money(t.amount) });
+    else rows.push({ kind: 'pair', left: 'Tax', right: money(r.totals.tax) });
+  }
   rows.push({ kind: 'pair', left: 'TOTAL', right: money(r.totals.total, r.currency), bold: true });
   rows.push({ kind: 'rule' });
   for (const t of r.tenders) rows.push({ kind: 'pair', left: `${t.label}${t.reference ? ` (${t.reference})` : ''}`, right: money(t.amount) });
@@ -190,10 +217,7 @@ export function serverReceiptRows(r: PosServerReceipt, s: Pick<PosPrintSettings,
     if (r.loyalty.earned) rows.push({ kind: 'pair', left: 'Points earned', right: String(r.loyalty.earned) });
     if (r.loyalty.balance != null) rows.push({ kind: 'pair', left: 'Points balance', right: String(r.loyalty.balance) });
   }
-  const foot = lines(s.footer || r.footer);
-  if (foot.length) rows.push({ kind: 'rule' });
-  for (const l of foot) rows.push({ kind: 'text', text: l, align: 'center' });
-  if (code128Encodable(r.receipt_no)) rows.push({ kind: 'barcode', text: r.receipt_no });
+  pushBottom(rows, { ...s, footer: s.footer || r.footer }, r.receipt_no);
   return rows;
 }
 
@@ -440,6 +464,36 @@ export function reportRows(r: PosReport, s: Pick<PosPrintSettings, 'header'>): R
   return rows;
 }
 
+/** A sale for the preview: two lines, tax at 18%, cash with change. */
+export function sampleSale(now = new Date()): PosSale {
+  return {
+    ref: 'T1-SAMPLE-000123',
+    created_at: now.toISOString(),
+    terminal_id: 1,
+    cashier_id: 1,
+    cashier_name: 'Cashier',
+    state: 'sent',
+    number: 'SO-0001',
+    message: null,
+    attempts: 1,
+    sent_at: now.toISOString(),
+    session_id: 1,
+    register_id: 1,
+    currency: 'LKR',
+    customer: { name: 'Walk-in customer' },
+    lines: [
+      { product_id: 1, code: 'TEA-100', name: 'Ceylon tea 100g', quantity: 2, unit_price: 450, discount_pct: 0, tax_rate: 18, net: 762.71, tax: 137.29, total: 900 },
+      { product_id: 2, code: 'BIS-01', name: 'Biscuits', quantity: 1, unit_price: 250, discount_pct: 0, tax_rate: 18, net: 211.86, tax: 38.14, total: 250 },
+    ],
+    discount_pct: 0,
+    totals: { subtotal: 974.57, discount: 0, tax: 175.43, total: 1150 },
+    tenders: [{ method: 'cash', amount: 1200 }],
+    change_given: 50,
+    priced_by: 'server',
+    catalogue_version: 'sample',
+  } as PosSale;
+}
+
 /* ── ESC/POS ─────────────────────────────────────────────────────────── */
 
 const ESC = 0x1b;
@@ -487,7 +541,7 @@ function wrap(t: string, width: number): string[] {
  * The receipt as ESC/POS bytes: initialise, the code page, the rows (alignment and emphasis as commands, text as
  * ASCII), the drawer's pulse when asked (first, so the drawer opens while it prints), a feed and a partial cut.
  */
-export function escpos(rows: ReceiptRow[], width: number, o: { pulse?: Buffer | null; copies?: number } = {}): Buffer {
+export function escpos(rows: ReceiptRow[], width: number, o: { pulse?: Buffer | null; copies?: number; cut?: PosPrintSettings['cut']; feed?: number } = {}): Buffer {
   const one: number[] = [];
   const push = (...b: number[]) => one.push(...b);
   const text = (t: string) => one.push(...Buffer.from(plain(t), 'latin1'), LF);
@@ -500,6 +554,8 @@ export function escpos(rows: ReceiptRow[], width: number, o: { pulse?: Buffer | 
       if (r.bold) push(ESC, 0x45, 1);
       text(pairLine(plain(r.left), plain(r.right), width));
       if (r.bold) push(ESC, 0x45, 0);
+    } else if (r.kind === 'image') {
+      one.push(...rasterBytes(r));
     } else if (r.kind === 'barcode') {
       one.push(...barcodeBytes(r.text, width));
     } else if (r.kind === 'qr') {
@@ -516,13 +572,27 @@ export function escpos(rows: ReceiptRow[], width: number, o: { pulse?: Buffer | 
       if (r.bold) push(ESC, 0x45, 0);
     }
   }
-  push(ESC, 0x61, 0, ESC, 0x64, 4, GS, 0x56, 0x42, 0x00);
+  // feed the last line past the cutter (or the tear bar), then cut: partial, full, or not at all
+  push(ESC, 0x61, 0, ESC, 0x64, Math.min(8, Math.max(0, o.feed ?? 4)));
+  const cut = o.cut ?? 'partial';
+  if (cut !== 'none') push(GS, 0x56, cut === 'full' ? 0x41 : 0x42, 0x00);
   const init = [ESC, 0x40, ESC, 0x74, 0x00];
   const copies = Math.min(3, Math.max(1, o.copies ?? 1));
   const parts: Buffer[] = [Buffer.from(init)];
   if (o.pulse) parts.push(o.pulse);
   for (let i = 0; i < copies; i++) parts.push(Buffer.from(one));
   return Buffer.concat(parts);
+}
+
+/**
+ * A black-and-white picture as a raster bit image (`GS v 0`, normal size), centred: the logo's dots, a row at a time,
+ * eight dots a byte, most significant bit first. Empty when the dots do not match the size they claim.
+ */
+export function rasterBytes(img: { width: number; height: number; raster: string }): number[] {
+  const bytesWide = Math.ceil(img.width / 8);
+  const data = Buffer.from(img.raster, 'base64');
+  if (!img.height || data.length !== bytesWide * img.height) return [];
+  return [ESC, 0x61, 1, GS, 0x76, 0x30, 0, bytesWide & 0xff, bytesWide >> 8, img.height & 0xff, img.height >> 8, ...data, LF, ESC, 0x61, 0];
 }
 
 /**
@@ -577,11 +647,12 @@ export function receiptHtml(rows: ReceiptRow[], paper: PosPrintSettings['paper']
       if (r.kind === 'rule') return '<hr>';
       if (r.kind === 'barcode') return `<div class="c k">${code128Svg(r.text, { height: 44, module: 1 })}</div><div class="c">${esc(r.text)}</div>`;
       if (r.kind === 'qr') return `<div class="c k">${qrSvg(r.text)}</div><div class="c">${esc(r.text)}</div>`;
+      if (r.kind === 'image') return /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(r.png) ? `<div class="c i"><img src="${r.png}" width="${Math.round(r.width / 2)}" alt=""></div>` : '';
       if (r.kind === 'pair') return `<div class="p${r.bold ? ' b' : ''}"><span>${esc(r.left)}</span><span>${esc(r.right)}</span></div>`;
       return `<div class="${[r.align === 'center' ? 'c' : '', r.bold ? 'b' : '', r.big ? 'g' : ''].join(' ').trim()}">${esc(r.text)}</div>`;
     })
     .join('');
-  return `<style>body{margin:0;width:${w}px;font:12px/1.35 ui-monospace,Menlo,Consolas,monospace;color:#000}div{padding:0 6px;overflow-wrap:anywhere}.p{display:flex;justify-content:space-between;gap:8px}.p span:last-child{white-space:nowrap}.c{text-align:center}.b{font-weight:700}.g{font-size:16px}hr{border:0;border-top:1px dashed #000;margin:4px 6px}.k{margin-top:8px}.k svg{max-width:100%;height:auto}</style></head><body>${body}</body></html>`;
+  return `<style>body{margin:0;width:${w}px;font:12px/1.35 ui-monospace,Menlo,Consolas,monospace;color:#000}div{padding:0 6px;overflow-wrap:anywhere}.p{display:flex;justify-content:space-between;gap:8px}.p span:last-child{white-space:nowrap}.c{text-align:center}.b{font-weight:700}.g{font-size:16px}hr{border:0;border-top:1px dashed #000;margin:4px 6px}.k{margin-top:8px}.k svg{max-width:100%;height:auto}.i{margin:2px 0 6px}.i img{max-width:100%;height:auto;image-rendering:pixelated}</style></head><body>${body}</body></html>`;
 }
 
 /* ── The service ─────────────────────────────────────────────────────── */
@@ -613,7 +684,8 @@ export class PosPrint {
 
   settings(): PosPrintSettings {
     const o = this.d.origin();
-    return { ...DEFAULT_POS_PRINT, ...(o ? this.all()[o] : undefined) };
+    const mine = o ? this.all()[o] : undefined;
+    return { ...DEFAULT_POS_PRINT, ...mine, design: designOf(mine ?? {}) };
   }
 
   /** Change them. A printer named must be one this computer has. */
@@ -638,7 +710,7 @@ export class PosPrint {
     const copies = o.copies ?? s.copies;
     if (s.mode === 'escpos') {
       if (!printer) return { ok: false, printer, message: 'Choose the receipt printer in Printers: ESC/POS goes straight to it.' };
-      const r = await this.raw(printer, escpos(rows, COLUMNS[s.paper], { pulse, copies }));
+      const r = await this.raw(printer, escpos(rows, COLUMNS[s.paper], { pulse, copies, cut: s.cut, feed: s.feed }));
       return r.ok ? { ok: true, printer, message: `Sent to ${printer}.` } : { ok: false, printer, message: `It could not be printed: ${r.reason}` };
     }
     const r = await this.print({ html: receiptHtml(rows, s.paper), paper: s.paper, deviceName: printer, silent: !!printer, copies });
@@ -690,6 +762,22 @@ export class PosPrint {
       { kind: 'text', text: 'If both edges of the ruled lines are on the paper, the roll width is right.', align: 'center' },
     ];
     return this.out(rows, installed, { copies: 1 });
+  }
+
+  /**
+   * The receipt as it will look, from a sample sale and the settings saved now: the page the driver prints (ESC/POS
+   * prints the same rows in the printer's own font). A company template published for the till is what prints, so the
+   * preview shows that.
+   */
+  preview(o: { till: string | null; code?: string | null; company?: string | null } = { till: null }): PosReceiptPreview {
+    const s = this.settings();
+    const tpl = this.template();
+    const sale = sampleSale();
+    const rows = tpl
+      ? templateRows(docOfSale(sale, { company: o.company ?? null, header: s.header, till: o.code ? { code: o.code, name: o.till ?? o.code } : null }), tpl, { latin: s.mode === 'escpos' })
+      : receiptRows(sale, s, { till: o.till ?? 'Till 1' });
+    const paper = paperOf(tpl, s.paper);
+    return { html: receiptHtml(rows, paper), paper, template: !!tpl };
   }
 
   /** Open the drawer, through the receipt printer. */
