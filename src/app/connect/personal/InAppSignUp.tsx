@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { call, errorMessage } from '../../../core/bridge';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
+import { Checkbox } from '../../../components/Checkbox';
 import { updatePrefs } from '../../../core/app-state';
 import { currentLanguage, LANGUAGES } from '../../../core/i18n';
 
@@ -220,7 +221,7 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
         ))}
       </select>
       <label className="flex items-start gap-2.5 text-[13px] text-ink-2">
-        <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]" />
+        <Checkbox checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
         <span>I accept WorkSuite Cloud&apos;s Terms of Service and Privacy Policy.</span>
       </label>
       <button type="submit" disabled={busy || !ready} className="flex h-[46px] items-center justify-center gap-2 rounded-[10px] bg-teal text-[15px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
