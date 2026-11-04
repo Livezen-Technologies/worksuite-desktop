@@ -285,6 +285,8 @@ describe('POS phase 2: the receipt by the company’s template', () => {
       'rule',
       'Thank you, Ruwan Jayasuriya',
       'QR T1-AAAAAA-000042',
+      // Every bill ends with the fixed line, after the template's own blocks.
+      'Powered by worksuitecloud.com by Livezen',
     ]);
     // The cashier is left out, as the template says; the Sinhala footer does not go to an ESC/POS code page.
     expect(words.some((w) => w.startsWith('Cashier'))).toBe(false);
