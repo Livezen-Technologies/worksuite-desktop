@@ -30,6 +30,30 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('in-app sign-up', () => {
+  it('where WhatsApp verification is required, Continue waits for the code and the proof goes with the sign-up', async () => {
+    bridge.call.mockImplementation(async (channel: string) => {
+      if (channel === 'signup:phoneMode') return { mode: 'required' };
+      if (channel === 'signup:phoneSend') return { token: 'tok-1', phone: '+94771234567', nextResendAt: null };
+      if (channel === 'signup:phoneVerify') return { phone: '+94771234567', proof: 'proof-1' };
+      if (channel === 'signup:start') return { email: 'nimali@example.com', expiresIn: 3600 };
+      return undefined;
+    });
+    render(<InAppSignUp accountId="acc_abcdefghijklmnopqrst" onBack={() => undefined} />);
+    fill();
+    const cont = () => screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement;
+    await waitFor(() => screen.getByRole('button', { name: 'Send code on WhatsApp' }));
+    expect(cont().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Send code on WhatsApp' }));
+    await waitFor(() => screen.getByLabelText('WhatsApp code'));
+    expect(bridge.call).toHaveBeenCalledWith('signup:phoneSend', { accountId: 'acc_abcdefghijklmnopqrst', phone: '077 123 4567', country: 'LK' });
+    fireEvent.change(screen.getByLabelText('WhatsApp code'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }));
+    await waitFor(() => screen.getByText('Verified on WhatsApp ✓'));
+    expect(cont().disabled).toBe(false);
+    fireEvent.click(cont());
+    await waitFor(() => expect(bridge.call).toHaveBeenCalledWith('signup:start', expect.objectContaining({ phoneProof: 'proof-1' })));
+  });
+
   it('sends the details and then asks for the emailed code', async () => {
     render(<InAppSignUp accountId="acc_abcdefghijklmnopqrst" onBack={() => undefined} />);
     fill();

@@ -34,6 +34,8 @@ export interface SignUpDetails {
   phone: string;
   /** Optional: the organization the person works for. */
   organization?: string;
+  /** From phoneVerify, where the server verifies numbers on WhatsApp. */
+  phoneProof?: string;
   acceptTerms: true;
   acceptPrivacy: true;
 }
@@ -196,4 +198,37 @@ export async function resetWithCode(apiOrigin: string, email: string, code: stri
     const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string; fields?: Record<string, string> } } | null;
     throw failed(body?.error?.code ?? 'SERVER_ERROR', body?.error?.message ?? 'The password could not be changed. Try again.', body?.error?.fields ?? null);
   }
+}
+
+/** How the server treats phone numbers at sign-up: WhatsApp verification 'off', 'optional' or 'required'. */
+export async function phoneMode(apiOrigin: string, fetch: FetchLike): Promise<'off' | 'optional' | 'required'> {
+  const res = await fetch(new URL('/api/v1/config', apiOrigin).toString(), { method: 'GET', headers: { Accept: 'application/json' } });
+  const body = (await res.json().catch(() => null)) as { phoneVerification?: string } | null;
+  const m = body?.phoneVerification;
+  return m === 'optional' || m === 'required' ? m : 'off';
+}
+
+async function postJson<T>(apiOrigin: string, path: string, data: unknown, fetch: FetchLike, fallback: string): Promise<T> {
+  const res = await fetch(new URL(path, apiOrigin).toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const body = (await res.json().catch(() => null)) as (T & { error?: { code?: string; message?: string; fields?: Record<string, string> } }) | null;
+  if (!res.ok || !body) throw failed(body?.error?.code ?? 'SERVER_ERROR', body?.error?.message ?? fallback, body?.error?.fields ?? null);
+  return body;
+}
+
+/** A code to the number on WhatsApp; `token` from an earlier send makes it a resend. */
+export async function phoneSend(apiOrigin: string, flow: string | null, phone: string, country: string, token: string | undefined, fetch: FetchLike): Promise<{ token: string; phone: string; nextResendAt: string | null }> {
+  const b = await postJson<{ token?: string; phone?: string; nextResendAt?: string | null }>(apiOrigin, '/api/v1/signup/phone/send', { ...(flow ? { flow } : {}), phone, country, ...(token ? { token } : {}) }, fetch, 'The code could not be sent. Check the number and try again.');
+  if (!b.token) throw failed('SERVER_ERROR', 'The code could not be sent. Try again.');
+  return { token: b.token, phone: String(b.phone ?? phone), nextResendAt: b.nextResendAt ?? null };
+}
+
+/** The code back: a signed proof that the number is this person's, carried by the sign-up. */
+export async function phoneVerify(apiOrigin: string, flow: string | null, token: string, code: string, fetch: FetchLike): Promise<{ phone: string; proof: string }> {
+  const b = await postJson<{ phone?: string; proof?: string }>(apiOrigin, '/api/v1/signup/phone/verify', { ...(flow ? { flow } : {}), token, code: code.replace(/\s+/g, '') }, fetch, 'That code could not be checked. Try again.');
+  if (!b.proof) throw failed('SERVER_ERROR', 'That code could not be checked. Try again.');
+  return { phone: String(b.phone ?? ''), proof: b.proof };
 }

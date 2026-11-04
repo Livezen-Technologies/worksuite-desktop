@@ -25,6 +25,20 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
   const [step, setStep] = useState<'details' | 'code'>('details');
   const [form, setForm] = useState({ firstName: '', lastName: '', organization: '', email: prefill ?? '', phone: '', password: '', confirm: '', country: countryGuess() });
   const [agreed, setAgreed] = useState(false);
+  /* WhatsApp verification of the number, where the server uses it: off, optional or required. */
+  const [phoneMode, setPhoneMode] = useState<'off' | 'optional' | 'required'>('off');
+  const [phoneSent, setPhoneSent] = useState<{ token: string; phone: string } | null>(null);
+  const [phoneCode, setPhoneCode] = useState('');
+  const [phoneProof, setPhoneProof] = useState<{ phone: string; proof: string } | null>(null);
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    call('signup:phoneMode', { accountId }).then((r) => alive && setPhoneMode(r?.mode ?? 'off'), () => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [accountId]);
   const [language, setLanguage] = useState(() => currentLanguage() || 'en');
   const countries = useCountries();
   const [code, setCode] = useState('');
@@ -59,6 +73,7 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
         phone: form.phone.trim(),
         ...(form.organization.trim() ? { organization: form.organization.trim() } : {}),
         acceptTerms: true,
+        ...(phoneProof ? { phoneProof: phoneProof.proof } : {}),
       });
       /* The language chosen here is this app's language from now on; the person can change it in Settings. */
       if (language !== currentLanguage()) void updatePrefs({ language }).catch(() => undefined);
@@ -103,7 +118,8 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
   const field = 'h-11 rounded-[10px] border border-line bg-surface px-3.5 text-[14px] text-ink outline-none focus:border-primary';
   const phoneOk = form.phone.replace(/[^\d]/g, '').length >= 7;
   const mismatch = form.confirm.length > 0 && form.confirm !== form.password;
-  const ready = form.firstName.trim() && form.lastName.trim() && form.email.includes('@') && phoneOk && form.password.length >= 8 && form.confirm === form.password && form.country.length === 2 && agreed;
+  const phoneDone = phoneMode !== 'required' || !!phoneProof;
+  const ready = phoneDone && form.firstName.trim() && form.lastName.trim() && form.email.includes('@') && phoneOk && form.password.length >= 8 && form.confirm === form.password && form.country.length === 2 && agreed;
 
   if (step === 'code')
     return (
@@ -183,7 +199,83 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
       <label htmlFor="signup-phone" className="text-[13px] font-semibold text-ink">
         Mobile number
       </label>
-      <input id="signup-phone" type="tel" inputMode="tel" autoComplete="tel" required aria-describedby="signup-phone-hint" maxLength={32} value={form.phone} onChange={set('phone')} className={field} />
+      <input
+        id="signup-phone"
+        type="tel"
+        inputMode="tel"
+        autoComplete="tel"
+        required
+        aria-describedby="signup-phone-hint"
+        maxLength={32}
+        value={form.phone}
+        onChange={(e) => {
+          set('phone')(e);
+          /* A different number needs its own code. */
+          setPhoneSent(null);
+          setPhoneProof(null);
+          setPhoneCode('');
+        }}
+        className={field}
+      />
+      {phoneMode !== 'off' ? (
+        phoneProof ? (
+          <p role="status" className="m-0 text-[12.5px] font-semibold text-success">
+            Verified on WhatsApp ✓
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2 rounded-[10px] border border-line p-3">
+            <p className="m-0 text-[12.5px] text-ink-2">
+              {phoneMode === 'required' ? 'Verify this number: we send a 6-digit code to it on WhatsApp.' : 'Optional: verify this number with a 6-digit code on WhatsApp.'}
+            </p>
+            {phoneSent ? (
+              <div className="flex items-center gap-2">
+                <input
+                  aria-label="WhatsApp code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={phoneCode}
+                  onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, ''))}
+                  className={cx(field, 'h-10 w-32 text-center font-mono tracking-[4px]')}
+                />
+                <button
+                  type="button"
+                  disabled={phoneBusy || phoneCode.length < 6}
+                  onClick={() => {
+                    setPhoneBusy(true);
+                    setPhoneError(null);
+                    call('signup:phoneVerify', { accountId, token: phoneSent.token, code: phoneCode })
+                      .then(setPhoneProof, (e) => setPhoneError(errorMessage(e)))
+                      .finally(() => setPhoneBusy(false));
+                  }}
+                  className="h-10 rounded-[10px] bg-primary px-4 text-[13px] font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
+                >
+                  Verify
+                </button>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              disabled={phoneBusy || !phoneOk}
+              onClick={() => {
+                setPhoneBusy(true);
+                setPhoneError(null);
+                call('signup:phoneSend', { accountId, phone: form.phone.trim(), country: form.country.toUpperCase(), ...(phoneSent ? { token: phoneSent.token } : {}) })
+                  .then((r) => setPhoneSent({ token: r.token, phone: r.phone }), (e) => setPhoneError(errorMessage(e)))
+                  .finally(() => setPhoneBusy(false));
+              }}
+              className="self-start text-[12.5px] font-semibold text-primary hover:underline disabled:opacity-60"
+            >
+              {phoneSent ? 'Send another code' : 'Send code on WhatsApp'}
+            </button>
+            {phoneError ? (
+              <p role="alert" className="m-0 text-[12px] text-danger">
+                {phoneError}
+              </p>
+            ) : null}
+          </div>
+        )
+      ) : null}
       <p id="signup-phone-hint" className="m-0 text-[12px] text-ink-3">With the country code if it is not a number in your country, as +94 77 123 4567.</p>
       <label htmlFor="signup-password" className="text-[13px] font-semibold text-ink">
         Password

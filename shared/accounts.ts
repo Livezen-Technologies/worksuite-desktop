@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AccountDeletion, BrowserSignIn, CloudInvitations, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
+import type { AccountDeletion, BrowserSignIn, CloudInvitations, CloudTwoStep, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
 import { IDP_HINTS } from './cloud';
 import type { ConnectRun } from './discovery';
 import type { SetupLinkPayload, TrustedConfig } from './trusted-config';
@@ -205,10 +205,16 @@ export const accountsContract = {
       organization: z.string().trim().max(160).optional(),
       /** The person ticked the Terms of Service and Privacy Policy box. */
       acceptTerms: z.literal(true),
+      /** From signup:phoneVerify, where the server verifies numbers on WhatsApp. */
+      phoneProof: z.string().max(600).optional(),
     }),
     rate: 2,
   },
   'signup:resend': { input: z.strictObject({ accountId }), rate: 1 },
+  /* The phone step, where the server verifies numbers on WhatsApp ('off', 'optional' or 'required'). */
+  'signup:phoneMode': { input: z.strictObject({ accountId }) },
+  'signup:phoneSend': { input: z.strictObject({ accountId, phone: z.string().trim().min(1).max(32), country: z.string().trim().max(2), token: z.string().max(200).optional() }), rate: 1 },
+  'signup:phoneVerify': { input: z.strictObject({ accountId, token: z.string().min(1).max(200), code: z.string().trim().min(4).max(12) }), rate: 3 },
   'signup:verify': { input: z.strictObject({ accountId, code: z.string().trim().max(12) }), rate: 4 },
   'signup:cancel': { input: none },
   /* Forgot password inside the app: a code by email, then the code and a new password. */
@@ -226,8 +232,14 @@ export const accountsContract = {
   'cloud:invitations': { input: none },
   'cloud:acceptInvitation': { input: z.strictObject({ id: z.string().regex(/^\d{1,18}$/).optional(), token: z.string().min(10).max(200).optional() }).refine((v) => !!v.id !== !!v.token, 'id or token'), rate: 2 },
   'cloud:declineInvitation': { input: z.strictObject({ id: z.string().regex(/^\d{1,18}$/) }), rate: 2 },
+  /* A personal account's two-step verification (WorkSuite Cloud's): every change carries the password or a code. */
+  'cloud:twoStep': { input: none },
+  'cloud:twoStepStart': { input: z.strictObject({ password: z.string().max(256).optional(), code: z.string().trim().max(20).optional() }), rate: 2 },
+  'cloud:twoStepConfirm': { input: z.strictObject({ code: z.string().trim().min(6).max(10) }), rate: 3 },
+  'cloud:twoStepRecoveryCodes': { input: z.strictObject({ password: z.string().max(256).optional(), code: z.string().trim().max(20).optional() }), rate: 2 },
+  'cloud:twoStepDisable': { input: z.strictObject({ password: z.string().max(256).optional(), code: z.string().trim().max(20).optional() }), rate: 2 },
   'cloud:requestDeletion': { input: z.strictObject({ confirm: z.string().max(16), password: z.string().max(256) }), sensitive: true, rate: 1 },
-  'cloud:openWeb': { input: z.strictObject({ page: z.enum(['storage', 'upgrade', 'privacy', 'support', 'verify', 'forgot']) }) },
+  'cloud:openWeb': { input: z.strictObject({ page: z.enum(['storage', 'upgrade', 'privacy', 'security', 'support', 'verify', 'forgot']) }) },
 };
 
 export interface AccountsOutputs {
@@ -261,6 +273,9 @@ export interface AccountsOutputs {
   /** The address the code went to, and how long the sign-up stays open (seconds). */
   'signup:start': { email: string; expiresIn: number };
   'signup:resend': { email: string };
+  'signup:phoneMode': { mode: 'off' | 'optional' | 'required' };
+  'signup:phoneSend': { token: string; phone: string; nextResendAt: string | null };
+  'signup:phoneVerify': { phone: string; proof: string };
   'signup:verify': { done: true };
   'signup:cancel': void;
   'recover:send': { sent: true };
@@ -276,6 +291,11 @@ export interface AccountsOutputs {
   'cloud:invitations': CloudInvitations;
   'cloud:acceptInvitation': { id: string; name: string };
   'cloud:declineInvitation': void;
+  'cloud:twoStep': CloudTwoStep;
+  'cloud:twoStepStart': { secret: string; uri: string };
+  'cloud:twoStepConfirm': CloudTwoStep & { recoveryCodes: string[] };
+  'cloud:twoStepRecoveryCodes': CloudTwoStep & { recoveryCodes: string[] };
+  'cloud:twoStepDisable': CloudTwoStep;
   'cloud:requestDeletion': { scheduledFor: string; cancelUrl: string };
   'cloud:openWeb': boolean;
 }

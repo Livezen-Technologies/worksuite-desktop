@@ -1,5 +1,5 @@
 import { DesktopError } from '../../main/errors';
-import { CLOUD_API, type AccountDeletion, type CloudInvitations, type CloudMe, type CloudPlan, type ProvisioningStatus, type StorageUsage } from '@shared/cloud';
+import { CLOUD_API, type AccountDeletion, type CloudInvitations, type CloudTwoStep, type CloudMe, type CloudPlan, type ProvisioningStatus, type StorageUsage } from '@shared/cloud';
 import { errorFromResponse, type HttpClient } from '../http';
 
 /**
@@ -87,6 +87,31 @@ export class CloudApi {
     await this.client().post(`${CLOUD_API.invitations}/${encodeURIComponent(id)}/decline`, {});
   }
 
+  /** Two-step verification of the signed-in person (Cloud's own; every change needs the password or a code). */
+  async twoStep(): Promise<CloudTwoStep> {
+    return twoStepOf(await this.client().get<CloudTwoStep>(CLOUD_API.twoStep));
+  }
+
+  async twoStepStart(proof: { password?: string; code?: string }): Promise<{ secret: string; uri: string }> {
+    const d = await this.client().post<{ secret?: string; uri?: string }>(`${CLOUD_API.twoStep}/start`, proof);
+    if (!d?.uri || !d.secret) throw bad('two-step');
+    return { secret: d.secret, uri: d.uri };
+  }
+
+  async twoStepConfirm(code: string): Promise<CloudTwoStep & { recoveryCodes: string[] }> {
+    const d = await this.client().post<CloudTwoStep & { recoveryCodes?: string[] }>(`${CLOUD_API.twoStep}/confirm`, { code });
+    return { ...twoStepOf(d), recoveryCodes: Array.isArray(d?.recoveryCodes) ? d.recoveryCodes.map(String).slice(0, 20) : [] };
+  }
+
+  async twoStepRecoveryCodes(proof: { password?: string; code?: string }): Promise<CloudTwoStep & { recoveryCodes: string[] }> {
+    const d = await this.client().post<CloudTwoStep & { recoveryCodes?: string[] }>(`${CLOUD_API.twoStep}/recovery-codes`, proof);
+    return { ...twoStepOf(d), recoveryCodes: Array.isArray(d?.recoveryCodes) ? d.recoveryCodes.map(String).slice(0, 20) : [] };
+  }
+
+  async twoStepDisable(proof: { password?: string; code?: string }): Promise<CloudTwoStep> {
+    return twoStepOf(await this.client().post<CloudTwoStep>(`${CLOUD_API.twoStep}/disable`, proof));
+  }
+
   /** The compact JWS for `organizationId` (answered as `application/jose`, or JSON `{entitlements|jws|token}`). */
   async entitlements(organizationId: string): Promise<string> {
     const h = this.client();
@@ -131,4 +156,9 @@ function bad(what: string): DesktopError {
 function provisioning(s: ProvisioningStatus | null): ProvisioningStatus {
   if (!s || typeof s !== 'object' || !['PROVISIONING', 'PROVISIONING_FAILED', 'ACTIVE'].includes(s.state)) throw bad('provisioning status');
   return { state: s.state, step: String(s.step ?? ''), attempts: Number(s.attempts) || 0, retry_at: typeof s.retry_at === 'string' ? s.retry_at : null };
+}
+
+function twoStepOf(d: CloudTwoStep | null | undefined): CloudTwoStep {
+  if (!d || typeof d !== 'object' || typeof d.enabled !== 'boolean') throw bad('two-step');
+  return { enabled: d.enabled, enabledAt: d.enabledAt ? String(d.enabledAt) : null, recoveryCodesLeft: Number(d.recoveryCodesLeft) || 0 };
 }
