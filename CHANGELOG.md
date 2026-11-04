@@ -29,6 +29,10 @@ Receipt printers by model, and a receipt designer with its preview, in the till'
 - **First-run setup asks about appearance and language.** A new step, Appearance and language, sets Light, Dark or
   the system's theme and the app's language as you choose them. The last step lists your apps, and on a personal
   account says your personal workspace is ready.
+- **Join an organization from the app.** My account › Organizations (personal accounts) lists the invitations waiting
+  for your address, with Join and Decline, and the organizations your email's domain may ask to join. A joined
+  organization appears in the workspace switcher; its data stays apart from your personal workspace. Needs a
+  WorkSuite Cloud with `/api/v1/invitations`.
 
 - **Xprinter models, set up for you.** Till settings › Receipt & printing has a Printer model list with 54 Xprinter
   receipt printers — the 80 mm desktop range (XP-80C, XP-Q200H, XP-Q800, XP-N160II, XP-C260H, XP-T80A, …), the

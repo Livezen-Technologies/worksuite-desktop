@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.1 — 2026-11-04
+
+- My account › Organizations: join or decline an organization's invitation from the app (personal accounts)
+
 ## 1.5.0 — 2026-10-28
 
 - Delete this WorkSuite Cloud account from inside the app

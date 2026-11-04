@@ -515,6 +515,21 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
     needBound();
     return api.plans();
   });
+  router.handle('cloud:invitations', () => {
+    needBound();
+    return api.invitations();
+  });
+  router.handle('cloud:acceptInvitation', async (by) => {
+    needBound();
+    const org = await api.acceptInvitation(by.id ? { id: by.id } : { token: by.token! });
+    /* The new organisation shows in the switcher with the next /me. */
+    accountChanged();
+    return org;
+  });
+  router.handle('cloud:declineInvitation', async ({ id }) => {
+    needBound();
+    await api.declineInvitation(id);
+  });
   router.handle('cloud:deletionState', () => {
     needBound();
     return api.deletionState();

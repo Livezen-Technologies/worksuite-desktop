@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AccountDeletion, BrowserSignIn, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
+import type { AccountDeletion, BrowserSignIn, CloudInvitations, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
 import { IDP_HINTS } from './cloud';
 import type { ConnectRun } from './discovery';
 import type { SetupLinkPayload, TrustedConfig } from './trusted-config';
@@ -222,6 +222,10 @@ export const accountsContract = {
   'cloud:plans': { input: none },
   /* Apple's App Review 5.1.1(v): an account made in the app can be deleted from the app. */
   'cloud:deletionState': { input: none },
+  /* Joining an organisation from the app: the invitations waiting for this person, accept, decline. */
+  'cloud:invitations': { input: none },
+  'cloud:acceptInvitation': { input: z.strictObject({ id: z.string().regex(/^\d{1,18}$/).optional(), token: z.string().min(10).max(200).optional() }).refine((v) => !!v.id !== !!v.token, 'id or token'), rate: 2 },
+  'cloud:declineInvitation': { input: z.strictObject({ id: z.string().regex(/^\d{1,18}$/) }), rate: 2 },
   'cloud:requestDeletion': { input: z.strictObject({ confirm: z.string().max(16), password: z.string().max(256) }), sensitive: true, rate: 1 },
   'cloud:openWeb': { input: z.strictObject({ page: z.enum(['storage', 'upgrade', 'privacy', 'support', 'verify', 'forgot']) }) },
 };
@@ -269,6 +273,9 @@ export interface AccountsOutputs {
   'cloud:storage': StorageUsage;
   'cloud:plans': CloudPlan[];
   'cloud:deletionState': AccountDeletion;
+  'cloud:invitations': CloudInvitations;
+  'cloud:acceptInvitation': { id: string; name: string };
+  'cloud:declineInvitation': void;
   'cloud:requestDeletion': { scheduledFor: string; cancelUrl: string };
   'cloud:openWeb': boolean;
 }

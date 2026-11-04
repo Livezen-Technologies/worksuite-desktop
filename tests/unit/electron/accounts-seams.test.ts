@@ -134,7 +134,10 @@ describe('installAccounts', () => {
     const cloudChannels = handle.mock.calls.map(([ch]) => String(ch)).filter((ch) => ch.startsWith('signin:') || ch.startsWith('signup:') || ch.startsWith('recover:') || ch.startsWith('cloud:'));
     /* signup:* and cloud:*Deletion are ENH-AUTH-01 §4-5: creating an account in the app, and deleting it from there. */
     expect(cloudChannels.sort()).toEqual([
+      'cloud:acceptInvitation',
+      'cloud:declineInvitation',
       'cloud:deletionState',
+      'cloud:invitations',
       'cloud:openWeb',
       'cloud:plans',
       'cloud:refresh',

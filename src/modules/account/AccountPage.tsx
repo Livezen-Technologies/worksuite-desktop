@@ -24,6 +24,7 @@ const Security = lazy(() => import('./Security'));
 const Pictures = lazy(() => import('./Pictures'));
 const Access = lazy(() => import('./Access'));
 const Storage = lazy(() => import('./Storage'));
+const Organizations = lazy(() => import('./Organizations'));
 
 const TITLES: Record<Section, string> = {
   profile: 'My profile',
@@ -34,6 +35,7 @@ const TITLES: Record<Section, string> = {
   pictures: 'Profile pictures',
   access: 'My access',
   storage: 'Storage',
+  organizations: 'Organizations',
 };
 
 /** Opens the picture editor on a tab; every screen that shows your picture can ask for it. */
@@ -44,7 +46,7 @@ export default function AccountPage(_props: ModuleProps) {
   const asked = (path[1] ?? query.get('tab') ?? 'profile') as Section;
   // Storage is WorkSuite Cloud's: a Personal account's only.
   const personal = usePersonal();
-  const section: Section = SECTIONS.includes(asked) && (asked !== 'storage' || personal) ? asked : 'profile';
+  const section: Section = SECTIONS.includes(asked) && ((asked !== 'storage' && asked !== 'organizations') || personal) ? asked : 'profile';
   const opened = query.get('edit');
   const [editor, setEditor] = useState<{ tab: EditorTab; style: Partial<AvatarStyle> | null } | null>(opened === 'photo' || opened === 'avatar' ? { tab: opened, style: null } : null);
   useTabTitle(`My account · ${TITLES[section]}`);
@@ -64,6 +66,7 @@ export default function AccountPage(_props: ModuleProps) {
           {section === 'pictures' ? <Pictures onEdit={open} /> : null}
           {section === 'access' ? <Access /> : null}
           {section === 'storage' ? <Storage /> : null}
+          {section === 'organizations' ? <Organizations /> : null}
         </Suspense>
       </main>
       {editor ? <PictureEditor tab={editor.tab} style={editor.style} onTab={(tab) => setEditor({ tab, style: editor.style })} onClose={() => (setEditor(null), opened ? go(`/account/${section}`) : undefined)} /> : null}

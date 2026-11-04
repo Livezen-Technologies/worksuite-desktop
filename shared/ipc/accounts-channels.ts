@@ -42,6 +42,9 @@ export const ACCOUNTS_INVOKE_CHANNELS = [
   'cloud:storage',
   'cloud:plans',
   'cloud:deletionState',
+  'cloud:invitations',
+  'cloud:acceptInvitation',
+  'cloud:declineInvitation',
   'cloud:requestDeletion',
   'cloud:openWeb',
 ] as const;
