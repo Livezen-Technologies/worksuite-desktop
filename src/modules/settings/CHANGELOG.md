@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.45.3 — 2026-11-04
+
+- First-run setup: an Appearance and language step, and your apps on the last step
+
 ## 1.45.2 — 2026-10-27
 
 - Sinhala and Tamil drafts for the shell, Settings, My account and the ten most-used modules (D-G10).
