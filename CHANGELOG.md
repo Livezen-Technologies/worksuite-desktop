@@ -26,6 +26,9 @@ Receipt printers by model, and a receipt designer with its preview, in the till'
   of the account ends, and you sign in again. Other servers still open their page in the browser.
 - **Country and language in the sign-up form.** Country is a list of names instead of a two-letter box, and a
   Language choice (English, Sinhala, Tamil, Arabic, Hindi) becomes the app's language once the account is started.
+- **First-run setup asks about appearance and language.** A new step, Appearance and language, sets Light, Dark or
+  the system's theme and the app's language as you choose them. The last step lists your apps, and on a personal
+  account says your personal workspace is ready.
 
 - **Xprinter models, set up for you.** Till settings › Receipt & printing has a Printer model list with 54 Xprinter
   receipt printers — the 80 mm desktop range (XP-80C, XP-Q200H, XP-Q800, XP-N160II, XP-C260H, XP-T80A, …), the
