@@ -205,10 +205,16 @@ export const accountsContract = {
       organization: z.string().trim().max(160).optional(),
       /** The person ticked the Terms of Service and Privacy Policy box. */
       acceptTerms: z.literal(true),
+      /** From signup:phoneVerify, where the server verifies numbers on WhatsApp. */
+      phoneProof: z.string().max(600).optional(),
     }),
     rate: 2,
   },
   'signup:resend': { input: z.strictObject({ accountId }), rate: 1 },
+  /* The phone step, where the server verifies numbers on WhatsApp ('off', 'optional' or 'required'). */
+  'signup:phoneMode': { input: z.strictObject({ accountId }) },
+  'signup:phoneSend': { input: z.strictObject({ accountId, phone: z.string().trim().min(1).max(32), country: z.string().trim().max(2), token: z.string().max(200).optional() }), rate: 1 },
+  'signup:phoneVerify': { input: z.strictObject({ accountId, token: z.string().min(1).max(200), code: z.string().trim().min(4).max(12) }), rate: 3 },
   'signup:verify': { input: z.strictObject({ accountId, code: z.string().trim().max(12) }), rate: 4 },
   'signup:cancel': { input: none },
   /* Forgot password inside the app: a code by email, then the code and a new password. */
@@ -267,6 +273,9 @@ export interface AccountsOutputs {
   /** The address the code went to, and how long the sign-up stays open (seconds). */
   'signup:start': { email: string; expiresIn: number };
   'signup:resend': { email: string };
+  'signup:phoneMode': { mode: 'off' | 'optional' | 'required' };
+  'signup:phoneSend': { token: string; phone: string; nextResendAt: string | null };
+  'signup:phoneVerify': { phone: string; proof: string };
   'signup:verify': { done: true };
   'signup:cancel': void;
   'recover:send': { sent: true };

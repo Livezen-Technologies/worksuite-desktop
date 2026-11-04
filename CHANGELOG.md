@@ -22,6 +22,9 @@ Two-step verification for personal accounts, inside the app.
   off — without leaving WorkSuite. Each change asks for your password again, or a current code. Passkeys are added in
   the browser (Manage passkeys in the browser), since they belong to WorkSuite Cloud's web address. Needs a WorkSuite
   Cloud with `/api/v1/security/two-step`.
+- **Phone verification on WhatsApp in the sign-up form.** Where WorkSuite Cloud verifies numbers on WhatsApp, the form
+  offers Send code on WhatsApp under Mobile number, then the code and Verify. Where the server requires it, Continue
+  waits until the number is verified; the proof goes with the sign-up. A changed number needs a new code.
 
 ### Changed
 

@@ -13,7 +13,7 @@ import { BrowserSignInFlow, type TakenCallback } from './browser-signin';
 import { CloudApi } from './cloud-api';
 import { EntitlementStore, entitlementKeyring, type EntitlementKeyValue } from './entitlements';
 import { buildAuthorize, exchangeCode, fetchMetadata, isAllowedEndpoint, listenLoopback, OIDC_CALLBACK, OidcTokenEndpoint, randomToken, s256, type LoopbackListener, type OidcMetadata, type PendingAuthorize } from './oidc';
-import { codeRetriable, openFlow, requestResetCode, resendCode, resetWithCode, startSignUp, verifyAndSignIn, type Started } from './in-app-signup';
+import { codeRetriable, openFlow, phoneMode, phoneSend, phoneVerify, requestResetCode, resendCode, resetWithCode, startSignUp, verifyAndSignIn, type Started } from './in-app-signup';
 import { ProvisioningFlow } from './provisioning';
 import { QuotaWatcher } from './quota';
 
@@ -420,7 +420,7 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
   router.handle('signin:copyLink', ({ attemptId }) => flow.copyLink(attemptId));
   router.handle('signin:cancel', ({ attemptId }) => flow.cancel(attemptId));
 
-  router.handle('signup:start', async ({ accountId, firstName, lastName, email, password, country, timezone, phone, organization }) => {
+  router.handle('signup:start', async ({ accountId, firstName, lastName, email, password, country, timezone, phone, organization, phoneProof }) => {
     const rec = deps.account(accountId);
     if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
     const auth = await serverAuth(rec);
@@ -429,7 +429,7 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
     const fetch = deps.fetchFor(rec.id);
     /* The redirect never opens: the code comes back through /signup/verify, not through a browser. */
     const { flow: flowToken, pending: auth2 } = await openFlow(meta, auth.oidc.clientId, OIDC_CALLBACK, email, fetch);
-    const started = await startSignUp(rec.apiOrigin || rec.serverOrigin, flowToken, auth2, { firstName, lastName, email, password, country, timezone, phone, ...(organization ? { organization } : {}), acceptTerms: true, acceptPrivacy: true }, fetch);
+    const started = await startSignUp(rec.apiOrigin || rec.serverOrigin, flowToken, auth2, { firstName, lastName, email, password, country, timezone, phone, ...(organization ? { organization } : {}), ...(phoneProof ? { phoneProof } : {}), acceptTerms: true, acceptPrivacy: true }, fetch);
     signup = { accountId, started, meta, clientId: auth.oidc.clientId };
     return { email: started.email, expiresIn: started.expiresIn };
   });
@@ -462,6 +462,24 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
       deps.onStage?.(accountId, 'signed-out', null);
       throw err;
     }
+  });
+
+  const originOf = (accountId: string) => {
+    const rec = deps.account(accountId);
+    if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
+    return { origin: rec.apiOrigin || rec.serverOrigin, fetch: deps.fetchFor(accountId) };
+  };
+  router.handle('signup:phoneMode', async ({ accountId }) => {
+    const { origin, fetch } = originOf(accountId);
+    return { mode: await phoneMode(origin, fetch) };
+  });
+  router.handle('signup:phoneSend', ({ accountId, phone, country, token }) => {
+    const { origin, fetch } = originOf(accountId);
+    return phoneSend(origin, null, phone, country, token, fetch);
+  });
+  router.handle('signup:phoneVerify', ({ accountId, token, code }) => {
+    const { origin, fetch } = originOf(accountId);
+    return phoneVerify(origin, null, token, code, fetch);
   });
 
   router.handle('signup:cancel', () => {

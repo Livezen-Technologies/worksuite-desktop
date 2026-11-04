@@ -812,6 +812,9 @@ const api = {
   signup: {
     start: call('signup:start'),
     resend: call('signup:resend'),
+    phoneMode: call('signup:phoneMode'),
+    phoneSend: call('signup:phoneSend'),
+    phoneVerify: call('signup:phoneVerify'),
     verify: call('signup:verify'),
     cancel: call('signup:cancel'),
   },
