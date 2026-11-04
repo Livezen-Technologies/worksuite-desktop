@@ -33,6 +33,8 @@ export const ACCOUNTS_INVOKE_CHANNELS = [
   'signup:resend',
   'signup:verify',
   'signup:cancel',
+  'recover:send',
+  'recover:reset',
   'cloud:status',
   'cloud:refresh',
   'cloud:resendVerification',
@@ -40,6 +42,9 @@ export const ACCOUNTS_INVOKE_CHANNELS = [
   'cloud:storage',
   'cloud:plans',
   'cloud:deletionState',
+  'cloud:invitations',
+  'cloud:acceptInvitation',
+  'cloud:declineInvitation',
   'cloud:requestDeletion',
   'cloud:openWeb',
 ] as const;

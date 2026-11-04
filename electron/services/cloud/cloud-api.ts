@@ -1,5 +1,5 @@
 import { DesktopError } from '../../main/errors';
-import { CLOUD_API, type AccountDeletion, type CloudMe, type CloudPlan, type ProvisioningStatus, type StorageUsage } from '@shared/cloud';
+import { CLOUD_API, type AccountDeletion, type CloudInvitations, type CloudMe, type CloudPlan, type ProvisioningStatus, type StorageUsage } from '@shared/cloud';
 import { errorFromResponse, type HttpClient } from '../http';
 
 /**
@@ -61,6 +61,30 @@ export class CloudApi {
     const d = await this.client().post<{ scheduled_for?: string; cancel_url?: string }>(CLOUD_API.accountDeletion, { confirm, password });
     if (!d?.scheduled_for) throw bad('account deletion');
     return { scheduledFor: d.scheduled_for, cancelUrl: String(d.cancel_url ?? '') };
+  }
+
+  /** Invitations to organisations waiting for this person (and organisations they may ask to join). */
+  async invitations(): Promise<CloudInvitations> {
+    const d = await this.client().get<CloudInvitations>(CLOUD_API.invitations);
+    if (!d || typeof d !== 'object' || !Array.isArray(d.invitations)) throw bad('invitations');
+    return {
+      invitations: d.invitations
+        .filter((i) => i && typeof i.id === 'string' && typeof i.organization === 'string')
+        .slice(0, 50)
+        .map((i) => ({ id: i.id, organization: i.organization, role: String(i.role ?? 'MEMBER'), invitedBy: i.invitedBy ? String(i.invitedBy) : null, expiresAt: i.expiresAt ? String(i.expiresAt) : null })),
+      joinable: (Array.isArray(d.joinable) ? d.joinable : []).filter((a) => a && typeof a.id === 'string').slice(0, 50).map((a) => ({ id: a.id, name: String(a.name ?? ''), requested: !!a.requested })),
+    };
+  }
+
+  /** Join the organisation of invitation `id` (from the list) or of an emailed invitation `token`. */
+  async acceptInvitation(by: { id: string } | { token: string }): Promise<{ id: string; name: string }> {
+    const d = await this.client().post<{ organization?: { id?: string; name?: string } }>(CLOUD_API.invitationAccept, by);
+    if (!d?.organization?.id) throw bad('invitation');
+    return { id: String(d.organization.id), name: String(d.organization.name ?? '') };
+  }
+
+  async declineInvitation(id: string): Promise<void> {
+    await this.client().post(`${CLOUD_API.invitations}/${encodeURIComponent(id)}/decline`, {});
   }
 
   /** The compact JWS for `organizationId` (answered as `application/jose`, or JSON `{entitlements|jws|token}`). */

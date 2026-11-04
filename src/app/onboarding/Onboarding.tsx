@@ -328,7 +328,8 @@ function Stopped({ auth }: { auth: AuthState }) {
  * features ship (and the monitoring step only ever appears when a policy is
  * assigned).
  */
-const STEPS = ['Server & sign in', 'Register device', 'Organization', 'Notifications', 'Startup', 'Finish'] as const;
+const STEPS = ['Server & sign in', 'Register device', 'Organization', 'Appearance', 'Notifications', 'Startup', 'Finish'] as const;
+const LAST = STEPS.length - 1;
 
 export function SetupWizard() {
   const b = useStore(app, (s) => s.bootstrap);
@@ -341,6 +342,9 @@ export function SetupWizard() {
   const [startMinimized, setStartMinimized] = useState(prefs?.startMinimized ?? false);
   const [toTray, setToTray] = useState(prefs?.minimizeToTray ?? true);
   const tested = useRef(false);
+  const apps = useStore(app, (s) => s.apps);
+  const lang = useLanguage();
+  const personal = useStore(app, (s) => s.auth?.account?.kind === 'personal');
   const orgs = b?.organizations ?? [];
 
   const finish = async () => {
@@ -381,6 +385,18 @@ export function SetupWizard() {
               </WizardStep>
             ) : null}
             {step === 3 ? (
+              <WizardStep title="Appearance and language" hint="How WorkSuite looks and which language it speaks. Change either later in Settings.">
+                <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-2.5">
+                  {([['system', 'Match the system'], ['light', 'Light'], ['dark', 'Dark']] as const).map(([id, label]) => (
+                    <ChoiceCard key={id} selected={(prefs?.theme ?? 'system') === id} onClick={() => void updatePrefs({ theme: id }).catch(() => undefined)} title={label} />
+                  ))}
+                </div>
+                <div className="mt-4 max-w-[320px]">
+                  <Select label="Language" value={lang} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(v) => void updatePrefs({ language: v }).catch(() => undefined)} />
+                </div>
+              </WizardStep>
+            ) : null}
+            {step === 4 ? (
               <WizardStep title="Notifications" hint="Choose how much a notification shows on your screen. Your organization may require more privacy.">
                 <div className="flex flex-col gap-2">
                   <ChoiceCard selected={privacy === 'FULL'} onClick={() => setPrivacy('FULL')} title="Show full content" hint="Sender and message preview." />
@@ -399,18 +415,18 @@ export function SetupWizard() {
                 </Button>
               </WizardStep>
             ) : null}
-            {step === 4 ? (
+            {step === 5 ? (
               <WizardStep title="Startup" hint="WorkSuite can keep notifications and transfers running in the background.">
                 <Toggle label="Start WorkSuite when I sign in to this computer" checked={startWithOs} onChange={setStartWithOs} />
                 <Toggle label="Start minimized to the tray" checked={startMinimized} onChange={setStartMinimized} />
                 <Toggle label="Closing the window keeps WorkSuite running in the tray" checked={toTray} onChange={setToTray} />
               </WizardStep>
             ) : null}
-            {step === 5 ? (
+            {step === LAST ? (
               <WizardStep title="You're all set" hint="WorkSuite is ready. Your apps are in the sidebar; press the search shortcut to find anything.">
                 <ul className="flex flex-col gap-2 text-[13.5px] text-ink-2">
                   <li className="flex items-center gap-2">
-                    <Icon name="check-circle" size={16} className="text-success" /> This computer is registered with your organization.
+                    <Icon name="check-circle" size={16} className="text-success" /> {personal ? 'Your personal workspace is ready.' : 'This computer is registered with your organization.'}
                   </li>
                   <li className="flex items-center gap-2">
                     <Icon name="check-circle" size={16} className="text-success" /> Your sign-in is kept in the system's secure storage.
@@ -419,6 +435,18 @@ export function SetupWizard() {
                     <Icon name="info" size={16} className="text-primary" /> No activity monitoring policy is assigned to you.
                   </li>
                 </ul>
+                {apps.length ? (
+                  <div className="mt-5">
+                    <div className="mb-2 text-[12px] font-bold tracking-[1px] text-ink-3 uppercase">Your apps</div>
+                    <ul aria-label="Your apps" className="flex flex-wrap gap-2">
+                      {apps.slice(0, 12).map((a) => (
+                        <li key={a.id} className="rounded-full border border-line bg-subtle px-3 py-1 text-[13px] text-ink">
+                          {a.label}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </WizardStep>
             ) : null}
           </div>
@@ -429,7 +457,7 @@ export function SetupWizard() {
               </Button>
             ) : null}
             <div className="flex-1" />
-            {step < 5 ? (
+            {step < LAST ? (
               <Button variant="primary" size="lg" onClick={() => setStep((s) => s + 1)}>
                 Continue
               </Button>

@@ -15,7 +15,7 @@ import { Mark, type PosView, type Till } from './parts';
 import { clockOf, tillPill } from './syncstate';
 
 /**
- * The till bar (64px, navy): which till and register this is, whether WorkSuite answers, the time, the cashier,
+ * The till bar (a light toolbar in the app; 64px navy at full screen): which till and register this is, whether WorkSuite answers, the time, the cashier,
  * Lock, and the till's menu — its screens, the customer display, full screen, changing cashier, the web's screens
  * and forgetting the till (what the side rail used to hold).
  */
@@ -42,7 +42,6 @@ export default function TillBar({ till, view, full, onFull, onSync }: { till: Ti
   const place = [till.company?.name ?? terminal.org_name, terminal.branch_name].filter(Boolean).join(' · ');
   // Online, offline, sending, the catalogue syncing or out of date (worksuite-desktop#296): sales and catalogue both.
   const pill = tillPill(s, till.offline);
-  const online = pill.tone !== 'offline';
   const net = t(pill.key, pill.vars);
   const when = t('pos.bar.title', { sales: clockOf(s.last_sync) ?? t('pos.bar.never'), cat: clockOf(s.catalogue?.fetched_at) ?? t('pos.bar.never') });
 
@@ -88,46 +87,71 @@ export default function TillBar({ till, view, full, onFull, onSync }: { till: Ti
     },
   ];
 
-  const glass = 'flex h-touch w-touch shrink-0 items-center justify-center rounded-[10px] bg-white/[.08] text-white hover:bg-white/[.14]';
+  // Inside the app the bar is a light toolbar under the tabs, like the app's own; full screen (the counter, nothing
+  // else on it) keeps the navy bar.
+  const k = full
+    ? {
+        bar: 'h-16 bg-pos-bar px-5 text-white',
+        sub: 'text-pos-bar-ink',
+        rule: 'bg-white/[.14]',
+        chip: 'bg-pos-bar-chip text-white',
+        reg: 'text-stage-gray-ink',
+        clock: 'text-stage-ink',
+        btn: 'h-touch w-touch rounded-[10px] bg-white/[.08] text-white hover:bg-white/[.14]',
+      }
+    : {
+        bar: 'h-14 border-b border-line bg-surface px-4 text-ink',
+        sub: 'text-ink-3',
+        rule: 'bg-line',
+        chip: 'border border-line bg-subtle text-ink',
+        reg: 'text-ink-2',
+        clock: 'text-ink-2',
+        btn: 'h-9 w-9 rounded-[8px] border border-line bg-surface text-ink-2 hover:bg-subtle hover:text-ink',
+      };
+  const tone =
+    pill.tone === 'online'
+      ? { pill: full ? 'bg-pos-online text-pos-online-ink' : 'border border-success/25 bg-success/10 text-success', dot: 'bg-green-bright' }
+      : pill.tone === 'busy'
+        ? { pill: full ? 'bg-pos-online text-pos-online-ink' : 'border border-primary/20 bg-selection text-primary', dot: 'bg-indigo-bright animate-pulse' }
+        : { pill: full ? 'bg-pos-offline text-pos-offline-ink' : 'border border-warning/30 bg-warning-bg text-warning', dot: 'bg-amber' };
+  const btn = `flex shrink-0 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${k.btn}`;
   return (
-    <header ref={bar} aria-label={t('pos.bar.label')} className="flex h-16 shrink-0 items-center gap-4 bg-pos-bar px-5 text-white">
+    <header ref={bar} aria-label={t('pos.bar.label')} className={`flex shrink-0 items-center gap-3 ${k.bar}`}>
       <div className="flex min-w-0 items-center gap-2.5">
-        <Mark />
-        <div className="min-w-0">
-          <div className="text-[15px] font-bold tracking-[-.01em]">{t('pos.bar.brand')}</div>
-          <div className="truncate text-[11px] text-pos-bar-ink">{place}</div>
+        <Mark size={full ? 28 : 24} />
+        <div className="min-w-0 leading-tight">
+          <div className="text-[14px] font-bold tracking-[-.01em]">{t('pos.bar.brand')}</div>
+          <div className={`truncate text-[11.5px] ${k.sub}`}>{place}</div>
         </div>
       </div>
-      <span className="h-8 w-px shrink-0 bg-white/[.14]" />
+      <span className={`h-7 w-px shrink-0 ${k.rule}`} />
       <div className="flex min-w-0 items-center gap-2 text-[13px]">
-        <span className="rounded-[6px] bg-pos-bar-chip px-2 py-[3px] font-mono font-bold">{terminal.code}</span>
-        <span className="truncate text-stage-gray-ink">{till.session?.register ?? t('pos.bar.noRegister')}</span>
+        <span className={`rounded-[6px] px-2 py-[2px] font-mono text-[12px] font-bold ${k.chip}`}>{terminal.code}</span>
+        <span className={`flex min-w-0 items-center gap-1.5 ${k.reg}`}>
+          <Icon name={till.session ? 'banknote' : 'lock'} size={14} />
+          <span className="truncate">{till.session?.register ?? t('pos.bar.noRegister')}</span>
+        </span>
       </div>
       <div className="flex-1" />
-      <button
-        type="button"
-        onClick={onSync}
-        title={when}
-        className={`flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-semibold ${online ? 'bg-pos-online text-pos-online-ink' : 'bg-pos-offline text-pos-offline-ink'}`}
-      >
-        <span className={`h-2 w-2 rounded-full ${pill.tone === 'online' ? 'bg-green-bright' : pill.tone === 'busy' ? 'bg-indigo-bright' : 'bg-amber'}`} />
+      <button type="button" onClick={onSync} title={when} className={`flex shrink-0 items-center gap-2 rounded-full px-3 py-1 text-[12px] font-semibold transition-opacity hover:opacity-90 ${tone.pill}`}>
+        <span className={`h-2 w-2 rounded-full ${tone.dot}`} />
         {net}
         {s.refused ? <span className="rounded-full bg-danger px-1.5 text-[11px] text-white">{s.refused}</span> : null}
       </button>
-      <span className="shrink-0 font-mono text-[14px] text-stage-ink tabular-nums">{now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
-      <span className="h-8 w-px shrink-0 bg-white/[.14]" />
-      <div className="flex min-w-0 items-center gap-2.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-[13px] font-bold text-white">{initials(cashier)}</span>
-        <div className="min-w-0 max-sm:hidden">
+      <span className={`shrink-0 font-mono text-[13px] tabular-nums ${k.clock}`}>{now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+      <span className={`h-7 w-px shrink-0 ${k.rule}`} />
+      <div className="flex min-w-0 items-center gap-2" title={t('pos.bar.cashier')}>
+        <span className={`flex shrink-0 items-center justify-center rounded-full bg-primary font-bold text-white ${full ? 'h-9 w-9 text-[13px]' : 'h-8 w-8 text-[12px]'}`}>{initials(cashier)}</span>
+        <div className="min-w-0 leading-tight max-md:hidden">
           <div className="truncate text-[13px] font-semibold">{cashier ?? '—'}</div>
-          <div className="text-[11px] text-pos-bar-ink">{t('pos.bar.cashier')}</div>
+          <div className={`text-[11px] ${k.sub}`}>{t('pos.bar.cashier')}</div>
         </div>
       </div>
-      <button type="button" aria-label={t('pos.lock')} title={t('pos.lock')} onClick={() => void call('security:lock')} className={glass}>
-        <Icon name="lock" size={20} />
+      <button type="button" aria-label={t('pos.lock')} title={t('pos.lock')} onClick={() => void call('security:lock')} className={btn}>
+        <Icon name="lock" size={full ? 20 : 17} />
       </button>
-      <button ref={menuBtn} type="button" aria-label={t('pos.bar.menu')} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)} className={glass}>
-        <Icon name="list" size={20} />
+      <button ref={menuBtn} type="button" aria-label={t('pos.bar.menu')} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)} className={btn}>
+        <Icon name="list" size={full ? 20 : 17} />
       </button>
       {menu ? <Menu sections={sections} label={t('pos.bar.menu')} anchor={menuBtn} avoid={bar} prefer="bottom" align="end" width={300} onClose={() => setMenu(false)} /> : null}
       {confirming ? (

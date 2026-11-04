@@ -931,8 +931,8 @@ export function useWebsiteConversation(id: string, { review = false }: { review?
   return useQuery({
     queryKey: key,
     queryFn: ({ signal }) => timed('conversation', () => apiGet<WebsiteConversation>(`${WEBSITE}/conversations/${id}`, review ? { review: '1' } : undefined, signal), (d) => d?.messages?.length ?? null),
-    // No realtime event for replies or visitor typing: poll, slower in the background.
-    refetchInterval: () => (document.visibilityState === 'visible' ? 5_000 : 30_000),
+    // No realtime event for replies or visitor typing: poll every 2 s (5 s felt slow, #454), slower in the background.
+    refetchInterval: () => (document.visibilityState === 'visible' ? 2_000 : 30_000),
   });
 }
 
@@ -973,8 +973,8 @@ export function useOpenConversation(id: string) {
   return useLocalFirstQuery<WebsiteConversation>({
     queryKey: ['website', 'conversation', id],
     path: `${WEBSITE}/conversations/${id}`,
-    // No realtime event for replies or visitor typing: poll, slower in the background.
-    interval: 5_000,
+    // No realtime event for replies or visitor typing: poll every 2 s (5 s felt slow, #454), slower in the background.
+    interval: 2_000,
     gcTime: Infinity,
     accept: isConversation,
     // Timed for Help › Diagnostics (#252).

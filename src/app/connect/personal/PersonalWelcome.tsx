@@ -9,6 +9,7 @@ import { useStore } from '../../../core/store';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
 import { ConnectFrame } from '../ConnectFrame';
+import { ForgotPassword } from './ForgotPassword';
 import { InAppSignUp } from './InAppSignUp';
 
 export interface PersonalWelcomeProps {
@@ -84,6 +85,9 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
   const [error, setError] = useState<string | null>(null);
   /* The account row the in-app sign-up belongs to; set when `Create Free Account` opens it. */
   const [creating, setCreating] = useState<string | null>(null);
+  /* Forgot password inside the app (the server's in-app mode), on this Personal account row. */
+  const [resetting, setResetting] = useState<string | null>(null);
+  const [resetDone, setResetDone] = useState(false);
 
   const startup: StartupConfig = run?.server?.startup ?? DEFAULT_STARTUP;
   const credentials = visibleCredentials(startup);
@@ -132,6 +136,17 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
     }
   };
 
+  /** Forgot password: in the app where the server creates accounts in the app, else its page in the browser. */
+  const forgot = async () => {
+    if (signup !== 'in_app') return void call('cloud:openWeb', { page: 'forgot' }).catch(() => undefined);
+    setError(null);
+    try {
+      setResetting(await personalAccount(account));
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
   const onEmail = (e: FormEvent) => {
     e.preventDefault();
     void start('email', 'sign-in', 'email');
@@ -168,6 +183,12 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
   );
 
   const idle = busy === null;
+  if (resetting)
+    return (
+      <ConnectFrame title={TITLE} aside={hero}>
+        <ForgotPassword accountId={resetting} prefill={email.trim() || undefined} onBack={(done) => { setResetting(null); setResetDone(!!done); }} />
+      </ConnectFrame>
+    );
   if (creating)
     return (
       <ConnectFrame title={TITLE} aside={hero}>
@@ -234,7 +255,12 @@ export function PersonalWelcome({ prefill, account }: PersonalWelcomeProps) {
           </button>
         </div>
         )}
-        <button type="button" onClick={() => void call('cloud:openWeb', { page: 'forgot' }).catch(() => undefined)} className="self-start text-[13px] text-primary hover:underline">
+        {resetDone ? (
+          <div role="status" className="rounded-[10px] bg-success-bg px-3 py-2.5 text-[13px] text-success">
+            Your password was changed. Sign in with the new one.
+          </div>
+        ) : null}
+        <button type="button" disabled={!idle} onClick={() => void forgot()} className="self-start text-[13px] text-primary hover:underline disabled:opacity-60">
           Forgot password?
         </button>
       </form>

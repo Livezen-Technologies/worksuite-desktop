@@ -12,8 +12,8 @@ import type { AvatarStyle } from './avatarArt';
  */
 
 /** `storage`: WorkSuite Cloud's storage (Connection & Startup screen 12), for a Personal account only. */
-export type Section = 'profile' | 'general' | 'preferences' | 'notifications' | 'security' | 'pictures' | 'access' | 'storage';
-export const SECTIONS: readonly Section[] = ['profile', 'general', 'preferences', 'notifications', 'security', 'pictures', 'access', 'storage'];
+export type Section = 'profile' | 'general' | 'preferences' | 'notifications' | 'security' | 'pictures' | 'access' | 'storage' | 'organizations';
+export const SECTIONS: readonly Section[] = ['profile', 'general', 'preferences', 'notifications', 'security', 'pictures', 'access', 'storage', 'organizations'];
 
 export interface MyProfile {
   id: number;

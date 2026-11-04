@@ -41,12 +41,15 @@ export function useDraft<T>(module: string, context: string, initial: T): {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(value);
+  /* Typed into since this editor opened: a saved copy that answers late must not replace it (worksuite-desktop#454). */
+  const touched = useRef(false);
 
   useEffect(() => {
     let alive = true;
+    touched.current = false;
     call('offline:getDraft', { module, context })
       .then((d) => {
-        if (alive && d && d.content !== null && d.content !== undefined) {
+        if (alive && !touched.current && d && d.content !== null && d.content !== undefined) {
           setValueState(d.content as T);
           latest.current = d.content as T;
           setRestored(true);
@@ -63,6 +66,7 @@ export function useDraft<T>(module: string, context: string, initial: T): {
 
   const setValue = useCallback(
     (v: T) => {
+      touched.current = true;
       latest.current = v;
       setValueState(v);
       if (timer.current) clearTimeout(timer.current);

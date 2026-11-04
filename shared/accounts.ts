@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AccountDeletion, BrowserSignIn, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
+import type { AccountDeletion, BrowserSignIn, CloudInvitations, CloudPlan, CloudStatus, IdpHint, ProvisioningStatus, StorageUsage } from './cloud';
 import { IDP_HINTS } from './cloud';
 import type { ConnectRun } from './discovery';
 import type { SetupLinkPayload, TrustedConfig } from './trusted-config';
@@ -199,12 +199,21 @@ export const accountsContract = {
       password: z.string().max(256),
       country: z.string().trim().length(2),
       timezone: z.string().max(64).optional(),
+      /** Required by the server: the mobile number, national (read with `country`) or +international. */
+      phone: z.string().trim().min(1).max(32),
+      /** Optional: the organization the person works for. */
+      organization: z.string().trim().max(160).optional(),
+      /** The person ticked the Terms of Service and Privacy Policy box. */
+      acceptTerms: z.literal(true),
     }),
     rate: 2,
   },
   'signup:resend': { input: z.strictObject({ accountId }), rate: 1 },
   'signup:verify': { input: z.strictObject({ accountId, code: z.string().trim().max(12) }), rate: 4 },
   'signup:cancel': { input: none },
+  /* Forgot password inside the app: a code by email, then the code and a new password. */
+  'recover:send': { input: z.strictObject({ accountId, email: z.string().trim().max(320) }), rate: 1 },
+  'recover:reset': { input: z.strictObject({ accountId, email: z.string().trim().max(320), code: z.string().trim().max(12), password: z.string().max(256) }), rate: 2 },
   'cloud:status': { input: none },
   'cloud:refresh': { input: none, rate: 2 },
   'cloud:resendVerification': { input: none, rate: 1 },
@@ -213,6 +222,10 @@ export const accountsContract = {
   'cloud:plans': { input: none },
   /* Apple's App Review 5.1.1(v): an account made in the app can be deleted from the app. */
   'cloud:deletionState': { input: none },
+  /* Joining an organisation from the app: the invitations waiting for this person, accept, decline. */
+  'cloud:invitations': { input: none },
+  'cloud:acceptInvitation': { input: z.strictObject({ id: z.string().regex(/^\d{1,18}$/).optional(), token: z.string().min(10).max(200).optional() }).refine((v) => !!v.id !== !!v.token, 'id or token'), rate: 2 },
+  'cloud:declineInvitation': { input: z.strictObject({ id: z.string().regex(/^\d{1,18}$/) }), rate: 2 },
   'cloud:requestDeletion': { input: z.strictObject({ confirm: z.string().max(16), password: z.string().max(256) }), sensitive: true, rate: 1 },
   'cloud:openWeb': { input: z.strictObject({ page: z.enum(['storage', 'upgrade', 'privacy', 'support', 'verify', 'forgot']) }) },
 };
@@ -250,6 +263,8 @@ export interface AccountsOutputs {
   'signup:resend': { email: string };
   'signup:verify': { done: true };
   'signup:cancel': void;
+  'recover:send': { sent: true };
+  'recover:reset': { reset: true };
   'cloud:status': CloudStatus;
   'cloud:refresh': CloudStatus;
   /** When Resend may be pressed again (epoch ms). */
@@ -258,6 +273,9 @@ export interface AccountsOutputs {
   'cloud:storage': StorageUsage;
   'cloud:plans': CloudPlan[];
   'cloud:deletionState': AccountDeletion;
+  'cloud:invitations': CloudInvitations;
+  'cloud:acceptInvitation': { id: string; name: string };
+  'cloud:declineInvitation': void;
   'cloud:requestDeletion': { scheduledFor: string; cancelUrl: string };
   'cloud:openWeb': boolean;
 }

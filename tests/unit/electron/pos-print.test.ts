@@ -91,7 +91,7 @@ describe('ESC/POS', () => {
 describe('the receipt', () => {
   it('lays out the sale from the till’s record', () => {
     const text = receiptRows(sale, { header: 'Acme Stores\nColombo 03', footer: 'No returns after 14 days' }, { till: 'Front till' })
-      .map((r) => (r.kind === 'rule' ? '---' : r.kind === 'pair' ? `${r.left}|${r.right}` : r.text))
+      .map((r) => (r.kind === 'rule' ? '---' : r.kind === 'pair' ? `${r.left}|${r.right}` : r.kind === 'image' ? '[logo]' : r.text))
       .join('\n');
     expect(text).toContain('Acme Stores\nColombo 03\n---\nReceipt|T1-AAAAAA-000042\nOrder|SO-2026-0100');
     expect(text).toContain('Ceylon tea — 100g\n  2 x 450.00|900.00');
@@ -128,7 +128,7 @@ describe('the receipt', () => {
       footer: 'Thank you',
     };
     const text = serverReceiptRows(r, { header: '', footer: '' }, { till: 'Front till', reprint: true })
-      .map((x) => (x.kind === 'rule' ? '---' : x.kind === 'pair' ? `${x.left}|${x.right}` : x.text))
+      .map((x) => (x.kind === 'rule' ? '---' : x.kind === 'pair' ? `${x.left}|${x.right}` : x.kind === 'image' ? '[logo]' : x.text))
       .join('\n');
     expect(text).toContain('Acme Stores\nColombo 03\nTax no. VAT-1\n*** COPY ***\n*** PART REFUNDED ***');
     expect(text).toContain('Receipt|T1-AAAAAA-000042\nInvoice|INV-77');
@@ -163,7 +163,7 @@ describe('the receipt', () => {
       footer: '',
     };
     const text = serverReceiptRows(r, { header: '', footer: '' }, { till: null })
-      .map((x) => (x.kind === 'rule' ? '---' : x.kind === 'pair' ? `${x.left}|${x.right}` : x.text))
+      .map((x) => (x.kind === 'rule' ? '---' : x.kind === 'pair' ? `${x.left}|${x.right}` : x.kind === 'image' ? '[logo]' : x.text))
       .join('\n');
     expect(text).toContain('*** PAYMENT MISSING ***');
     expect(text).toContain('TOTAL|LKR 450.00\n---\nPayment missing|450.00');
@@ -271,5 +271,68 @@ describe('the till’s printer', () => {
     p.forgetAll();
     expect(cfg.m.size).toBe(0);
     expect(p.settings().copies).toBe(1);
+  });
+});
+
+describe('receipt printers and the receipt design', () => {
+  it('knows Xprinter models and sets each up with its roll, cutter and drawer port', async () => {
+    const { RECEIPT_PRINTER_MODELS, printerModel, presetFor, modelOfPrinterName } = await import('@shared/receipt-printers');
+    expect(RECEIPT_PRINTER_MODELS.length).toBeGreaterThan(40);
+    expect(new Set(RECEIPT_PRINTER_MODELS.map((m) => m.id)).size).toBe(RECEIPT_PRINTER_MODELS.length);
+    const q = printerModel('xp-q200h')!;
+    expect(presetFor(q, { drawer: 'printer' })).toEqual({ printer_model: 'xp-q200h', paper: '80mm', mode: 'escpos', cut: 'partial', feed: 4, drawer: 'printer', drawer_pin: 2 });
+    expect(presetFor(printerModel('xp-58iih')!, { drawer: 'printer' })).toMatchObject({ paper: '58mm', cut: 'none', feed: 3, drawer: 'printer' });
+    expect(presetFor(printerModel('xp-p323b')!, { drawer: 'printer' })).toMatchObject({ cut: 'none', drawer: 'off' });
+    expect(modelOfPrinterName('XP-80C')?.name).toBe('XP-80C');
+    expect(modelOfPrinterName('Xprinter XP-58IIH (copy 1)')?.name).toBe('XP-58IIH');
+    expect(modelOfPrinterName('XP 58IIIL')?.name).toBe('XP-58IIIL');
+    expect(modelOfPrinterName('EPSON L3160 Series')).toBeNull();
+  });
+
+  it('cuts as asked, feeds as asked, and prints a logo as a raster image', async () => {
+    const { rasterBytes } = await import('../../../electron/services/pos-print');
+    const rows: ReceiptRow[] = [{ kind: 'text', text: 'x' }];
+    expect([...escpos(rows, 48, { cut: 'full', feed: 6 }).subarray(-7)]).toEqual([0x1b, 0x64, 6, 0x1d, 0x56, 0x41, 0x00]);
+    const none = escpos(rows, 48, { cut: 'none', feed: 3 });
+    expect([...none.subarray(-3)]).toEqual([0x1b, 0x64, 3]);
+    expect(has(none, [0x1d, 0x56])).toBe(false);
+    // 16 dots across, 2 down: GS v 0 0, 2 bytes wide, 2 rows, then the dots
+    const logo = { width: 16, height: 2, raster: Buffer.from([0xff, 0x00, 0x0f, 0xf0]).toString('base64') };
+    expect(rasterBytes(logo)).toEqual([0x1b, 0x61, 1, 0x1d, 0x76, 0x30, 0, 2, 0, 2, 0, 0xff, 0x00, 0x0f, 0xf0, 0x0a, 0x1b, 0x61, 0]);
+    expect(rasterBytes({ ...logo, height: 3 })).toEqual([]);
+    const b = escpos([{ kind: 'image', png: 'data:image/png;base64,AA==', ...logo }], 48);
+    expect(has(b, [0x1d, 0x76, 0x30, 0, 2, 0, 2, 0])).toBe(true);
+  });
+
+  it('lays the receipt out by the design', async () => {
+    const { DEFAULT_RECEIPT_DESIGN } = await import('@shared/pos');
+    const flat = (rows: ReceiptRow[]) => rows.map((x) => (x.kind === 'rule' ? '---' : x.kind === 'pair' ? `${x.left}|${x.right}` : x.kind === 'image' ? '[logo]' : `${x.kind}:${x.text}`));
+    const plainDesign = receiptRows(sale, { header: 'Ceylon Fresh\nKandy', footer: 'Thank you' }, { till: 'Till 1' });
+    expect(flat(plainDesign)).toContain('Cashier|Kasun');
+    expect(plainDesign.find((r) => r.kind === 'text')).toMatchObject({ text: 'Ceylon Fresh', bold: true, big: false, align: 'center' });
+    const design = { ...DEFAULT_RECEIPT_DESIGN, title_size: 'large' as const, align: 'left' as const, show_cashier: false, show_customer: false, show_order: false, show_barcode: false, qr: 'https://shop.example/review', logo: { png: 'data:image/png;base64,AA==', width: 8, height: 1, raster: 'gA==' } };
+    const rows = receiptRows(sale, { header: 'Ceylon Fresh\nKandy', footer: 'Thank you', design }, { till: 'Till 1' });
+    const f = flat(rows);
+    expect(f[0]).toBe('[logo]');
+    expect(rows[1]).toMatchObject({ text: 'Ceylon Fresh', big: true, align: 'left' });
+    expect(f.some((x) => x.startsWith('Cashier'))).toBe(false);
+    expect(f.some((x) => x.startsWith('Customer'))).toBe(false);
+    expect(f.some((x) => x.startsWith('Order'))).toBe(false);
+    expect(f).toContain('qr:https://shop.example/review');
+    expect(rows.some((r) => r.kind === 'barcode')).toBe(false);
+    expect(receiptHtml(rows, '80mm')).toContain('<img src="data:image/png;base64,AA=="');
+  });
+
+  it('previews a sample receipt with the saved settings, and keeps saved settings without a design whole', () => {
+    const { p, cfg } = service();
+    p.update({ header: 'Ceylon Fresh', design: { title_size: 'large', align: 'center', show_order: true, show_till: true, show_cashier: true, show_customer: true, show_tax: true, show_barcode: true, qr: '', logo: null } }, []);
+    const v = p.preview({ till: 'Till 1' });
+    expect(v).toMatchObject({ paper: '80mm', template: false });
+    expect(v.html).toContain('Ceylon Fresh');
+    expect(v.html).toContain('Ceylon tea 100g');
+    expect(v.html).toContain('<svg');
+    // settings saved by an older version: no design, no cut, no feed
+    cfg.m.set('pos-print', { 'https://ws.example': { receipt_printer: null, paper: '58mm', mode: 'escpos', copies: 1, auto_print: true, drawer: 'off', drawer_pin: 2, header: '', footer: '' } });
+    expect(p.settings()).toMatchObject({ paper: '58mm', cut: 'partial', feed: 4, design: { title_size: 'normal', show_barcode: true, logo: null } });
   });
 });

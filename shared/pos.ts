@@ -580,6 +580,65 @@ export interface PosPrintSettings {
    * it is on; `yes`/`no` say so where the system cannot tell. Without touch the display offers no phone entry.
    */
   display_touch?: 'auto' | 'yes' | 'no';
+  /** The printer's model from the catalogue (shared/receipt-printers.ts), or null: one set up by hand. */
+  printer_model?: string | null;
+  /** How the paper is cut at the end: a partial or full cut by the auto-cutter, or none (torn off by hand). */
+  cut?: 'partial' | 'full' | 'none';
+  /** Lines fed before the cut, so the last line clears the cutter or the tear bar. */
+  feed?: number;
+  /** How the till's own receipt looks (a company's published template, when there is one, takes its place). */
+  design?: PosReceiptDesign;
+}
+
+/** Till settings › Receipt & printing › Receipt design. */
+export interface PosReceiptDesign {
+  /** The first line at the top (the shop's name) printed double size. */
+  title_size: 'normal' | 'large';
+  /** Where the lines at the top and the bottom sit. */
+  align: 'center' | 'left';
+  show_order: boolean;
+  show_till: boolean;
+  show_cashier: boolean;
+  show_customer: boolean;
+  /** The tax by rate under the subtotal. */
+  show_tax: boolean;
+  /** The receipt number as a barcode, to scan back for a return. */
+  show_barcode: boolean;
+  /** A QR code at the bottom: a web address, a review link, a payment code; empty for none. */
+  qr: string;
+  /** A black-and-white logo at the top: the picture for the screen and the page, and the same dots for ESC/POS. */
+  logo: PosReceiptLogo | null;
+}
+
+export interface PosReceiptLogo {
+  /** data:image/png;base64,… */
+  png: string;
+  /** Dots across (a multiple of 8) and down. */
+  width: number;
+  height: number;
+  /** The dots, a row at a time, 1 = black, as base64: what `GS v 0` prints. */
+  raster: string;
+}
+
+export const DEFAULT_RECEIPT_DESIGN: PosReceiptDesign = {
+  title_size: 'normal',
+  align: 'center',
+  show_order: true,
+  show_till: true,
+  show_cashier: true,
+  show_customer: true,
+  show_tax: true,
+  show_barcode: true,
+  qr: '',
+  logo: null,
+};
+
+/** The page `pos:receiptPreview` answers: the receipt as the driver prints it, from a sample sale and these settings. */
+export interface PosReceiptPreview {
+  html: string;
+  paper: PosPrintSettings['paper'];
+  /** A company template published for this till decides the receipt's look, not the design here. */
+  template: boolean;
 }
 
 export interface PosPrintOutcome {
@@ -602,6 +661,28 @@ export const posPrintPatchSchema = z
     header: text(400),
     footer: text(400),
     display_touch: z.enum(['auto', 'yes', 'no']),
+    printer_model: z.string().trim().min(1).max(40).nullable(),
+    cut: z.enum(['partial', 'full', 'none']),
+    feed: z.number().int().min(0).max(8),
+    design: z.strictObject({
+      title_size: z.enum(['normal', 'large']),
+      align: z.enum(['center', 'left']),
+      show_order: z.boolean(),
+      show_till: z.boolean(),
+      show_cashier: z.boolean(),
+      show_customer: z.boolean(),
+      show_tax: z.boolean(),
+      show_barcode: z.boolean(),
+      qr: text(300),
+      logo: z
+        .strictObject({
+          png: z.string().max(200_000).regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/),
+          width: z.number().int().min(8).max(576).refine((w) => w % 8 === 0, 'a multiple of 8'),
+          height: z.number().int().min(1).max(400),
+          raster: z.string().max(40_000).regex(/^[A-Za-z0-9+/=]*$/),
+        })
+        .nullable(),
+    }),
   })
   .partial();
 export type PosPrintPatch = z.infer<typeof posPrintPatchSchema>;
@@ -778,6 +859,7 @@ export const posContract = {
   'pos:email': { input: z.strictObject({ ref, email: z.string().trim().email().max(150).optional() }), session: true, rate: 3 },
   'pos:printReport': { input: posReportSchema, session: true, rate: 2 },
   'pos:printTest': { input: none, session: true, rate: 2 },
+  'pos:receiptPreview': { input: none, session: true, rate: 10 },
   'pos:openDrawer': { input: none, session: true, rate: 1, sensitive: true },
   'pos:displayOpen': { input: none, session: true, rate: 2 },
   'pos:displayClose': { input: none, session: true, rate: 2 },
@@ -834,6 +916,7 @@ export interface PosOutputs {
   'pos:email': { message: string };
   'pos:printReport': PosPrintOutcome;
   'pos:printTest': PosPrintOutcome;
+  'pos:receiptPreview': PosReceiptPreview;
   'pos:openDrawer': PosPrintOutcome;
   'pos:displayOpen': { opened: boolean; secondary: boolean };
   'pos:displayClose': boolean;

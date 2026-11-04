@@ -13,7 +13,7 @@ import { BrowserSignInFlow, type TakenCallback } from './browser-signin';
 import { CloudApi } from './cloud-api';
 import { EntitlementStore, entitlementKeyring, type EntitlementKeyValue } from './entitlements';
 import { buildAuthorize, exchangeCode, fetchMetadata, isAllowedEndpoint, listenLoopback, OIDC_CALLBACK, OidcTokenEndpoint, randomToken, s256, type LoopbackListener, type OidcMetadata, type PendingAuthorize } from './oidc';
-import { codeRetriable, openFlow, resendCode, startSignUp, verifyAndSignIn, type Started } from './in-app-signup';
+import { codeRetriable, openFlow, requestResetCode, resendCode, resetWithCode, startSignUp, verifyAndSignIn, type Started } from './in-app-signup';
 import { ProvisioningFlow } from './provisioning';
 import { QuotaWatcher } from './quota';
 
@@ -420,7 +420,7 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
   router.handle('signin:copyLink', ({ attemptId }) => flow.copyLink(attemptId));
   router.handle('signin:cancel', ({ attemptId }) => flow.cancel(attemptId));
 
-  router.handle('signup:start', async ({ accountId, firstName, lastName, email, password, country, timezone }) => {
+  router.handle('signup:start', async ({ accountId, firstName, lastName, email, password, country, timezone, phone, organization }) => {
     const rec = deps.account(accountId);
     if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
     const auth = await serverAuth(rec);
@@ -429,7 +429,7 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
     const fetch = deps.fetchFor(rec.id);
     /* The redirect never opens: the code comes back through /signup/verify, not through a browser. */
     const { flow: flowToken, pending: auth2 } = await openFlow(meta, auth.oidc.clientId, OIDC_CALLBACK, email, fetch);
-    const started = await startSignUp(rec.apiOrigin || rec.serverOrigin, flowToken, auth2, { firstName, lastName, email, password, country, timezone, acceptTerms: true, acceptPrivacy: true }, fetch);
+    const started = await startSignUp(rec.apiOrigin || rec.serverOrigin, flowToken, auth2, { firstName, lastName, email, password, country, timezone, phone, ...(organization ? { organization } : {}), acceptTerms: true, acceptPrivacy: true }, fetch);
     signup = { accountId, started, meta, clientId: auth.oidc.clientId };
     return { email: started.email, expiresIn: started.expiresIn };
   });
@@ -468,6 +468,20 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
     signup = null;
   });
 
+  router.handle('recover:send', async ({ accountId, email }) => {
+    const rec = deps.account(accountId);
+    if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
+    await requestResetCode(rec.apiOrigin || rec.serverOrigin, email, deps.fetchFor(accountId));
+    return { sent: true as const };
+  });
+
+  router.handle('recover:reset', async ({ accountId, email, code, password }) => {
+    const rec = deps.account(accountId);
+    if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
+    await resetWithCode(rec.apiOrigin || rec.serverOrigin, email, code, password, deps.fetchFor(accountId));
+    return { reset: true as const };
+  });
+
   router.handle('cloud:status', () => {
     ensureBound();
     return status() ?? { ...EMPTY_CLOUD_STATUS };
@@ -500,6 +514,21 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
   router.handle('cloud:plans', () => {
     needBound();
     return api.plans();
+  });
+  router.handle('cloud:invitations', () => {
+    needBound();
+    return api.invitations();
+  });
+  router.handle('cloud:acceptInvitation', async (by) => {
+    needBound();
+    const org = await api.acceptInvitation(by.id ? { id: by.id } : { token: by.token! });
+    /* The new organisation shows in the switcher with the next /me. */
+    accountChanged();
+    return org;
+  });
+  router.handle('cloud:declineInvitation', async ({ id }) => {
+    needBound();
+    await api.declineInvitation(id);
   });
   router.handle('cloud:deletionState', () => {
     needBound();

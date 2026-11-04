@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGetMeta: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn() }));
@@ -255,6 +255,10 @@ describe('New project (W03)', () => {
   });
 
   it('has the budget amount beside the currency, and the app’s date picker in the local format', async () => {
+    /* The calendar opens on today's month: pin today in October 2026, which the dates below are in. */
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-15T09:00:00'));
+    onTestFinished(() => void vi.useRealTimers());
     at('/projects/all', 'new=blank');
     vi.mocked(apiPost).mockResolvedValue({ id: 77, code: 'PRJ-0028' });
     show();

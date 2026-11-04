@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { call, errorMessage } from '../../../core/bridge';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
+import { Checkbox } from '../../../components/Checkbox';
+import { updatePrefs } from '../../../core/app-state';
+import { currentLanguage, LANGUAGES } from '../../../core/i18n';
 
 export interface InAppSignUpProps {
   /** The Personal account row this sign-up will become. */
@@ -20,7 +23,10 @@ export interface InAppSignUpProps {
  */
 export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
   const [step, setStep] = useState<'details' | 'code'>('details');
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: prefill ?? '', password: '', country: countryGuess() });
+  const [form, setForm] = useState({ firstName: '', lastName: '', organization: '', email: prefill ?? '', phone: '', password: '', confirm: '', country: countryGuess() });
+  const [agreed, setAgreed] = useState(false);
+  const [language, setLanguage] = useState(() => currentLanguage() || 'en');
+  const countries = useCountries();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +56,12 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
         password: form.password,
         country: form.country.toUpperCase(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        phone: form.phone.trim(),
+        ...(form.organization.trim() ? { organization: form.organization.trim() } : {}),
+        acceptTerms: true,
       });
+      /* The language chosen here is this app's language from now on; the person can change it in Settings. */
+      if (language !== currentLanguage()) void updatePrefs({ language }).catch(() => undefined);
       setSentTo(out.email);
       setStep('code');
     } catch (err) {
@@ -90,7 +101,9 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
   };
 
   const field = 'h-11 rounded-[10px] border border-line bg-surface px-3.5 text-[14px] text-ink outline-none focus:border-primary';
-  const ready = form.firstName.trim() && form.lastName.trim() && form.email.includes('@') && form.password.length >= 8 && form.country.length === 2;
+  const phoneOk = form.phone.replace(/[^\d]/g, '').length >= 7;
+  const mismatch = form.confirm.length > 0 && form.confirm !== form.password;
+  const ready = form.firstName.trim() && form.lastName.trim() && form.email.includes('@') && phoneOk && form.password.length >= 8 && form.confirm === form.password && form.country.length === 2 && agreed;
 
   if (step === 'code')
     return (
@@ -159,20 +172,58 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
           <input id="signup-last" autoComplete="family-name" maxLength={60} value={form.lastName} onChange={set('lastName')} className={field} />
         </div>
       </div>
+      <label htmlFor="signup-org" className="text-[13px] font-semibold text-ink">
+        Organization <span className="font-normal text-ink-3">(optional)</span>
+      </label>
+      <input id="signup-org" autoComplete="organization" maxLength={160} value={form.organization} onChange={set('organization')} className={field} />
       <label htmlFor="signup-email" className="text-[13px] font-semibold text-ink">
         Email
       </label>
       <input id="signup-email" type="email" autoComplete="email" maxLength={254} value={form.email} onChange={set('email')} className={field} />
+      <label htmlFor="signup-phone" className="text-[13px] font-semibold text-ink">
+        Mobile number
+      </label>
+      <input id="signup-phone" type="tel" inputMode="tel" autoComplete="tel" required aria-describedby="signup-phone-hint" maxLength={32} value={form.phone} onChange={set('phone')} className={field} />
+      <p id="signup-phone-hint" className="m-0 text-[12px] text-ink-3">With the country code if it is not a number in your country, as +94 77 123 4567.</p>
       <label htmlFor="signup-password" className="text-[13px] font-semibold text-ink">
         Password
       </label>
       <input id="signup-password" type="password" autoComplete="new-password" aria-describedby="signup-password-hint" maxLength={256} value={form.password} onChange={set('password')} className={field} />
       <p id="signup-password-hint" className="m-0 text-[12px] text-ink-3">At least 8 characters. Your password is used to create the account and is never stored on this computer.</p>
+      <label htmlFor="signup-confirm" className="text-[13px] font-semibold text-ink">
+        Confirm password
+      </label>
+      <input id="signup-confirm" type="password" autoComplete="new-password" aria-invalid={mismatch ? true : undefined} aria-describedby={mismatch ? 'signup-confirm-err' : undefined} maxLength={256} value={form.confirm} onChange={set('confirm')} className={cx(field, mismatch && 'border-danger')} />
+      {mismatch ? (
+        <p id="signup-confirm-err" className="m-0 text-[12px] text-danger">
+          The two passwords are not the same.
+        </p>
+      ) : null}
       <label htmlFor="signup-country" className="text-[13px] font-semibold text-ink">
         Country
       </label>
-      <input id="signup-country" autoComplete="country" aria-describedby="signup-country-hint" maxLength={2} value={form.country} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') }))} className={cx(field, 'uppercase')} />
-      <p id="signup-country-hint" className="m-0 text-[12px] text-ink-3">Two letters, as LK or GB.</p>
+      <select id="signup-country" autoComplete="country" value={form.country} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))} className={field}>
+        <option value="">Choose…</option>
+        {countries.map((c) => (
+          <option key={c.code} value={c.code}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      <label htmlFor="signup-language" className="text-[13px] font-semibold text-ink">
+        Language
+      </label>
+      <select id="signup-language" value={language} onChange={(e) => setLanguage(e.target.value)} className={field}>
+        {LANGUAGES.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.label}
+          </option>
+        ))}
+      </select>
+      <label className="flex items-start gap-2.5 text-[13px] text-ink-2">
+        <Checkbox checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
+        <span>I accept WorkSuite Cloud&apos;s Terms of Service and Privacy Policy.</span>
+      </label>
       <button type="submit" disabled={busy || !ready} className="flex h-[46px] items-center justify-center gap-2 rounded-[10px] bg-teal text-[15px] font-semibold text-white hover:opacity-90 disabled:opacity-60">
         {busy ? <Icon name="spinner" size={16} className="animate-spin-slow" /> : null}
         Continue
@@ -182,7 +233,7 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
           {error}
         </div>
       ) : null}
-      <p className="m-0 text-[12px] text-ink-3">Creating an account accepts WorkSuite Cloud's Terms of Service and Privacy Policy.</p>
+
       <button type="button" onClick={onBack} className="self-start text-[13px] text-ink-3 hover:underline">
         ← Back to sign in
       </button>
@@ -195,4 +246,27 @@ function countryGuess(): string {
   const tag = typeof navigator === 'undefined' ? '' : navigator.language;
   const region = /-([A-Za-z]{2})$/.exec(tag ?? '')?.[1];
   return (region ?? '').toUpperCase();
+}
+
+/** Every country this computer can name, in its own language, sorted by name. */
+function useCountries(): Array<{ code: string; name: string }> {
+  const [list] = useState(() => {
+    const A = 65;
+    let names: Intl.DisplayNames | null = null;
+    try {
+      names = new Intl.DisplayNames([typeof navigator === 'undefined' ? 'en' : navigator.language, 'en'], { type: 'region', fallback: 'none' });
+    } catch {
+      names = null;
+    }
+    const out: Array<{ code: string; name: string }> = [];
+    for (let i = 0; i < 26; i++)
+      for (let j = 0; j < 26; j++) {
+        const code = String.fromCharCode(A + i, A + j);
+        const name = names?.of(code);
+        /* Reserved and private-use codes have no name, or a placeholder one. */
+        if (name && name !== code && !/^(Unknown|Pseudo|EU$|UN$)/.test(name) && !['EU', 'EZ', 'UN', 'QO', 'XA', 'XB', 'ZZ'].includes(code)) out.push({ code, name });
+      }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  });
+  return list;
 }

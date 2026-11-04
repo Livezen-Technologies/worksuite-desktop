@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.0.9 — 2026-11-04
+
+- Website chat: a draft that loads late no longer replaces what you typed; the open chat is read every 2 seconds (#454)
+
 ## 2.0.8 — 2026-10-27
 
 **Changed**

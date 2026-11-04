@@ -18,6 +18,9 @@ const fill = () => {
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'nimali@example.com' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'a-long-enough-password' } });
   fireEvent.change(screen.getByLabelText('Country'), { target: { value: 'LK' } });
+  fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '077 123 4567' } });
+  fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'a-long-enough-password' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: /Terms of Service/ }));
 };
 
 beforeEach(() => {
@@ -32,7 +35,7 @@ describe('in-app sign-up', () => {
     fill();
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(screen.getByText('Check your email')).toBeTruthy());
-    expect(bridge.call).toHaveBeenCalledWith('signup:start', expect.objectContaining({ email: 'nimali@example.com', country: 'LK', accountId: 'acc_abcdefghijklmnopqrst' }));
+    expect(bridge.call).toHaveBeenCalledWith('signup:start', expect.objectContaining({ email: 'nimali@example.com', country: 'LK', phone: '077 123 4567', acceptTerms: true, accountId: 'acc_abcdefghijklmnopqrst' }));
     expect(screen.getByText('nimali@example.com')).toBeTruthy();
   });
 
@@ -40,6 +43,12 @@ describe('in-app sign-up', () => {
     render(<InAppSignUp accountId="acc_abcdefghijklmnopqrst" onBack={() => undefined} />);
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
     fill();
+    fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '' } });
+    expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '077 123 4567' } });
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'something-else' } });
+    expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'a-long-enough-password' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'short' } });
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
   });

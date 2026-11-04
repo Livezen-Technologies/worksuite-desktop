@@ -528,3 +528,28 @@ describe('signing in (SessionController)', () => {
     await expect(handlers.get('auth:signIn')!(event, { email: 'ann@x.lk', password: 'right' })).resolves.toMatchObject({ stage: 'ready' });
   });
 });
+
+describe('offline access for someone who signed in before (WF-02)', () => {
+  it('opens from the saved bootstrap when the server cannot be reached, as the same person', async () => {
+    const { server, session } = await harness();
+    expect((await session.signIn('ann@x.lk', 'right')).stage).toBe('ready');
+    // The network goes: every request fails as a dropped connection does.
+    server.route(() => {
+      throw new TypeError('fetch failed');
+    });
+    await session.init();
+    const st = session.get();
+    expect(st.stage).toBe('ready');
+    expect(String(st.user?.id)).toBe(String(USER.id));
+  });
+
+  it('without a saved bootstrap, an unreachable server leaves the person signed out with the reason', async () => {
+    const { server, session } = await harness();
+    server.route(() => {
+      throw new TypeError('fetch failed');
+    });
+    await session.init();
+    expect(session.get().stage).not.toBe('ready');
+  });
+});
+

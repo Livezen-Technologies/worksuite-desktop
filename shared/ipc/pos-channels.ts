@@ -24,6 +24,7 @@ export const POS_INVOKE_CHANNELS = [
   'pos:email',
   'pos:printReport',
   'pos:printTest',
+  'pos:receiptPreview',
   'pos:openDrawer',
   'pos:displayOpen',
   'pos:displayClose',

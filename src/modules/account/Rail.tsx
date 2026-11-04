@@ -24,6 +24,8 @@ const ITEMS: Array<{ id: Section; label: string; icon: string } | { head: string
   { id: 'access', label: 'My access', icon: 'key' },
   // WorkSuite Cloud's storage (Connection & Startup screen 12): a Personal account's only.
   { id: 'storage', label: 'Storage', icon: 'cloud' },
+  // Joining an organisation by invitation: a Personal account's only.
+  { id: 'organizations', label: 'Organizations', icon: 'users' },
 ];
 
 export function AccountRail({ section, onPick }: { section: Section; onPick: (s: Section) => void }) {
@@ -49,7 +51,7 @@ export function AccountRail({ section, onPick }: { section: Section; onPick: (s:
         </span>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 scroll-thin">
-        {ITEMS.filter((it) => !('id' in it) || it.id !== 'storage' || personal).map((it) => {
+        {ITEMS.filter((it) => !('id' in it) || (it.id !== 'storage' && it.id !== 'organizations') || personal).map((it) => {
           if ('head' in it) {
             return (
               <div key={it.head} className="mt-2.5 flex h-6 shrink-0 items-center px-2 text-[11px] font-bold tracking-[.3px] text-ink-3">

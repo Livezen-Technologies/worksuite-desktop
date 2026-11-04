@@ -9,7 +9,7 @@ const meta: OidcMetadata = {
 } as OidcMetadata;
 
 const API = 'https://worksuitecloud.com';
-const DETAILS = { firstName: 'Nimali', lastName: 'Perera', email: 'nimali@example.com', password: 'a-long-enough-password', country: 'LK', acceptTerms: true, acceptPrivacy: true } as const;
+const DETAILS = { firstName: 'Nimali', lastName: 'Perera', email: 'nimali@example.com', password: 'a-long-enough-password', country: 'LK', phone: '0771234567', acceptTerms: true, acceptPrivacy: true } as const;
 
 const reply = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });

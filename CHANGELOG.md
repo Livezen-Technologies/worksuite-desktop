@@ -11,6 +11,53 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.286 — 2026-11-04
+
+Receipt printers by model, and a receipt designer with its preview, in the till's settings.
+
+### Added
+
+- **Sign-up asks for a mobile number and, optionally, an organization.** Creating a WorkSuite Cloud account in the
+  app now needs a mobile number; the organization name can be left empty. The form also asks you to confirm the
+  password and to tick the Terms of Service and Privacy Policy box, instead of accepting them for you. Needs a
+  WorkSuite Cloud that takes the two fields (worksuite-cloud migration 042).
+- **Forgot password, inside the app.** Where WorkSuite Cloud creates accounts in the app, Forgot password? now
+  stays in the app too: your email, then the 6-digit code it sends and a new password (typed twice). Every session
+  of the account ends, and you sign in again. Other servers still open their page in the browser.
+- **Country and language in the sign-up form.** Country is a list of names instead of a two-letter box, and a
+  Language choice (English, Sinhala, Tamil, Arabic, Hindi) becomes the app's language once the account is started.
+- **First-run setup asks about appearance and language.** A new step, Appearance and language, sets Light, Dark or
+  the system's theme and the app's language as you choose them. The last step lists your apps, and on a personal
+  account says your personal workspace is ready.
+- **Join an organization from the app.** My account › Organizations (personal accounts) lists the invitations waiting
+  for your address, with Join and Decline, and the organizations your email's domain may ask to join. A joined
+  organization appears in the workspace switcher; its data stays apart from your personal workspace. Needs a
+  WorkSuite Cloud with `/api/v1/invitations`.
+
+- **Xprinter models, set up for you.** Till settings › Receipt & printing has a Printer model list with 54 Xprinter
+  receipt printers — the 80 mm desktop range (XP-80C, XP-Q200H, XP-Q800, XP-N160II, XP-C260H, XP-T80A, …), the
+  58 mm range (XP-58IIH, XP-58IIL, XP-58C, …) and the portable ones (XP-P323B, XP-P810, …). Choosing one sets the
+  roll width, ESC/POS, the cut and the drawer for it; picking a printer whose name says which Xprinter it is sets that
+  model up too. Everything stays editable: some models are sold with and without a cutter.
+- **Cut and feed.** A partial cut, a full cut or none (tear off), and how many lines are fed before it. Before, every
+  receipt ended with four lines and a partial cut, which a printer without a cutter could not do.
+- **A receipt designer.** A logo, printed in black and white (as a raster image over ESC/POS, as a picture through
+  the driver); the shop's name large; the top and bottom lines centred or left; whether the receipt shows the order
+  number, the till, the cashier, the customer, the tax by rate and the receipt barcode; and a QR code at the bottom
+  (a web address, a review link, a payment code). Receipts the till prints and reprints from WorkSuite follow it.
+- **A lighter till bar.** Inside the app the POS bar under the tabs is now a light toolbar like the app's own,
+  instead of a second navy bar repeating the app's status and avatar. Full screen keeps the navy bar for the counter.
+- **The receipt as it will print**, beside the designer: a sample sale with the settings just saved. Where the company
+  has published a receipt template for the till, that is what prints, so that is what the preview shows.
+
+### Fixed
+
+- **Website chat: what you type no longer doubles up or jumps back** (#454). A saved draft that arrived from this
+  computer after you had started typing replaced your text, so letters came back twice or a sentence reverted.
+  A draft is now restored only into an empty composer that has not been typed in.
+- **Website chat: new messages show sooner** (#454). The open conversation is read every 2 seconds while the window
+  is in front (it was 5), and every 30 seconds behind other windows, as before.
+
 ## 0.2.285 — 2026-10-28
 
 Central login management, part 1: the startup screen now follows what the server publishes.

@@ -640,6 +640,7 @@ const api = {
     email: call('pos:email'),
     printReport: call('pos:printReport'),
     printTest: call('pos:printTest'),
+    receiptPreview: call('pos:receiptPreview'),
     openDrawer: call('pos:openDrawer'),
     displayOpen: call('pos:displayOpen'),
     displayClose: call('pos:displayClose'),
@@ -814,6 +815,10 @@ const api = {
     verify: call('signup:verify'),
     cancel: call('signup:cancel'),
   },
+  recover: {
+    send: call('recover:send'),
+    reset: call('recover:reset'),
+  },
   cloud: {
     status: call('cloud:status'),
     refresh: call('cloud:refresh'),
@@ -823,6 +828,9 @@ const api = {
     plans: call('cloud:plans'),
     openWeb: call('cloud:openWeb'),
     deletionState: call('cloud:deletionState'),
+    invitations: call('cloud:invitations'),
+    acceptInvitation: call('cloud:acceptInvitation'),
+    declineInvitation: call('cloud:declineInvitation'),
     requestDeletion: call('cloud:requestDeletion'),
   },
   events: { on },

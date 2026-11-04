@@ -35,7 +35,25 @@ export const CLOUD_API = {
   desktopAuthConfig: '/api/v1/desktop/auth-config',
   /** Beginning (and reading the state of) the deletion of this account, from inside the app. */
   accountDeletion: '/api/v1/account/deletion',
+  /** Invitations to organisations for the signed-in person: list, accept (`{id}` or `{token}`), `/:id/decline`. */
+  invitations: '/api/v1/invitations',
+  invitationAccept: '/api/v1/invitations/accept',
 } as const;
+
+/** `GET /api/v1/invitations`: an invitation to an organisation waiting for this person. */
+export interface CloudInvitation {
+  id: string;
+  organization: string;
+  role: string;
+  invitedBy: string | null;
+  expiresAt: string | null;
+}
+
+/** `GET /api/v1/invitations`, and an organisation this person's verified address may ask to join. */
+export interface CloudInvitations {
+  invitations: CloudInvitation[];
+  joinable: Array<{ id: string; name: string; requested: boolean }>;
+}
 
 /** `GET /api/v1/me`. */
 export interface CloudMe {
