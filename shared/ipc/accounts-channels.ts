@@ -33,6 +33,8 @@ export const ACCOUNTS_INVOKE_CHANNELS = [
   'signup:resend',
   'signup:verify',
   'signup:cancel',
+  'recover:send',
+  'recover:reset',
   'cloud:status',
   'cloud:refresh',
   'cloud:resendVerification',

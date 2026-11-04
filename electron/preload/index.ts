@@ -815,6 +815,10 @@ const api = {
     verify: call('signup:verify'),
     cancel: call('signup:cancel'),
   },
+  recover: {
+    send: call('recover:send'),
+    reset: call('recover:reset'),
+  },
   cloud: {
     status: call('cloud:status'),
     refresh: call('cloud:refresh'),

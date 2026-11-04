@@ -168,3 +168,32 @@ export async function verifyAndSignIn(apiOrigin: string, meta: OidcMetadata, cli
   if (!authCode) throw failed('SIGNUP_NEEDS_SIGN_IN', 'Your account is ready. Sign in to finish setting up this computer.');
   return exchangeCode(meta, started.pending, authCode, clientId, fetch);
 }
+
+/**
+ * Forgot password, in the app: the server emails a 6-digit code (POST /recover {headless:true}). It answers the same
+ * whether or not the address has an account, so this never says which.
+ */
+export async function requestResetCode(apiOrigin: string, email: string, fetch: FetchLike): Promise<void> {
+  const res = await fetch(new URL('/api/v1/recover', apiOrigin).toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ email, headless: true }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
+    throw failed(body?.error?.code ?? 'SERVER_ERROR', body?.error?.message ?? 'A code could not be sent. Try again shortly.');
+  }
+}
+
+/** The code and the new password (POST /recover/code). Every session of the account ends; the person signs in again. */
+export async function resetWithCode(apiOrigin: string, email: string, code: string, password: string, fetch: FetchLike): Promise<void> {
+  const res = await fetch(new URL('/api/v1/recover/code', apiOrigin).toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ email, code: code.replace(/\s+/g, ''), password }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string; fields?: Record<string, string> } } | null;
+    throw failed(body?.error?.code ?? 'SERVER_ERROR', body?.error?.message ?? 'The password could not be changed. Try again.', body?.error?.fields ?? null);
+  }
+}

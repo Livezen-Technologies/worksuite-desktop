@@ -211,6 +211,9 @@ export const accountsContract = {
   'signup:resend': { input: z.strictObject({ accountId }), rate: 1 },
   'signup:verify': { input: z.strictObject({ accountId, code: z.string().trim().max(12) }), rate: 4 },
   'signup:cancel': { input: none },
+  /* Forgot password inside the app: a code by email, then the code and a new password. */
+  'recover:send': { input: z.strictObject({ accountId, email: z.string().trim().max(320) }), rate: 1 },
+  'recover:reset': { input: z.strictObject({ accountId, email: z.string().trim().max(320), code: z.string().trim().max(12), password: z.string().max(256) }), rate: 2 },
   'cloud:status': { input: none },
   'cloud:refresh': { input: none, rate: 2 },
   'cloud:resendVerification': { input: none, rate: 1 },
@@ -256,6 +259,8 @@ export interface AccountsOutputs {
   'signup:resend': { email: string };
   'signup:verify': { done: true };
   'signup:cancel': void;
+  'recover:send': { sent: true };
+  'recover:reset': { reset: true };
   'cloud:status': CloudStatus;
   'cloud:refresh': CloudStatus;
   /** When Resend may be pressed again (epoch ms). */

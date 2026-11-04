@@ -13,7 +13,7 @@ import { BrowserSignInFlow, type TakenCallback } from './browser-signin';
 import { CloudApi } from './cloud-api';
 import { EntitlementStore, entitlementKeyring, type EntitlementKeyValue } from './entitlements';
 import { buildAuthorize, exchangeCode, fetchMetadata, isAllowedEndpoint, listenLoopback, OIDC_CALLBACK, OidcTokenEndpoint, randomToken, s256, type LoopbackListener, type OidcMetadata, type PendingAuthorize } from './oidc';
-import { codeRetriable, openFlow, resendCode, startSignUp, verifyAndSignIn, type Started } from './in-app-signup';
+import { codeRetriable, openFlow, requestResetCode, resendCode, resetWithCode, startSignUp, verifyAndSignIn, type Started } from './in-app-signup';
 import { ProvisioningFlow } from './provisioning';
 import { QuotaWatcher } from './quota';
 
@@ -466,6 +466,20 @@ export function registerCloudHandlers(router: IpcRouter, deps: CloudDeps): Cloud
 
   router.handle('signup:cancel', () => {
     signup = null;
+  });
+
+  router.handle('recover:send', async ({ accountId, email }) => {
+    const rec = deps.account(accountId);
+    if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
+    await requestResetCode(rec.apiOrigin || rec.serverOrigin, email, deps.fetchFor(accountId));
+    return { sent: true as const };
+  });
+
+  router.handle('recover:reset', async ({ accountId, email, code, password }) => {
+    const rec = deps.account(accountId);
+    if (!rec) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
+    await resetWithCode(rec.apiOrigin || rec.serverOrigin, email, code, password, deps.fetchFor(accountId));
+    return { reset: true as const };
   });
 
   router.handle('cloud:status', () => {
