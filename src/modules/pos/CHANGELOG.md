@@ -11,6 +11,7 @@ the root CHANGELOG.md.
 - Till settings › Receipt & printing: the printer by model — 54 Xprinter receipt printers (80 mm, 58 mm, portable), each set up with its roll, ESC/POS, its auto-cutter and its drawer port when chosen, and recognised from the printer's own name when one is picked
 - the cut (partial, full, none) and the paper fed before it
 - a receipt designer: a black-and-white logo (printed as a raster image over ESC/POS), the shop's name large, the top and bottom lines centred or left, which details the receipt shows (order, till, cashier, customer, tax by rate, the barcode) and a QR code at the bottom
+- the till bar is a light toolbar inside the app, under the tabs, like the app's own (it was a second navy bar that repeated the app's): a smaller mark, the till's code and register with an icon, a soft status pill, outlined Lock and menu buttons; full screen keeps the navy bar
 - the receipt as it will print beside the designer, from a sample sale (`pos:receiptPreview`); a company template published for the till shows instead, as it prints
 
 ## 1.5.3 — 2026-10-27

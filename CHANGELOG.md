@@ -28,6 +28,8 @@ Receipt printers by model, and a receipt designer with its preview, in the till'
   the driver); the shop's name large; the top and bottom lines centred or left; whether the receipt shows the order
   number, the till, the cashier, the customer, the tax by rate and the receipt barcode; and a QR code at the bottom
   (a web address, a review link, a payment code). Receipts the till prints and reprints from WorkSuite follow it.
+- **A lighter till bar.** Inside the app the POS bar under the tabs is now a light toolbar like the app's own,
+  instead of a second navy bar repeating the app's status and avatar. Full screen keeps the navy bar for the counter.
 - **The receipt as it will print**, beside the designer: a sample sale with the settings just saved. Where the company
   has published a receipt template for the till, that is what prints, so that is what the preview shows.
 
