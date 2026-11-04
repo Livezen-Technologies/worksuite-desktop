@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { call, errorMessage } from '../../../core/bridge';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
+import { updatePrefs } from '../../../core/app-state';
+import { currentLanguage, LANGUAGES } from '../../../core/i18n';
 
 export interface InAppSignUpProps {
   /** The Personal account row this sign-up will become. */
@@ -22,6 +24,8 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
   const [step, setStep] = useState<'details' | 'code'>('details');
   const [form, setForm] = useState({ firstName: '', lastName: '', organization: '', email: prefill ?? '', phone: '', password: '', confirm: '', country: countryGuess() });
   const [agreed, setAgreed] = useState(false);
+  const [language, setLanguage] = useState(() => currentLanguage() || 'en');
+  const countries = useCountries();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +59,8 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
         ...(form.organization.trim() ? { organization: form.organization.trim() } : {}),
         acceptTerms: true,
       });
+      /* The language chosen here is this app's language from now on; the person can change it in Settings. */
+      if (language !== currentLanguage()) void updatePrefs({ language }).catch(() => undefined);
       setSentTo(out.email);
       setStep('code');
     } catch (err) {
@@ -195,8 +201,24 @@ export function InAppSignUp({ accountId, prefill, onBack }: InAppSignUpProps) {
       <label htmlFor="signup-country" className="text-[13px] font-semibold text-ink">
         Country
       </label>
-      <input id="signup-country" autoComplete="country" aria-describedby="signup-country-hint" maxLength={2} value={form.country} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') }))} className={cx(field, 'uppercase')} />
-      <p id="signup-country-hint" className="m-0 text-[12px] text-ink-3">Two letters, as LK or GB.</p>
+      <select id="signup-country" autoComplete="country" value={form.country} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))} className={field}>
+        <option value="">Choose…</option>
+        {countries.map((c) => (
+          <option key={c.code} value={c.code}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      <label htmlFor="signup-language" className="text-[13px] font-semibold text-ink">
+        Language
+      </label>
+      <select id="signup-language" value={language} onChange={(e) => setLanguage(e.target.value)} className={field}>
+        {LANGUAGES.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.label}
+          </option>
+        ))}
+      </select>
       <label className="flex items-start gap-2.5 text-[13px] text-ink-2">
         <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]" />
         <span>I accept WorkSuite Cloud&apos;s Terms of Service and Privacy Policy.</span>
@@ -223,4 +245,27 @@ function countryGuess(): string {
   const tag = typeof navigator === 'undefined' ? '' : navigator.language;
   const region = /-([A-Za-z]{2})$/.exec(tag ?? '')?.[1];
   return (region ?? '').toUpperCase();
+}
+
+/** Every country this computer can name, in its own language, sorted by name. */
+function useCountries(): Array<{ code: string; name: string }> {
+  const [list] = useState(() => {
+    const A = 65;
+    let names: Intl.DisplayNames | null = null;
+    try {
+      names = new Intl.DisplayNames([typeof navigator === 'undefined' ? 'en' : navigator.language, 'en'], { type: 'region', fallback: 'none' });
+    } catch {
+      names = null;
+    }
+    const out: Array<{ code: string; name: string }> = [];
+    for (let i = 0; i < 26; i++)
+      for (let j = 0; j < 26; j++) {
+        const code = String.fromCharCode(A + i, A + j);
+        const name = names?.of(code);
+        /* Reserved and private-use codes have no name, or a placeholder one. */
+        if (name && name !== code && !/^(Unknown|Pseudo|EU$|UN$)/.test(name) && !['EU', 'EZ', 'UN', 'QO', 'XA', 'XB', 'ZZ'].includes(code)) out.push({ code, name });
+      }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  });
+  return list;
 }

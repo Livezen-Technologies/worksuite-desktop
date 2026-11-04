@@ -24,6 +24,8 @@ Receipt printers by model, and a receipt designer with its preview, in the till'
 - **Forgot password, inside the app.** Where WorkSuite Cloud creates accounts in the app, Forgot password? now
   stays in the app too: your email, then the 6-digit code it sends and a new password (typed twice). Every session
   of the account ends, and you sign in again. Other servers still open their page in the browser.
+- **Country and language in the sign-up form.** Country is a list of names instead of a two-letter box, and a
+  Language choice (English, Sinhala, Tamil, Arabic, Hindi) becomes the app's language once the account is started.
 
 - **Xprinter models, set up for you.** Till settings › Receipt & printing has a Printer model list with 54 Xprinter
   receipt printers — the 80 mm desktop range (XP-80C, XP-Q200H, XP-Q800, XP-N160II, XP-C260H, XP-T80A, …), the
