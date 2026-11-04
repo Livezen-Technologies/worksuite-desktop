@@ -38,6 +38,14 @@ Receipt printers by model, and a receipt designer with its preview, in the till'
 - **The receipt as it will print**, beside the designer: a sample sale with the settings just saved. Where the company
   has published a receipt template for the till, that is what prints, so that is what the preview shows.
 
+### Fixed
+
+- **Website chat: what you type no longer doubles up or jumps back** (#454). A saved draft that arrived from this
+  computer after you had started typing replaced your text, so letters came back twice or a sentence reverted.
+  A draft is now restored only into an empty composer that has not been typed in.
+- **Website chat: new messages show sooner** (#454). The open conversation is read every 2 seconds while the window
+  is in front (it was 5), and every 30 seconds behind other windows, as before.
+
 ## 0.2.285 — 2026-10-28
 
 Central login management, part 1: the startup screen now follows what the server publishes.
