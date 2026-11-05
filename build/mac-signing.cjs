@@ -15,6 +15,13 @@
  *               carry a Developer ID Application authority and a Team ID
  *               (APPLE_TEAM_ID when set), with the hardened runtime; anything
  *               else fails the build. Other builds only warn, loudly.
+ *               With no Developer ID, electron-builder skips signing, leaving
+ *               only prebuilt Electron's signature, which the universal merge,
+ *               fuses, the Info.plist rename and app.asar break; the updater's
+ *               `codesign --verify --deep --strict` then refuses the update
+ *               (UPDATE_CODESIGN_FAILED). So such a build is ad-hoc signed here
+ *               (`codesign --force --deep --sign -`), and every build's bundle
+ *               must pass `codesign --verify --deep --strict` or the build fails.
  *
  * A release is a tagged CI build (GITHUB_REF refs/tags/v*) or WS_RELEASE_BUILD=1.
  */
@@ -27,6 +34,11 @@ function isRelease(env = process.env) {
 
 function hasIdentity(env = process.env) {
   return !!(env.CSC_LINK || env.CSC_NAME);
+}
+
+/** How afterSign signs the app: electron-builder already did with a Developer ID, or it is ad-hoc signed here. */
+function signPlan(env = process.env) {
+  return hasIdentity(env) ? 'developer-id' : 'adhoc';
 }
 
 /** Parses `codesign -dv --verbose=4` output (stderr). */
@@ -81,14 +93,23 @@ async function afterSign(context, env = process.env, run = spawnSync) {
   // The single-architecture halves of a universal build are not the shipped app.
   if (/-(x64|arm64)-temp$/.test(context.appOutDir)) return;
   const app = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
+  // A release without a Developer ID was refused in beforePack; it is never ad-hoc signed into shape.
+  if (signPlan(env) === 'adhoc' && !isRelease(env)) {
+    const a = run('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', app], { encoding: 'utf8', timeout: 600_000 });
+    if (!a || a.status !== 0) throw new Error(`Ad-hoc signing ${path.basename(app)} failed: ${(a && (a.stderr || a.stdout)) || 'codesign did not run'}`);
+  }
   const r = run('/usr/bin/codesign', ['-dv', '--verbose=4', app], { encoding: 'utf8', timeout: 60_000 });
   const output = `${(r && r.stderr) || ''}${(r && r.stdout) || ''}`;
   const sig = parseCodesign(output);
   const problems = !r || r.status !== 0 || !sig.identifier ? [/not signed at all/.test(output) ? 'it is not signed at all' : 'codesign could not read its signature'] : signingProblems(sig, env, context.packager.appInfo.id || 'lk.worksuite.desktop');
-  if (problems.length === 0) return;
-  const text = `${path.basename(app)}: ${problems.join('; ')}.`;
-  if (isRelease(env)) throw new Error(`Refusing to ship a macOS release: ${text}`);
-  WARN(text);
+  if (problems.length) {
+    const text = `${path.basename(app)}: ${problems.join('; ')}.`;
+    if (isRelease(env)) throw new Error(`Refusing to ship a macOS release: ${text}`);
+    WARN(text);
+  }
+  // A bundle that fails this is refused by the updater on every Mac it reaches: never ship one.
+  const v = run('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { encoding: 'utf8', timeout: 600_000 });
+  if (!v || v.status !== 0) throw new Error(`${path.basename(app)} fails codesign --verify --deep --strict: ${(v && (v.stderr || v.stdout)) || 'codesign did not run'}`);
 }
 
-module.exports = { isRelease, hasIdentity, parseCodesign, signingProblems, beforePack, afterSign };
+module.exports = { isRelease, hasIdentity, signPlan, parseCodesign, signingProblems, beforePack, afterSign };

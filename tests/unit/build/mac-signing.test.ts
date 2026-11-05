@@ -7,6 +7,7 @@ const signing = require('../../../build/mac-signing.cjs') as {
   parseCodesign(out: string): { identifier: string | null; teamId: string | null; authorities: string[]; adhoc: boolean; runtime: boolean };
   signingProblems(sig: ReturnType<typeof signing.parseCodesign>, env: Record<string, string | undefined>): string[];
   beforePack(ctx: { electronPlatformName: string }, env: Record<string, string | undefined>): Promise<void>;
+  signPlan(env: Record<string, string | undefined>): 'adhoc' | 'developer-id';
   afterSign(ctx: unknown, env: Record<string, string | undefined>, run: (...a: unknown[]) => unknown): Promise<void>;
 };
 
@@ -70,6 +71,18 @@ describe('electron-builder configuration: macOS signing (worksuite-desktop#147)'
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     await expect(signing.afterSign(ctx(), {}, answer(ADHOC))).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('ad-hoc'));
+  });
+
+  it('ad-hoc signs a build with no Developer ID, then fails any bundle codesign --verify --deep --strict rejects', async () => {
+    expect(signing.signPlan({})).toBe('adhoc');
+    expect(signing.signPlan({ CSC_NAME: 'Developer ID Application: X' })).toBe('developer-id');
+    const run = answer(ADHOC);
+    await signing.afterSign(ctx(), {}, run);
+    const app = '/build/release/mac-universal/WorkSuite.app';
+    expect(run.mock.calls.map((c) => (c as unknown[])[1])).toEqual([['--force', '--deep', '--sign', '-', app], ['-dv', '--verbose=4', app], ['--verify', '--deep', '--strict', app]]);
+    const broken = vi.fn((_c: string, args: string[]) => (args[0] === '--verify' ? { status: 1, stdout: '', stderr: 'a sealed resource is missing or invalid' } : { status: 0, stdout: '', stderr: DEVELOPER_ID }));
+    await expect(signing.afterSign(ctx(), { CSC_LINK: 'x', APPLE_TEAM_ID: 'ABCDE12345' }, broken)).rejects.toThrow(/sealed resource/);
+    expect(broken.mock.calls.some((c) => c[1][0] === '--force')).toBe(false);
   });
 
   it('skips the single-architecture halves of a universal build and other platforms', async () => {
