@@ -28,7 +28,10 @@
  * keychain; APPLE_TEAM_ID is checked against the result). Ad-hoc signing ties
  * Accessibility to one exact build, so permission is lost on every update.
  * build/mac-signing.cjs refuses such a release (a tagged CI build, or
- * WS_RELEASE_BUILD=1) and warns loudly for any other build.
+ * WS_RELEASE_BUILD=1) and warns loudly for any other build. electron-builder
+ * skips signing without an identity, so mac-signing.cjs's afterSign ad-hoc signs
+ * such a build itself (`codesign --force --deep --sign -`) and fails any build whose
+ * bundle does not pass `codesign --verify --deep --strict`, the updater's check.
  */
 const macSigning = require('./mac-signing.cjs');
 

@@ -236,11 +236,19 @@ export default function Printers() {
               <Field label="Drawer connector" hint="Most drawers use pin 2. Try pin 5 if it does not open.">
                 <Choice label="Drawer connector" value={String(s.drawer_pin) as '2' | '5'} onChange={(v) => void save({ drawer_pin: v === '5' ? 5 : 2 })} options={[{ value: '2', label: 'Pin 2' }, { value: '5', label: 'Pin 5' }]} />
               </Field>
+              <Field label={t('pos.prn.drawerWhen')} hint={t('pos.prn.drawerWhenHint')}>
+                <Choice
+                  label={t('pos.prn.drawerWhen')}
+                  value={s.drawer_when ?? 'cash'}
+                  onChange={(drawer_when) => void save({ drawer_when })}
+                  options={[{ value: 'cash', label: t('pos.prn.drawerCash') }, { value: 'always', label: t('pos.prn.drawerAlways') }]}
+                />
+              </Field>
               <div>
                 <Button icon="banknote" loading={busy === 'drawer'} disabled={!s.receipt_printer} onClick={() => void run('drawer', openDrawer)}>
-                  {t('pos.openDrawer')}
+                  {t('pos.prn.testDrawer')}
                 </Button>
-                <p className="mt-1 text-[12px] text-ink-3">It opens by itself when cash is taken. The printer must take ESC/POS commands, as thermal receipt printers do.</p>
+                <p className="mt-1 text-[12px] text-ink-3">The printer must take ESC/POS commands, as thermal receipt printers do.</p>
               </div>
             </>
           ) : null}

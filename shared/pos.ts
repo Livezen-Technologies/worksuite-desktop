@@ -194,6 +194,18 @@ export function tenderOptionsOf(v: unknown): PosTenderOption[] | null {
   return out.length ? out : null;
 }
 
+/**
+ * Whether a completed sale opens the drawer (worksuite-desktop#458): every sale when `always`; otherwise when one of
+ * its tenders opens it — cash, or a tender the company set to (`opens_drawer`), and never one it set not to.
+ */
+export function saleOpensDrawer(methods: readonly string[], options: readonly PosTenderOption[] | null | undefined, when: 'cash' | 'always' = 'cash'): boolean {
+  if (when === 'always') return true;
+  return methods.some((m) => {
+    const o = options?.find((x) => x.kind === m);
+    return o ? o.opens_drawer : m === 'cash';
+  });
+}
+
 /** How the cashier's discount is stated (#293): a percentage, or a fixed amount of money. */
 export const POS_DISCOUNT_TYPES = ['pct', 'amount'] as const;
 export type PosDiscountType = (typeof POS_DISCOUNT_TYPES)[number];
@@ -572,6 +584,11 @@ export interface PosPrintSettings {
   /** A cash drawer on the receipt printer's RJ-11 port, opened with ESC p. */
   drawer: 'off' | 'printer';
   drawer_pin: 2 | 5;
+  /**
+   * When a sale opens the drawer (worksuite-desktop#458): `cash` — when a tender that opens the drawer was taken (cash,
+   * or one the company set to open it); `always` — after every sale, whatever it was paid with.
+   */
+  drawer_when?: 'cash' | 'always';
   /** Lines above and below every receipt (the shop's name and address, a returns policy). */
   header: string;
   footer: string;
@@ -658,6 +675,7 @@ export const posPrintPatchSchema = z
     auto_print: z.boolean(),
     drawer: z.enum(['off', 'printer']),
     drawer_pin: z.union([z.literal(2), z.literal(5)]),
+    drawer_when: z.enum(['cash', 'always']),
     header: text(400),
     footer: text(400),
     display_touch: z.enum(['auto', 'yes', 'no']),

@@ -1,5 +1,5 @@
 import { BrowserWindow, type WebContents } from 'electron';
-import type { PosPrintOutcome } from '@shared/pos';
+import { saleOpensDrawer, type PosPrintOutcome } from '@shared/pos';
 import { DesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { IpcRouter } from '../ipc/router';
@@ -132,11 +132,17 @@ export function createPos(d: PosDeps) {
       const r = await till.sell(input, cashier);
       // A manager's approval is needed first: nothing was sold, nothing is printed.
       if ('needs' in r) return r;
-      const cash = r.sale.tenders.some((t) => t.method === 'cash');
+      const ps = print.settings();
+      // #458: the tenders the company configured decide (a tender set to open the drawer, not only `cash`), or every sale.
+      const kick = saleOpensDrawer(r.sale.tenders.map((t) => t.method), till.catalogue()?.tenders, ps.drawer_when);
       let printed: PosPrintOutcome | null = null;
       try {
-        if (print.settings().auto_print) printed = await print.receipt(r.sale, await installed(c.sender), { ...tillOf(), kick: cash });
-        else if (cash && print.settings().drawer === 'printer') printed = await print.drawer(await installed(c.sender));
+        const printers = await installed(c.sender);
+        if (ps.auto_print) {
+          printed = await print.receipt(r.sale, printers, { ...tillOf(), kick });
+          // The receipt did not go (the drawer's pulse rides in its job): the drawer still opens for the cash taken.
+          if (!printed.ok && kick && ps.drawer === 'printer') await print.drawer(printers).catch(() => undefined);
+        } else if (kick && ps.drawer === 'printer') printed = await print.drawer(printers);
       } catch (e) {
         // The sale stands whatever the printer does; the screen offers a reprint.
         log.warn('pos receipt not printed', { error: String((e as Error)?.message ?? e) });

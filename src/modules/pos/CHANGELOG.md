@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-11-05
+
+- The drawer opens after a sale for every tender set to open it (`opens_drawer`), not only cash, and even when the receipt did not print (#458)
+- Printers › Cash drawer: open the drawer after a sale — cash payments only, or every sale (`drawer_when`); *Test the drawer*
+
 ## 1.7.0 — 2026-11-04
 
 - Every receipt ends with a fixed 'Powered by worksuitecloud.com by Livezen' line that no footer, design or template removes
