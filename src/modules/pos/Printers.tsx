@@ -221,14 +221,14 @@ export default function Printers() {
 
       <Card title="Cash drawer">
         <div className="flex flex-col gap-4">
-          {model && !model.drawer ? <Note tone="muted">The {model.brand} {model.name} has no drawer port.</Note> : null}
+          {model && !model.drawer ? <Note tone="muted">The {model.brand} {model.name} usually has no drawer port. If yours has one, you can still turn the drawer on.</Note> : null}
           <Choice
             label="The drawer"
             value={s.drawer}
             onChange={(drawer) => void save({ drawer })}
             options={[
               { value: 'off', label: 'None, or opened by the printer’s driver' },
-              { value: 'printer', label: 'Plugged into the receipt printer', disabled: !!model && !model.drawer },
+              { value: 'printer', label: 'Plugged into the receipt printer' },
             ]}
           />
           {s.drawer === 'printer' ? (

@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.34.6 — 2026-11-05
+
+- The Sync all accounts card (hover the ↻ by Accounts) is no longer cut off by the sidebar's edge (#452): it opens over
+  the message list, fixed to the window, instead of inside the sidebar's scroll area.
+
 ## 1.34.5 — 2026-10-27
 
 **Changed**

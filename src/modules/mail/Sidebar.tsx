@@ -429,12 +429,17 @@ function AccountRow({ box, account, running, offline, open, count, active, onTog
  */
 function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline, onSyncAll, onRetry }: { summary: SyncSummary; accounts: SyncAccount[]; boxes: Mailbox[]; running: ReadonlySet<number>; syncingAll: boolean; offline: boolean; onSyncAll: () => void; onRetry: (id: number) => void }) {
   const [open, setOpen] = useState(false);
+  // The card is fixed to the viewport, not absolute in the sidebar: the sidebar's scroll area clipped it (#452).
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  const anchor = useRef<HTMLSpanElement | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const spin = syncingAll || summary.state === 'syncing';
   // Spinning, then a check (or red) when the run ends (worksuite-desktop#165).
   const feedback = useSyncFeedback(spin, summary.failed.length > 0);
   const show = () => {
     if (timer.current) clearTimeout(timer.current);
+    const r = anchor.current?.getBoundingClientRect();
+    if (r) setAt({ left: Math.max(8, Math.min(r.left, window.innerWidth - 308)), top: r.bottom + 4 });
     setOpen(true);
   };
   const hide = () => {
@@ -444,7 +449,7 @@ function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline,
   useEffect(() => () => (timer.current ? clearTimeout(timer.current) : undefined), []);
   const rows = accounts.filter((a) => a.included || boxes.length <= 1);
   return (
-    <span className="relative" onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide} onKeyDown={(e) => (e.key === 'Escape' ? setOpen(false) : undefined)}>
+    <span ref={anchor} className="relative" onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide} onKeyDown={(e) => (e.key === 'Escape' ? setOpen(false) : undefined)}>
       <button
         type="button"
         onClick={onSyncAll}
@@ -459,7 +464,7 @@ function SyncAllButton({ summary, accounts, boxes, running, syncingAll, offline,
         <Icon name={feedback.icon} size={13} className={feedback.iconClass} />
       </button>
       {open ? (
-        <div id="mail-sync-all-card" role="tooltip" className="absolute left-0 top-7 z-30 w-[300px] rounded-[10px] border border-line bg-surface p-2 text-[12.5px] shadow-lg">
+        <div id="mail-sync-all-card" role="tooltip" style={at ? { left: at.left, top: at.top } : undefined} className="fixed z-50 w-[300px] rounded-[10px] border border-line bg-surface p-2 text-[12.5px] shadow-lg">
           <div className="flex items-center justify-between px-1.5 pb-1.5">
             <b className="text-ink">{spin ? summary.headline : text('Sync all accounts')}</b>
             <Kbd aria-hidden>{text('Ctrl+Shift+R')}</Kbd>

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.1 — 2026-11-05
+
+- Printers › Cash drawer: "Plugged into the receipt printer" can always be chosen (#461). It was greyed out whenever the
+  chosen printer model is one that usually ships without a drawer port, which also hit printers recognised from their
+  name, so the drawer could not be turned on. The note now says the model usually has no port.
+
 ## 1.8.0 — 2026-11-05
 
 - The drawer opens after a sale for every tender set to open it (`opens_drawer`), not only cash, and even when the receipt did not print (#458)
