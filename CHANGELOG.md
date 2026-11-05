@@ -11,6 +11,28 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.289 — 2026-11-05
+
+The cash drawer opens after the bill (#458), and unsigned Mac builds update again.
+
+### Fixed
+
+- **Point of Sale: the cash drawer opens after a sale's receipt for every payment that should open it.** The till
+  only opened it for a tender called `cash`, ignoring the payment types your company set in WorkSuite to open the
+  drawer; and when the receipt did not print, the drawer, whose pulse goes with the receipt, stayed shut. Now a
+  payment type set to open the drawer opens it, and a receipt that fails to print still opens the drawer for the
+  cash taken. The drawer must be set up in Till settings › Receipt & printing › Cash drawer.
+- **macOS: updating a build made without a Developer ID no longer fails with "UPDATE_CODESIGN_FAILED".** Such a
+  build kept only prebuilt Electron's signature, which packaging then broke, so the updater's
+  `codesign --verify --deep --strict` refused every new version. These builds are now ad-hoc signed as a whole, and a
+  build whose app does not pass that check fails instead of shipping.
+
+### Added
+
+- **Point of Sale: when the drawer opens.** Cash drawer › *Open the drawer after a sale*: cash payments only (the
+  default) or every sale. The drawer's button there is now *Test the drawer*, beside *Print a test receipt*, roll
+  width, copies, printing after every sale, the drawer's pin, cut and feed (POS 1.8.0).
+
 ## 0.2.288 — 2026-11-04
 
 Every bill says who it is powered by.

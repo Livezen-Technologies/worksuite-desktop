@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ BrowserWindow: class {} }));
 
-import { POWERED_BY, vatRows, type PosSale, type PosServerReceipt } from '@shared/pos';
+import { POWERED_BY, saleOpensDrawer, vatRows, type PosSale, type PosServerReceipt } from '@shared/pos';
 import { code128, code128Encodable, code128Values, CODE128_PATTERNS } from '@shared/code128';
 import { barcodeBytes, COLUMNS, escpos, pairLine, plain, PosPrint, receiptHtml, receiptRows, reportRows, serverReceiptRows, type ReceiptRow } from '../../../electron/services/pos-print';
 import { drawerPulse, type PrintJob } from '../../../electron/services/salon-print';
@@ -255,6 +255,19 @@ describe('the till’s printer', () => {
     p.update({ receipt_printer: 'Thermal', drawer: 'printer' }, ['Thermal']);
     await p.receipt(sale, ['Thermal'], { till: null, reprint: true });
     expect(raw.mock.calls[0]![1].indexOf(Buffer.from([0x1b, 0x70]))).toBe(-1);
+  });
+
+  it('opens the drawer for cash, a tender set to open it, or every sale when asked (#458)', () => {
+    const opts = [
+      { kind: 'cash' as const, name: 'Cash', opens_drawer: false, offline: true, needs_customer: false, needs_reference: false },
+      { kind: 'voucher' as const, name: 'Gift', opens_drawer: true, offline: false, needs_customer: false, needs_reference: true },
+    ];
+    expect(saleOpensDrawer(['cash'], null)).toBe(true);
+    expect(saleOpensDrawer(['card'], null)).toBe(false);
+    expect(saleOpensDrawer(['card', 'voucher'], opts)).toBe(true);
+    expect(saleOpensDrawer(['cash'], opts)).toBe(false);
+    expect(saleOpensDrawer(['card'], null, 'always')).toBe(true);
+    expect(service().p.settings().drawer_when).toBe('cash');
   });
 
   it('says what is missing rather than guessing a printer', async () => {

@@ -51,6 +51,7 @@ export const DEFAULT_POS_PRINT: PosPrintSettings = {
   auto_print: true,
   drawer: 'off',
   drawer_pin: 2,
+  drawer_when: 'cash',
   header: '',
   footer: 'Thank you',
   display_touch: 'auto',
