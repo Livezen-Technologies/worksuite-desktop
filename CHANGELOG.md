@@ -11,6 +11,20 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.290 — 2026-11-05
+
+The cash drawer can be turned on again for every printer model (#461), and Mail's sync card is no longer cut off (#452).
+
+### Fixed
+
+- **Point of Sale: Printers › Cash drawer › "Plugged into the receipt printer" can always be chosen** (#461). It was
+  greyed out when the chosen printer model usually ships without a drawer port, including models recognised from the
+  printer's name, so the drawer could not be turned on at all. The note under it now says so instead of blocking it.
+- **Mail: the Sync all accounts card is no longer clipped** (#452). Hovering the ↻ beside Accounts showed the card cut
+  off at the sidebar's edge; it now opens fixed to the window, over the message list.
+- **"Something went wrong, but WorkSuite kept running" now says what failed** (#459): the error's name and message
+  follow the sentence, so a report can name the error, and Settings › Diagnostics has the rest.
+
 ## 0.2.289 — 2026-11-05
 
 The cash drawer opens after the bill (#458), and unsigned Mac builds update again.

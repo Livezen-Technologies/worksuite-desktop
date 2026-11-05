@@ -15,6 +15,15 @@ const log = logger('process');
  */
 export const FRIENDLY_ERROR = 'Something went wrong, but WorkSuite kept running. If an action did not finish, try it again.';
 
+/**
+ * The toast for one error: the plain sentence, then what failed in a few words (worksuite-desktop#459), so a person can
+ * say which error it was — and Settings › Diagnostics has the whole of it.
+ */
+export function friendlyError(d: { name: string; message: string }): string {
+  const what = `${d.name}: ${d.message}`.replace(/\s+/g, ' ').trim().slice(0, 140);
+  return `${FRIENDLY_ERROR} What failed: ${what}. Settings › Diagnostics has the details.`;
+}
+
 export interface ProcessGuardDeps {
   /** A short message in the app's windows (a toast). */
   notify?: (text: string) => void;
@@ -57,7 +66,7 @@ export function installProcessGuards(deps: ProcessGuardDeps = {}): () => void {
       if (kind === 'uncaughtException' && deps.notify && now() - lastNotice >= quiet) {
         lastNotice = now();
         try {
-          deps.notify(FRIENDLY_ERROR);
+          deps.notify(friendlyError(d));
         } catch {
           /* no window yet */
         }

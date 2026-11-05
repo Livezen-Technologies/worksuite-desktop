@@ -314,7 +314,8 @@ describe('main-process guards', () => {
     target.emit('uncaughtException', boom);
     target.emit('uncaughtException', boom);
     expect(notify).toHaveBeenCalledTimes(1);
-    expect(notify).toHaveBeenCalledWith(FRIENDLY_ERROR);
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining(FRIENDLY_ERROR));
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining('What failed: TypeError: Cannot convert argument to a ByteString'));
     expect(report).toHaveBeenCalledWith(expect.stringContaining('8239'));
     expect(recentLog().some((l) => l.includes('uncaught exception') && l.includes('ByteString'))).toBe(true);
     t = 2000;
