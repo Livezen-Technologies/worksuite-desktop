@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         # ubuntu-24.04, not ubuntu-latest: the X tools and libraries these checks use are those of a known image.
-        os: [windows-latest, macos-14, ubuntu-24.04]
+        os: [windows-latest, macos-15, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:

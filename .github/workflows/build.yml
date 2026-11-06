@@ -69,7 +69,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             target: --mac
           - os: windows-latest
             target: --win
@@ -119,7 +119,7 @@ jobs:
           fi
       - run: npm run build
         env:
-          # electron-vite build exceeds Node's default ~2 GB heap and aborts with exit 134; macos-14 has 7 GB RAM.
+          # electron-vite build exceeds Node's default ~2 GB heap and aborts with exit 134; macos-15 has 7 GB RAM.
           NODE_OPTIONS: --max-old-space-size=6144
           MAIN_VITE_POLICY_PUBLIC_KEY: ${{ secrets.WS_POLICY_PUBLIC_KEY }}
       - name: Package
