@@ -54,6 +54,12 @@ const azure = process.env.AZURE_TRUSTED_SIGNING_ACCOUNT
   : undefined;
 
 /** @type {import('electron-builder').Configuration} */
+// Branding (0.2.291): what people read says "WorkSuite Desktop". productName stays "WorkSuite" because it decides the
+// install folder, the app data folder (…/WorkSuite, app.getPath('userData')), the exe and bundle names
+// (WorkSuite.exe, WorkSuite.app, which the updater replaces in place), the Windows registry keys and the macOS
+// helpers' names. appId (the AppUserModelId, the bundle ID and the codesign identifier) stays too.
+const displayName = 'WorkSuite Desktop';
+
 module.exports = {
   appId: 'lk.worksuite.desktop',
   productName: 'WorkSuite',
@@ -152,6 +158,8 @@ module.exports = {
       // types through System Events instead, which is what this Automation prompt is for.
       NSAppleEventsUsageDescription: 'WorkSuite types text for someone you let control this Mac, and only while control lasts.',
       LSMultipleInstancesProhibited: true,
+      // The name Finder, the Dock and Spotlight show; CFBundleName and the bundle (WorkSuite.app) are unchanged.
+      CFBundleDisplayName: displayName,
     },
   },
   // Mac App Store / TestFlight (docs/TESTFLIGHT.md): `npm run dist:mas`. Sandboxed, signed with the Apple Distribution
@@ -166,7 +174,7 @@ module.exports = {
     provisioningProfile: process.env.WS_MAS_PROVISIONING_PROFILE || 'build/embedded.provisionprofile',
     ...(process.env.WS_MAS_BUILD_NUMBER ? { bundleVersion: process.env.WS_MAS_BUILD_NUMBER } : {}),
   },
-  dmg: { sign: false, title: 'WorkSuite ${version}' },
+  dmg: { sign: false, title: `${displayName} \${version}` },
   pkg: { isRelocatable: false, allowAnywhere: false, allowCurrentUserHome: false, installLocation: '/Applications' },
 
   win: {
@@ -181,6 +189,9 @@ module.exports = {
     ...(azure ? { azureSignOptions: azure } : {}),
     // Windows 10 22H2+ (NFR-CMP-01).
     requestedExecutionLevel: 'asInvoker',
+    // The exe's FileDescription and ProductName are productName ("WorkSuite", never "Electron"), CompanyName is
+    // package.json's author (Livezen Technologies) and LegalCopyright is `copyright` above.
+    legalTrademarks: 'WorkSuite is a trademark of Livezen Technologies LLC.',
   },
   nsis: {
     oneClick: false,
@@ -189,7 +200,19 @@ module.exports = {
     allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
-    shortcutName: 'WorkSuite',
+    // Desktop and Start menu: "WorkSuite Desktop". Shortcuts named "WorkSuite" by earlier versions are renamed on
+    // update by electron-builder and removed by build/installer.nsh when setup runs by hand (the AppUserModelId,
+    // lk.worksuite.desktop, is set on the new ones, so notifications and taskbar pins keep working).
+    shortcutName: displayName,
+    uninstallDisplayName: `${displayName} \${version}`,
+    // build/installerSidebar.bmp, build/installerHeader.bmp and build/license.txt come from
+    // scripts/make-installer-art.py; the installer's icon is build/icon.png's, and build/installer.nsh brands the
+    // window title and the welcome and finish pages.
+    installerSidebar: 'build/installerSidebar.bmp',
+    uninstallerSidebar: 'build/installerSidebar.bmp',
+    installerHeader: 'build/installerHeader.bmp',
+    license: 'build/license.txt',
+    include: 'build/installer.nsh',
     deleteAppDataOnUninstall: false,
     artifactName: 'WorkSuite-Setup-${version}-${arch}.${ext}',
   },
@@ -217,9 +240,10 @@ module.exports = {
     // The launcher's right-click menu (worksuite-desktop#346): reachable where the desktop shows no tray icon (GNOME
     // without the AppIndicator extension). A second launch focuses the running WorkSuite; mailto: opens a new email.
     desktop: {
-      entry: { StartupWMClass: 'WorkSuite', Actions: 'open;new-email;' },
+      // Name is what menus show; StartupWMClass stays the window class Electron reports (productName).
+      entry: { Name: displayName, GenericName: 'Business suite', StartupWMClass: 'WorkSuite', Actions: 'open;new-email;' },
       desktopActions: {
-        open: { Name: 'Open WorkSuite', Exec: 'worksuite' },
+        open: { Name: 'Open WorkSuite Desktop', Exec: 'worksuite' },
         'new-email': { Name: 'New email', Exec: 'worksuite mailto:' },
       },
     },

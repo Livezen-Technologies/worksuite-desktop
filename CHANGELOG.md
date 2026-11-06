@@ -11,6 +11,24 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.291 — 2026-11-06
+
+The installers and the app's name on screen say **WorkSuite Desktop**.
+
+### Changed
+
+- **Windows setup is branded WorkSuite Desktop.** The setup window, its welcome and finish pages, the side and header
+  artwork (the WorkSuite logo in its own blues), and a licence page with the WorkSuite Desktop licence (not shown again
+  on updates). Apps & features lists it as "WorkSuite Desktop 0.2.291", and the desktop and Start menu shortcuts are
+  called "WorkSuite Desktop". Shortcuts called "WorkSuite" from earlier versions are renamed on update, or replaced
+  when setup is run by hand; pinned taskbar icons and notifications keep working.
+- **macOS: Finder, the Dock and Spotlight show "WorkSuite Desktop"**, the installer disk is "WorkSuite Desktop
+  0.2.291", and WorkSuite › About WorkSuite shows WorkSuite Desktop with Livezen Technologies' copyright.
+- **Linux: the app menu entry is "WorkSuite Desktop"** (and its right-click action "Open WorkSuite Desktop").
+- The Windows exe's properties name Livezen Technologies and the WorkSuite trademark.
+
+Nothing moves: the app is still installed in the same folder, keeps its data and settings, and updates in place.
+
 ## 0.2.290 — 2026-11-05
 
 The cash drawer can be turned on again for every printer model (#461), and Mail's sync card is no longer cut off (#452).
