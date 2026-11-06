@@ -38,7 +38,7 @@ jobs:
       fail-fast: false
       matrix:
         # ubuntu-24.04, not ubuntu-latest: the X tools and libraries these checks use are those of a known image.
-        os: [windows-latest, macos-14, ubuntu-24.04]
+        os: [windows-latest, macos-15, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
@@ -50,7 +50,7 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          # electron-vite build exceeds Node's default ~2 GB heap and aborts with exit 134 on macos-14 (as in build.yml).
+          # electron-vite build exceeds Node's default ~2 GB heap and aborts with exit 134 on macos-15 (as in build.yml).
           NODE_OPTIONS: --max-old-space-size=6144
       - name: A display
         if: runner.os == 'Linux'
