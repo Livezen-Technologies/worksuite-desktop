@@ -187,6 +187,11 @@ function main(): void {
   registerPrivilegedSchemes();
   app.on('web-contents-created', (_e, contents) => hardenWebContents(contents));
   if (process.platform === 'win32') app.setAppUserModelId('lk.worksuite.desktop');
+  // App menu › About (macOS, Linux): "WorkSuite Desktop", not the bare product name. app.name stays "WorkSuite" — it
+  // names the app data folder and the mac menu, and Windows has no About panel.
+  if (process.platform !== 'win32') {
+    app.setAboutPanelOptions({ applicationName: 'WorkSuite Desktop', applicationVersion: app.getVersion(), version: '', copyright: `© ${new Date().getFullYear()} Livezen Technologies LLC`, website: 'https://worksuite.lk' });
+  }
   // Crash dumps stay on this machine; they are shared only through a diagnostic bundle (WF-27, Q4).
   crashReporter.start({ uploadToServer: false });
 
