@@ -1,7 +1,7 @@
 // Renders the app icon and tray icons from SVG with Electron's own renderer,
 // so the build needs no image tooling. Run: npx electron scripts/render-icons.mjs
 import { app, BrowserWindow } from 'electron';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,14 +24,11 @@ const markPaths = (paint = (c) => c, centre = 1) =>
 /** The mark placed in a box: x, y, size in the parent's units. */
 const markAt = (x, y, size, inner) => `<svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="${MARK_VIEWBOX}">${inner}</svg>`;
 
-// The app icon (2026-11): a light tile with the WorkSuite squares (blue, cyan and the navy overlap), drawn on a 512
-// grid; Windows and Linux take the same artwork from build/icon.png. The tray keeps the original four-square mark.
+// The app icon is build/icon.svg (2026-11): a light tile on Apple's 1024 grid (824, 100 in from each edge, so the Dock
+// lines it up with the system's icons) with the WorkSuite squares in blue, cyan and the navy overlap, a soft shadow
+// and gentle gradients. Windows and Linux take the same artwork from build/icon.png. The tray keeps the four-square mark.
 function appIcon() {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-<defs><linearGradient id="t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e9eef7"/></linearGradient></defs>
-<rect x="56" y="56" width="400" height="400" rx="92" fill="url(#t)"/>
-<rect x="236" y="136" width="136" height="136" fill="#1f5fe0"/><rect x="140" y="232" width="96" height="96" fill="#5fd3ec"/><rect x="236" y="328" width="96" height="48" fill="#5fd3ec"/><rect x="236" y="232" width="96" height="96" fill="#0b1d4f"/>
-  </svg>`;
+  return readFileSync(join(buildDir, 'icon.svg'), 'utf8');
 }
 
 // Tray glyphs. `template` = monochrome black on transparent (macOS menu bar template images; the OS recolours them

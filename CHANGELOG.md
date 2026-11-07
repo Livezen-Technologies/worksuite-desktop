@@ -11,6 +11,14 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.294 — 2026-11-07
+
+### Changed
+
+- **The WorkSuite Desktop icon is polished**: sized to the macOS icon grid so it lines up with other apps in the Dock,
+  a soft shadow, gentle gradients on the blue and cyan, and rounded outer corners. Each size from 16 to 1024 pixels
+  is drawn on its own, so small icons stay sharp.
+
 ## 0.2.293 — 2026-11-07
 
 ### Changed
