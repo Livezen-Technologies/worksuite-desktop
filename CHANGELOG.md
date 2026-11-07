@@ -11,6 +11,13 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.293 — 2026-11-07
+
+### Changed
+
+- **New WorkSuite Desktop icon**: a light tile with the WorkSuite squares in blue, cyan and navy. It is the app's icon
+  on Windows, macOS and Linux and on the setup pages. The tray icon keeps the four-square mark.
+
 ## 0.2.292 — 2026-11-07
 
 POS follows your colour theme, and the Windows setup names WorkSuite Desktop on every page.

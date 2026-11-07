@@ -24,17 +24,13 @@ const markPaths = (paint = (c) => c, centre = 1) =>
 /** The mark placed in a box: x, y, size in the parent's units. */
 const markAt = (x, y, size, inner) => `<svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="${MARK_VIEWBOX}">${inner}</svg>`;
 
-// The app icon: the mark on a white rounded tile, on Apple's 1024 grid (an 824 tile, 100 in from each edge, so the
-// Dock lines it up with the system's icons); Windows and Linux take the same artwork from build/icon.png.
+// The app icon (2026-11): a light tile with the WorkSuite squares (blue, cyan and the navy overlap), drawn on a 512
+// grid; Windows and Linux take the same artwork from build/icon.png. The tray keeps the original four-square mark.
 function appIcon() {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-    <defs>
-      <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EEF3FB"/></linearGradient>
-      <filter id="s" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="${NAVY}" flood-opacity=".22"/></filter>
-    </defs>
-    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)" filter="url(#s)"/>
-    <rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke="${NAVY}" stroke-opacity=".08" stroke-width="1"/>
-    ${markAt(282, 282, 460, markPaths())}
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e9eef7"/></linearGradient></defs>
+<rect x="56" y="56" width="400" height="400" rx="92" fill="url(#t)"/>
+<rect x="236" y="136" width="136" height="136" fill="#1f5fe0"/><rect x="140" y="232" width="96" height="96" fill="#5fd3ec"/><rect x="236" y="328" width="96" height="48" fill="#5fd3ec"/><rect x="236" y="232" width="96" height="96" fill="#0b1d4f"/>
   </svg>`;
 }
 
