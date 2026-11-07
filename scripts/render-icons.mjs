@@ -24,7 +24,7 @@ const markPaths = (paint = (c) => c, centre = 1) =>
 /** The mark placed in a box: x, y, size in the parent's units. */
 const markAt = (x, y, size, inner) => `<svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="${MARK_VIEWBOX}">${inner}</svg>`;
 
-// The app icon is build/icon.svg (2026-11): a light tile on Apple's 1024 grid (824, 100 in from each edge, so the Dock
+// The app icon is build/icon.svg (the WorkSuite icon pack, 2026-11): the WorkSuite mark on a light tile.
 // lines it up with the system's icons) with the WorkSuite squares in blue, cyan and the navy overlap, a soft shadow
 // and gentle gradients. Windows and Linux take the same artwork from build/icon.png. The tray keeps the four-square mark.
 function appIcon() {
