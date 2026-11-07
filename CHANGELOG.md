@@ -11,6 +11,13 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.295 — 2026-11-07
+
+### Changed
+
+- **The WorkSuite icon from the WorkSuite icon pack** replaces 0.2.294's: the WorkSuite mark in its brand blue, cyan
+  and navy on a light tile. It is the app icon on Windows, macOS and Linux and on the setup pages.
+
 ## 0.2.294 — 2026-11-07
 
 ### Changed
