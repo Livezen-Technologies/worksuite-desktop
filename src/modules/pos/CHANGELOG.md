@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.2 — 2026-11-07
+
+- The till follows the colour profile (Settings › Appearance): its ground, panels, keys, lines, selection and top bar
+  come from the profile's tokens instead of fixed WorkSuite blues, in light and dark.
+
 ## 1.8.1 — 2026-11-05
 
 - Printers › Cash drawer: "Plugged into the receipt printer" can always be chosen (#461). It was greyed out whenever the
