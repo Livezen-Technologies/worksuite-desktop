@@ -42,6 +42,8 @@ export const GUIDE_KEYS: Readonly<Record<string, string | null>> = {
   tenders: 'tender',
   recruitment: 'recruitment',
   amc: 'amc',
+  // Service & Repair: no server guide yet — the list of guides.
+  service: null,
   board: 'board',
   finance: 'finance',
   expenses: 'expenses',

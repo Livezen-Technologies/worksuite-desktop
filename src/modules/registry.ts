@@ -293,6 +293,18 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./recruitment/RecruitmentShell'),
   },
   {
+    // Service & Repair (Service & Repair blueprint, phases 1–4): dashboard, the repair list and job card (status steps,
+    // diagnosis, parts reserve/use, quotations, QA and handover), the Kanban board, check-in and the device registry,
+    // over `/api/v1/service`. Read offline from the last answers kept (READ_CACHE); every write waits for the server.
+    input: defineDesktopManifest({
+      id: 'service', name: 'Service & Repair', icon: 'wrench', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'READ_CACHE', cache: ['/api/v1/service'] },
+      windows: [{ id: 'job', route: '/service?view=jobs&solo=1' }],
+      quickActions: [{ id: 'service-checkin', label: 'New repair job', route: '/service?view=checkin' }, { id: 'service-board', label: 'Repair board', route: '/service?view=board' }],
+      deepLinks: ['service', 'service/board', 'service/jobs/:id'],
+    }),
+    load: () => import('./service/ServiceShell'),
+  },
+  {
     // AMC & Service (WS-AMC-SRS-001 T-15): D-01 dashboard, D-02 dispatch timeline (drag to give out, suggestions, bulk
     // give-out of overdue PMs), D-03 the request window (a pop-out too) and the lists with their details, over
     // `/api/amc`. Read offline from the last answers kept (READ_CACHE); every write waits for the server.

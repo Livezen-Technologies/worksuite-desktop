@@ -223,8 +223,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // AMC & Service (WS-AMC-SRS-001 T-15): the server's app `amc`; native here — the dashboard, the dispatch timeline, the
   // request window and the lists. Its links `/amc?view=…` (shared/amc.ts) open here; the rest of AMC on the web.
   // Service & Repair (Service & Repair blueprint): phone, computer, laptop, tablet and printer repair shops; the
-  // server's app `service`, its API under /api/v1/service. On the web until its desktop screens are built.
-  { id: 'service-repair', label: 'Service & Repair', group: 'operations', icon: 'wrench', app: 'service', webPath: '/service', surface: 'browser', order: 214, keywords: 'service repair repairs job card ticket device imei serial phone mobile laptop computer tablet printer technician diagnosis quotation estimate spare parts warranty pickup handover qa' },
+  // server's app `service`, its API under /api/v1/service. Native: the dashboard, jobs and job card, board, check-in
+  // and devices (src/modules/service); the rest opens on the web.
+  { id: 'service', label: 'Service & Repair', group: 'operations', icon: 'wrench', app: 'service', webPath: '/service', surface: 'native', sidebar: 'business', order: 214, keywords: 'service repair repairs job card ticket device imei serial phone mobile laptop computer tablet printer technician diagnosis quotation estimate spare parts warranty pickup handover qa' },
   { id: 'amc', label: 'AMC & Service', group: 'operations', icon: 'wrench', app: 'amc', webPath: '/amc', surface: 'native', sidebar: 'business', order: 215, keywords: 'amc service contracts maintenance requests dispatch technicians visits renewals estimates units equipment warranties sla' },
   // A shop's till: native here (the counter PC) — pairing, the drawer's shift, selling (offline too), receipts, the drawer
   // kick and a customer display. Tills, registers and settings are managed on the web.

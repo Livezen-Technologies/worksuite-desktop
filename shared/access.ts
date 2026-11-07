@@ -169,6 +169,7 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   tickets: ['support'],
   appointments: ['appointments'],
   amc: ['amc'],
+  service: ['service'],
   assets: ['assets'],
   // Hosting & Domains' notices (`hosting.domain_expiring`, `hosting.monitor_down`, `hosting.sync_failed`…).
   hosting: ['hosting'],
