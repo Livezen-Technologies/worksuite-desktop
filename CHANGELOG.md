@@ -11,6 +11,14 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.296 — 2026-11-07
+
+### Fixed
+
+- **The Windows setup builds again.** 0.2.292 to 0.2.295 named the setup "WorkSuite Desktop" in a way the installer
+  compiler counts as an error, so no Windows installer was made for them; 0.2.296 is the first with the new icon and
+  the WorkSuite Desktop wording on every setup page.
+
 ## 0.2.295 — 2026-11-07
 
 ### Changed

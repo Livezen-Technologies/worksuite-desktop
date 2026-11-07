@@ -7,7 +7,11 @@
 !macro customHeader
   ; $(^Name) in NSIS's own page texts (licence, installing, uninstalling) and the line along the bottom. Name is only
   ; what people read: the folders, the exe and the registry keep coming from PRODUCT_NAME / APP_FILENAME.
+  ; electron-builder has set Name already, and a second one is warning 6029, an error in its build: silence just that one.
+  !pragma warning push
+  !pragma warning disable 6029
   Name "WorkSuite Desktop"
+  !pragma warning pop
   BrandingText "WorkSuite Desktop ${VERSION}"
   !ifdef BUILD_UNINSTALLER
     Caption "WorkSuite Desktop Uninstall"
