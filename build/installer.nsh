@@ -5,6 +5,10 @@
 ; registry keys, and existing installs must keep updating in place. So only what the person reads changes here.
 
 !macro customHeader
+  ; $(^Name) in NSIS's own page texts (licence, installing, uninstalling) and the line along the bottom. Name is only
+  ; what people read: the folders, the exe and the registry keep coming from PRODUCT_NAME / APP_FILENAME.
+  Name "WorkSuite Desktop"
+  BrandingText "WorkSuite Desktop ${VERSION}"
   !ifdef BUILD_UNINSTALLER
     Caption "WorkSuite Desktop Uninstall"
   !else

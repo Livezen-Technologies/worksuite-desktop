@@ -44,4 +44,10 @@ describe('installer branding', () => {
     const norm = (t: string) => t.replace(/\r\n/g, '\n');
     expect(norm(page.subarray(3).toString('utf8'))).toBe(norm(readFileSync(join(root, 'LICENSE'), 'utf8')));
   });
+
+  it("names WorkSuite Desktop in NSIS's own page texts and branding line", () => {
+    const nsh = readFileSync(join(root, 'build/installer.nsh'), 'utf8');
+    expect(nsh).toMatch(/^\s*Name "WorkSuite Desktop"$/m);
+    expect(nsh).toMatch(/^\s*BrandingText "WorkSuite Desktop \$\{VERSION\}"$/m);
+  });
 });

@@ -11,6 +11,21 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.292 — 2026-11-07
+
+POS follows your colour theme, and the Windows setup names WorkSuite Desktop on every page.
+
+### Fixed
+
+- **POS kept its own colours when you changed the theme.** The till's background, panels, keys, lines, selection and
+  the bar along the top were fixed shades of WorkSuite blue, so after picking another profile in Settings ›
+  Appearance (or your organisation's) the rest of the app changed and the till did not. They now come from the
+  profile, in light and dark, like every other screen. Category tints, stock and promotion badges keep their own
+  colours, since they carry meaning.
+- **Windows setup: "WorkSuite" on the licence, installing and uninstalling pages** and in the line along the bottom
+  now reads "WorkSuite Desktop", as the title, welcome and finish pages already did. The install folder, app data and
+  updates are unchanged.
+
 ## 0.2.291 — 2026-11-06
 
 The installers and the app's name on screen say **WorkSuite Desktop**.

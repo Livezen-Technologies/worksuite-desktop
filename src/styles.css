@@ -1258,27 +1258,28 @@ html:lang(si) .ws-localized-control, html:lang(ta) .ws-localized-control { white
 
 /*
  * POS — the counter (src/modules/pos). Its tokens live on `.pos-scope`, the till's root, so they colour nothing
- * else; dark mode has its own values. Tile tints go to a product's category; promo, stock and tier badges, the
+ * else. Grounds, panels, keys, lines, the till bar and the selection come from the colour profile's --ws-* tokens,
+ * so the till follows Settings › Appearance like every other screen; dark mode has its own values. Tile tints go to a product's category; promo, stock and tier badges, the
  * till bar's navy, the change-to-give teal and the online / offline pill.
  */
 .pos-scope {
-  --pos-ground: #f4f5f9;
-  --pos-panel: #ffffff;
-  --pos-key: #f4f5f9;
-  --pos-line: #dfe3ee;
-  --pos-bar: #0f1b3d;
-  --pos-bar-ink: #a5b4fc;
+  --pos-ground: var(--ws-ground);
+  --pos-panel: var(--ws-surface);
+  --pos-key: var(--ws-subtle);
+  --pos-line: var(--ws-line);
+  --pos-bar: var(--ws-navy);
+  --pos-bar-ink: var(--ws-navy-ink);
   --pos-bar-chip: rgba(255, 255, 255, 0.1);
-  --pos-on: #eef1fb;
-  --pos-on-ring: #23349e;
+  --pos-on: var(--ws-selection);
+  --pos-on-ring: var(--ws-indigo);
   --pos-change: #7fd8df;
-  --pos-change-ink: #0f1b3d;
+  --pos-change-ink: var(--ws-navy);
   --pos-online: rgba(16, 185, 129, 0.15);
   --pos-online-ink: #6ee7b7;
   --pos-offline: rgba(245, 158, 11, 0.18);
   --pos-offline-ink: #fcd34d;
-  --pos-tint-indigo: #e0e7ff;
-  --pos-tint-indigo-ink: #23349e;
+  --pos-tint-indigo: var(--ws-selection);
+  --pos-tint-indigo-ink: var(--ws-indigo);
   --pos-tint-green: #dcfce7;
   --pos-tint-green-ink: #166534;
   --pos-tint-sky: #e0f2fe;
@@ -1306,23 +1307,23 @@ html:lang(si) .ws-localized-control, html:lang(ta) .ws-localized-control { white
 }
 
 [data-theme='dark'] .pos-scope {
-  --pos-ground: #0b1124;
-  --pos-panel: #121a34;
-  --pos-key: #192343;
-  --pos-line: #253052;
-  --pos-bar: #070c1c;
-  --pos-bar-ink: #a5b4fc;
+  --pos-ground: var(--ws-ground);
+  --pos-panel: var(--ws-surface);
+  --pos-key: var(--ws-subtle);
+  --pos-line: var(--ws-line);
+  --pos-bar: color-mix(in srgb, var(--ws-ground) 70%, black);
+  --pos-bar-ink: var(--ws-navy-ink);
   --pos-bar-chip: rgba(255, 255, 255, 0.08);
-  --pos-on: #1c2a5e;
-  --pos-on-ring: #5c7cfa;
+  --pos-on: var(--ws-selection);
+  --pos-on-ring: var(--ws-indigo);
   --pos-change: #1f5f66;
   --pos-change-ink: #e6fbfc;
   --pos-online: rgba(16, 185, 129, 0.18);
   --pos-online-ink: #6ee7b7;
   --pos-offline: rgba(245, 158, 11, 0.2);
   --pos-offline-ink: #fcd34d;
-  --pos-tint-indigo: #1f2a5c;
-  --pos-tint-indigo-ink: #b4c3ff;
+  --pos-tint-indigo: var(--ws-selection);
+  --pos-tint-indigo-ink: var(--ws-indigo);
   --pos-tint-green: #123524;
   --pos-tint-green-ink: #86efac;
   --pos-tint-sky: #0f2f45;
@@ -1335,7 +1336,7 @@ html:lang(si) .ws-localized-control, html:lang(ta) .ws-localized-control { white
   --pos-tint-slate-ink: #cbd5e1;
   --pos-promo: #059669;
   --pos-promo-ink: #ffffff;
-  --pos-stock: rgba(11, 17, 36, 0.8);
+  --pos-stock: color-mix(in srgb, var(--ws-ground) 80%, transparent);
   --pos-stock-ink: #cbd5e1;
   --pos-stock-low: #3a2a0c;
   --pos-stock-low-ink: #fcd34d;
