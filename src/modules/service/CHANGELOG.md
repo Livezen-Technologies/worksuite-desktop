@@ -10,3 +10,4 @@ the root CHANGELOG.md.
 
 - Service & Repair on the desktop: dashboard, repair jobs and the job card (status steps, diagnosis, parts, quotations, QA and handover, activity), the Kanban board, check-in with device intake checklists and consent, and the device registry, over `/api/v1/service`
 - Inventory and Billing wired in: add a stocked part from Inventory (what is free shown) or the customer's own, release a reservation or return a used part as defective, pick quotation part lines from Inventory, make the job's invoice in Billing from the approved lines and open it in Invoices, and open a part in Inventory
+- The approved, rework and delivered steps are not offered as buttons: the server takes them from the customer's decision, a failed QA and the handover

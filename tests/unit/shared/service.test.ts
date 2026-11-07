@@ -17,8 +17,10 @@ describe('Service & Repair', () => {
 
   it('follows the default workflow', () => {
     expect(nextStatuses('new')).toEqual(['received', 'cancelled']);
-    expect(nextStatuses('qa_testing')).toContain('rework_required');
+    expect(nextStatuses('qa_testing')).toEqual(['ready_for_pickup', 'cancelled']);
+    expect(nextStatuses('awaiting_approval')).not.toContain('approved');
     expect(nextStatuses('delivered')).toEqual(['closed']);
+    expect(nextStatuses('ready_for_pickup')).toEqual(['cancelled']);
     expect(nextStatuses('closed')).toEqual([]);
     expect(nextStatuses('custom_org_status')).toEqual([]);
     for (const s of SERVICE_STATUSES) for (const t of nextStatuses(s)) expect(SERVICE_STATUSES).toContain(t);

@@ -54,10 +54,16 @@ export function isServiceStatus(s: unknown): s is ServiceStatus {
   return typeof s === 'string' && (SERVICE_STATUSES as readonly string[]).includes(s);
 }
 
-/** The steps the desktop offers from `status` (the server may still refuse one). */
+/**
+ * Steps the server takes itself, from what happened: the customer's decision on a quotation approves the job, a
+ * failed QA sends it for rework, and the handover record delivers it. They are never offered as buttons.
+ */
+export const SYSTEM_ONLY: readonly ServiceStatus[] = ['approved', 'rework_required', 'delivered'];
+
+/** The steps the desktop offers by hand from `status` (the server may still refuse one). */
 export function nextStatuses(status: string): ServiceStatus[] {
   if (!isServiceStatus(status)) return [];
-  const out = [...NEXT[status]];
+  const out = NEXT[status].filter((s) => !SYSTEM_ONLY.includes(s));
   if (!TERMINAL.includes(status) && !['delivered', 'cancelled', 'closed'].includes(status)) out.push('cancelled');
   return out;
 }
