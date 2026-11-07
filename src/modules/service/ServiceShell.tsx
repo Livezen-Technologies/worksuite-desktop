@@ -27,7 +27,7 @@ const WEB: Array<[string, string, string]> = [['Technicians', '/service/technici
 const idOf = (v: string | null) => (v && /^[\w-]{1,64}$/.test(v) ? v : null);
 
 export default function ServiceShell(_props: ModuleProps) {
-  const { query, go } = useTab();
+  const { query, go, openInNewTab } = useTab();
   const asked = query.get('view') ?? '';
   const view: ServiceView = (SERVICE_VIEWS as readonly string[]).includes(asked) ? (asked as ServiceView) : idOf(query.get('job')) ? 'jobs' : 'home';
   const job = idOf(query.get('job'));
@@ -37,7 +37,7 @@ export default function ServiceShell(_props: ModuleProps) {
   const web = (path: string) => void call('app:openInBrowser', { path });
   const openJob = (id: string) => go(`/service?view=jobs&scope=${encodeURIComponent(scope)}&job=${encodeURIComponent(id)}`);
 
-  if (query.get('solo') === '1' && job) return <Suspense fallback={<Spinner />}><JobCard id={job} offline={offline} onWeb={web} /></Suspense>;
+  if (query.get('solo') === '1' && job) return <Suspense fallback={<Spinner />}><JobCard id={job} offline={offline} onWeb={web} onRoute={(r) => openInNewTab(r)} /></Suspense>;
 
   return (
     <div className="flex h-full min-h-0">
@@ -67,7 +67,7 @@ export default function ServiceShell(_props: ModuleProps) {
             : (
               <div className="flex h-full min-h-0">
                 <div className="min-w-0 flex-1"><Jobs scope={scope} onScope={(s) => go(`/service?view=jobs&scope=${encodeURIComponent(s)}`)} selected={job} onOpen={openJob} /></div>
-                {job ? <aside className="w-[min(640px,55%)] shrink-0 border-l border-line bg-surface"><JobCard id={job} offline={offline} onWeb={web} onClose={() => go(`/service?view=jobs&scope=${encodeURIComponent(scope)}`)} /></aside> : null}
+                {job ? <aside className="w-[min(640px,55%)] shrink-0 border-l border-line bg-surface"><JobCard id={job} offline={offline} onWeb={web} onRoute={(r) => openInNewTab(r)} onClose={() => go(`/service?view=jobs&scope=${encodeURIComponent(scope)}`)} /></aside> : null}
               </div>
             )}
         </Suspense>

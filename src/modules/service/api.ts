@@ -18,6 +18,7 @@ export const K = {
   jobs: (q: Query) => ['service', 'jobs', q] as const,
   job: (id: string) => ['service', 'job', id] as const,
   board: ['service', 'board'] as const,
+  stock: (q: string) => ['service', 'stock', q] as const,
   device: (id: string) => ['service', 'device', id] as const,
   deviceSearch: (q: string) => ['service', 'devices', q] as const,
 };
@@ -52,8 +53,16 @@ export interface JobRow {
 }
 export interface HistoryEntry { id: string; from?: string | null; to: string; at: string; by?: string | null; note?: string | null; customer_visible?: boolean }
 export interface Diagnostic { id: string; finding: string; cause?: string | null; recommendation?: string | null; by?: string | null; at: string }
-export interface JobPart { id: string; name: string; sku?: string | null; qty: number; state: 'required' | 'reserved' | 'used' | 'returned'; unit_price?: number | null; customer_supplied?: boolean }
-export interface QuoteItem { kind: 'diagnosis' | 'labour' | 'part' | 'other'; description: string; qty: number; unit_price: number; tax?: number }
+export interface JobPart {
+  id: string; name: string; sku?: string | null; qty: number; state: 'required' | 'reserved' | 'used' | 'returned'; unit_price?: number | null; customer_supplied?: boolean;
+  /** The Inventory product the part is, when it is stocked (a customer's own part is not). */
+  product_id?: number | null; warehouse?: string | null;
+}
+export interface QuoteItem { kind: 'diagnosis' | 'labour' | 'part' | 'other'; description: string; qty: number; unit_price: number; tax?: number; product_id?: number | null }
+/** A stocked part from Inventory, through the service API's inventory adapter: what it sells for and what is free. */
+export interface StockPart { product_id: number; sku?: string | null; name: string; unit_price: number; currency?: string | null; on_hand?: number | null; available?: number | null; warehouse?: string | null }
+/** The job's Billing invoice, once one is made from its approved billable items. */
+export interface JobInvoice { id: number; number?: string | null; status: string; total: number; balance?: number | null; currency?: string | null }
 export interface Quote { id: string; version: number; status: 'draft' | 'sent' | 'approved' | 'rejected' | 'superseded'; items: QuoteItem[]; discount?: number; total: number; currency?: string; decided_at?: string | null }
 export interface QaResult { id: string; passed: boolean; checks: Array<{ label: string; ok: boolean }>; note?: string | null; by?: string | null; at: string }
 export interface Activity { id: string; at: string; by?: string | null; text: string }
@@ -62,6 +71,7 @@ export interface Job extends JobRow {
   history?: HistoryEntry[]; diagnostics?: Diagnostic[]; parts?: JobPart[]; quotes?: Quote[]; qa?: QaResult[]; activity?: Activity[];
   deposit?: number | null; paid?: number | null; balance?: number | null;
   warranty?: { until?: string | null; terms?: string | null } | null;
+  invoice?: JobInvoice | null;
 }
 export interface Page<T> { items: T[]; total: number; page: number; per_page: number }
 export interface Overview {
@@ -96,10 +106,15 @@ export function useDeviceHistory(id: string | null) {
   return useQuery({ queryKey: K.device(id ?? ''), enabled: !!id, queryFn: ({ signal }) => read<{ device: Device; jobs: JobRow[] }>(`/devices/${encodeURIComponent(id!)}/history`, undefined, signal) });
 }
 
+/** Stocked parts matching a name, SKU or barcode (Inventory, through the service API so branch and price rules hold). */
+export function useStockSearch(q: string) {
+  return useQuery({ queryKey: K.stock(q), enabled: q.trim().length >= 2, queryFn: ({ signal }) => read<{ items: StockPart[] }>('/parts', { q: q.trim() }, signal), staleTime: 30_000 });
+}
+
 // ── writes ─────────────────────────────────────────────────────────────────
 
 /** A write against a job: on success every Service & Repair read is refreshed. */
-function useJobWrite<V>(fn: (v: V) => Promise<unknown>) {
+function useJobWrite<V, R = unknown>(fn: (v: V) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({ mutationFn: fn, onSuccess: () => void qc.invalidateQueries({ queryKey: K.all }) });
 }
@@ -119,6 +134,23 @@ export function useAddDiagnostic(jobId: string) {
 
 export function usePart(jobId: string, action: 'reserve' | 'consume') {
   return useJobWrite((v: { part_id: string; qty: number }) => apiPost(`${B}/jobs/${encodeURIComponent(jobId)}/parts/${action}`, { ...v, idempotency_key: idemKey() }));
+}
+
+/** Adds a part the job needs: a stocked one by its product, or the customer's own (never added to owned stock). */
+export function useAddPart(jobId: string) {
+  return useJobWrite((v: { product_id?: number; name?: string; qty: number; unit_price?: number; customer_supplied?: boolean; reserve?: boolean }) =>
+    apiPost(`${B}/jobs/${encodeURIComponent(jobId)}/parts`, { ...v, idempotency_key: idemKey() }));
+}
+
+/** Gives a reserved or used part back to stock (returned, or found defective). */
+export function useReturnPart(jobId: string) {
+  return useJobWrite((v: { part_id: string; qty: number; condition: 'good' | 'defective' }) =>
+    apiPost(`${B}/jobs/${encodeURIComponent(jobId)}/parts/return`, { ...v, idempotency_key: idemKey() }));
+}
+
+/** Makes the job's Billing invoice from its approved, billable items (the server's billing adapter; once only). */
+export function useCreateInvoice(jobId: string) {
+  return useJobWrite(() => apiPost<{ invoice: JobInvoice }>(`${B}/jobs/${encodeURIComponent(jobId)}/invoice`, { idempotency_key: idemKey() }));
 }
 
 export function useCreateQuote(jobId: string) {

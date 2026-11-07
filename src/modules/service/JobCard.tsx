@@ -2,7 +2,8 @@ import { Checkbox } from '../../components/Checkbox';
 import { useState } from 'react';
 import { money, needsReason, nextStatuses, statusLabel, type ServiceStatus } from '@shared/service';
 import { Button, cx, ErrorNote, OfflineNote, Spinner } from '../../components/ui';
-import { useAddDiagnostic, useCreateQuote, useHandover, useJob, usePart, useQa, useQuoteDecision, useTransition, type Job, type QuoteItem } from './api';
+import { useAddDiagnostic, useAddPart, useCreateInvoice, useCreateQuote, useHandover, useJob, usePart, useQa, useQuoteDecision, useReturnPart, useTransition, type Job, type QuoteItem } from './api';
+import StockPicker from './StockPicker';
 import { deviceName, input, StatusChip, when } from './parts';
 
 const TABS = ['overview', 'diagnosis', 'parts', 'quotation', 'financials', 'qa', 'activity'] as const;
@@ -10,7 +11,8 @@ type Tab = (typeof TABS)[number];
 const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', diagnosis: 'Diagnosis', parts: 'Parts', quotation: 'Quotation', financials: 'Financials', qa: 'QA & Handover', activity: 'Activity Log' };
 
 /** One repair job (blueprint §5 job detail): its status steps and the tabs. Every change is the server's to accept. */
-export default function JobCard({ id, offline, onClose, onWeb }: { id: string; offline: boolean; onClose?: () => void; onWeb: (path: string) => void }) {
+/** `onRoute` opens another desktop module's screen (the part in Inventory, the invoice in Billing). */
+export default function JobCard({ id, offline, onClose, onWeb, onRoute }: { id: string; offline: boolean; onClose?: () => void; onWeb: (path: string) => void; onRoute: (route: string) => void }) {
   const job = useJob(id);
   const [tab, setTab] = useState<Tab>('overview');
   if (job.isPending) return <Spinner />;
@@ -32,7 +34,7 @@ export default function JobCard({ id, offline, onClose, onWeb }: { id: string; o
         {TABS.map((t) => <button key={t} role="tab" type="button" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('border-b-2 px-2 py-1.5 text-[12.5px] whitespace-nowrap', tab === t ? 'border-primary font-bold' : 'border-transparent text-ink-2')}>{TAB_LABEL[t]}</button>)}
       </nav>
       <div className="min-h-0 flex-1 overflow-auto p-3 text-[13px] scroll-thin">
-        {tab === 'overview' ? <Overview j={j} /> : tab === 'diagnosis' ? <Diagnosis j={j} offline={offline} /> : tab === 'parts' ? <Parts j={j} offline={offline} /> : tab === 'quotation' ? <Quotation j={j} offline={offline} /> : tab === 'financials' ? <Financials j={j} onWeb={onWeb} /> : tab === 'qa' ? <Qa j={j} offline={offline} /> : <ActivityLog j={j} />}
+        {tab === 'overview' ? <Overview j={j} /> : tab === 'diagnosis' ? <Diagnosis j={j} offline={offline} /> : tab === 'parts' ? <Parts j={j} offline={offline} onRoute={onRoute} /> : tab === 'quotation' ? <Quotation j={j} offline={offline} /> : tab === 'financials' ? <Financials j={j} offline={offline} onRoute={onRoute} /> : tab === 'qa' ? <Qa j={j} offline={offline} /> : <ActivityLog j={j} />}
       </div>
     </div>
   );
@@ -121,29 +123,48 @@ function Diagnosis({ j, offline }: { j: Job; offline: boolean }) {
   );
 }
 
-function Parts({ j, offline }: { j: Job; offline: boolean }) {
+function Parts({ j, offline, onRoute }: { j: Job; offline: boolean; onRoute: (route: string) => void }) {
   const reserve = usePart(j.id, 'reserve');
   const consume = usePart(j.id, 'consume');
-  const err = reserve.error ?? consume.error;
+  const add = useAddPart(j.id);
+  const back = useReturnPart(j.id);
+  const [own, setOwn] = useState({ name: '', qty: 1 });
+  const err = reserve.error ?? consume.error ?? add.error ?? back.error;
+  const busy = offline || reserve.isPending || consume.isPending || add.isPending || back.isPending;
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[12px] text-ink-3">Reserving holds a part for this job; stock is deducted only when the part is used.</p>
+      <p className="text-[12px] text-ink-3">Parts come from Inventory. Reserving holds a part for this job; stock is deducted only when it is marked used.</p>
       <table className="w-full text-[12.5px]">
         <thead className="text-left text-ink-3"><tr><th className="py-1">Part</th><th>Qty</th><th>State</th><th>Price</th><th /></tr></thead>
         <tbody>
           {(j.parts ?? []).map((p) => (
             <tr key={p.id} className="border-t border-line">
-              <td className="py-1">{p.name}{p.sku ? <span className="text-ink-3"> · {p.sku}</span> : null}{p.customer_supplied ? <span className="text-ink-3"> · customer's own</span> : null}</td>
-              <td>{p.qty}</td><td className="capitalize">{p.state}</td><td>{money(p.unit_price, j.currency ?? 'LKR')}</td>
-              <td className="text-right">
-                {p.state === 'required' ? <Button size="sm" disabled={offline || reserve.isPending} onClick={() => reserve.mutate({ part_id: p.id, qty: p.qty })}>Reserve</Button> : null}
-                {p.state === 'reserved' ? <Button size="sm" disabled={offline || consume.isPending} onClick={() => consume.mutate({ part_id: p.id, qty: p.qty })}>Mark used</Button> : null}
+              <td className="py-1">
+                {p.product_id ? <button type="button" className="font-medium underline-offset-2 hover:underline" title="Open in Inventory" onClick={() => onRoute(`/inventory?product=${p.product_id}`)}>{p.name}</button> : p.name}
+                {p.sku ? <span className="text-ink-3"> · {p.sku}</span> : null}{p.warehouse ? <span className="text-ink-3"> · {p.warehouse}</span> : null}{p.customer_supplied ? <span className="text-ink-3"> · customer's own</span> : null}
+              </td>
+              <td>{p.qty}</td><td className="capitalize">{p.state}</td><td>{p.customer_supplied ? '—' : money(p.unit_price, j.currency ?? 'LKR')}</td>
+              <td className="space-x-1 text-right whitespace-nowrap">
+                {p.state === 'required' && !p.customer_supplied ? <Button size="sm" disabled={busy} onClick={() => reserve.mutate({ part_id: p.id, qty: p.qty })}>Reserve</Button> : null}
+                {p.state === 'reserved' || (p.state === 'required' && p.customer_supplied) ? <Button size="sm" disabled={busy} onClick={() => consume.mutate({ part_id: p.id, qty: p.qty })}>Mark used</Button> : null}
+                {p.state === 'reserved' && !p.customer_supplied ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => back.mutate({ part_id: p.id, qty: p.qty, condition: 'good' })}>Release</Button> : null}
+                {p.state === 'used' && !p.customer_supplied ? <Button size="sm" variant="ghost" disabled={busy} title="Back to stock as defective" onClick={() => back.mutate({ part_id: p.id, qty: p.qty, condition: 'defective' })}>Return defective</Button> : null}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
       {!j.parts?.length ? <p className="text-ink-3">No parts on this job.</p> : null}
+      <fieldset disabled={offline} className="flex flex-col gap-1.5 rounded-[8px] border border-line p-2">
+        <legend className="px-1 font-semibold">Add a part</legend>
+        <StockPicker disabled={busy} onPick={(sp) => add.mutate({ product_id: sp.product_id, qty: 1, unit_price: sp.unit_price, reserve: (sp.available ?? sp.on_hand ?? 1) > 0 })} />
+        <div className="flex items-center gap-1.5">
+          <input aria-label="Customer's own part" placeholder="Or the customer's own part" value={own.name} onChange={(e) => setOwn({ ...own, name: e.target.value })} className={input} />
+          <input aria-label="Quantity" type="number" min={1} value={own.qty} onChange={(e) => setOwn({ ...own, qty: Number(e.target.value) })} className={cx(input, 'w-[70px]')} />
+          <Button size="sm" disabled={busy || !own.name.trim() || own.qty < 1} onClick={() => add.mutate({ name: own.name.trim(), qty: own.qty, customer_supplied: true }, { onSuccess: () => setOwn({ name: '', qty: 1 }) })}>Add</Button>
+        </div>
+        <p className="text-[11.5px] text-ink-3">A stocked part is reserved when some is free; otherwise it waits as required. A customer's own part is never added to stock.</p>
+      </fieldset>
       {err ? <p className="text-[12px] text-danger">{(err as Error).message}</p> : null}
     </div>
   );
@@ -180,8 +201,12 @@ function Quotation({ j, offline }: { j: Job; offline: boolean }) {
         <legend className="px-1 font-semibold">{j.quotes?.length ? 'Revise the quotation' : 'New quotation'}</legend>
         {items.map((it, n) => (
           <div key={n} className="flex gap-1.5">
-            <select aria-label="Kind" value={it.kind} onChange={(e) => set(n, { kind: e.target.value as QuoteItem['kind'] })} className="rounded-[7px] border border-line bg-surface px-1 text-[13px]"><option value="diagnosis">Diagnosis</option><option value="labour">Labour</option><option value="part">Part</option><option value="other">Other</option></select>
-            <input aria-label="Description" placeholder="Description" value={it.description} onChange={(e) => set(n, { description: e.target.value })} className={input} />
+            <select aria-label="Kind" value={it.kind} onChange={(e) => set(n, { kind: e.target.value as QuoteItem['kind'], product_id: null })} className="rounded-[7px] border border-line bg-surface px-1 text-[13px]"><option value="diagnosis">Diagnosis</option><option value="labour">Labour</option><option value="part">Part</option><option value="other">Other</option></select>
+            {it.kind === 'part' && !it.product_id ? (
+              <StockPicker placeholder="Pick the part from Inventory" onPick={(sp) => set(n, { product_id: sp.product_id, description: sp.sku ? `${sp.name} (${sp.sku})` : sp.name, unit_price: sp.unit_price })} />
+            ) : (
+              <input aria-label="Description" placeholder="Description" value={it.description} onChange={(e) => set(n, { description: e.target.value, ...(it.kind === 'part' ? {} : { product_id: null }) })} className={input} />
+            )}
             <input aria-label="Quantity" type="number" min={1} value={it.qty} onChange={(e) => set(n, { qty: Number(e.target.value) })} className={cx(input, 'w-[70px]')} />
             <input aria-label="Unit price" type="number" min={0} step="0.01" value={it.unit_price} onChange={(e) => set(n, { unit_price: Number(e.target.value) })} className={cx(input, 'w-[110px]')} />
             <Button size="sm" variant="ghost" aria-label="Remove line" onClick={() => setItems(items.filter((_, k) => k !== n))}>×</Button>
@@ -201,8 +226,12 @@ function Quotation({ j, offline }: { j: Job; offline: boolean }) {
   );
 }
 
-function Financials({ j, onWeb }: { j: Job; onWeb: (path: string) => void }) {
+function Financials({ j, offline, onRoute }: { j: Job; offline: boolean; onRoute: (route: string) => void }) {
+  const make = useCreateInvoice(j.id);
   const cur = j.currency ?? 'LKR';
+  const inv = j.invoice;
+  const approved = (j.quotes ?? []).some((q) => q.status === 'approved');
+  const billable = approved || !!j.under_warranty;
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -210,7 +239,27 @@ function Financials({ j, onWeb }: { j: Job; onWeb: (path: string) => void }) {
         <Field label="Paid">{money(j.paid, cur)}</Field><Field label="Balance">{money(j.balance, cur)}</Field>
       </div>
       <Field label="Payment status"><span className="capitalize">{j.payment_status}</span></Field>
-      <div><Button size="sm" icon="external" onClick={() => onWeb(`/service/jobs/${j.id}?tab=financials`)}>Invoice, payments and refunds on the web</Button></div>
+      <section className="rounded-[8px] border border-line p-2">
+        <h3 className="mb-1 font-bold">Invoice</h3>
+        {inv ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold">{inv.number ?? `Draft #${inv.id}`}</span>
+            <span className="capitalize text-ink-2">{inv.status}</span>
+            <span>{money(inv.total, inv.currency ?? cur)}</span>
+            {inv.balance ? <span className="text-warning">Due {money(inv.balance, inv.currency ?? cur)}</span> : null}
+            <span className="flex-1" />
+            <Button size="sm" icon="receipt" onClick={() => onRoute(`/billing?invoice=${inv.id}`)}>Open in Invoices</Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[12.5px] text-ink-2">Made in Billing from the approved quotation's lines, the parts used and the deposit already taken. Nothing unapproved is charged.</p>
+            <div><Button size="sm" variant="primary" disabled={offline || !billable || make.isPending} loading={make.isPending} onClick={() => make.mutate(undefined, { onSuccess: (r) => onRoute(`/billing?invoice=${r.invoice.id}`) })}>Create invoice</Button></div>
+            {!billable ? <p className="text-[12px] text-ink-3">The customer has to approve a quotation first.</p> : null}
+          </div>
+        )}
+        {make.isError ? <p className="mt-1 text-[12px] text-danger">{(make.error as Error).message}</p> : null}
+      </section>
+      <p className="text-[12px] text-ink-3">Payments, refunds and credit notes are taken on the invoice in Invoices.</p>
     </div>
   );
 }
